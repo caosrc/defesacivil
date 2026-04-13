@@ -71,8 +71,10 @@ export default function App() {
       endereco: p.endereco ?? null,
       proprietario: p.proprietario ?? null,
       observacoes: p.observacoes ?? null,
+      data_ocorrencia: p.data_ocorrencia ?? null,
       created_at: p._savedAt ?? new Date().toISOString(),
       _offline: true,
+      _localId: p.localId,
     }))
     setOcorrencias([...offlineItems, ...serverData])
     setCarregando(false)

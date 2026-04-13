@@ -62,6 +62,25 @@ export function removePending(localId: number): Promise<undefined> {
   return run(PENDING_STORE, 'readwrite', (s) => s.delete(localId)) as Promise<undefined>
 }
 
+export function updatePending(localId: number, data: object): Promise<void> {
+  return getDB().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(PENDING_STORE, 'readwrite')
+        const store = tx.objectStore(PENDING_STORE)
+        const getReq = store.get(localId)
+        getReq.onsuccess = () => {
+          const existing = getReq.result
+          if (!existing) { reject(new Error('Não encontrado')); return }
+          const putReq = store.put({ ...existing, ...data })
+          putReq.onsuccess = () => resolve()
+          putReq.onerror = () => reject(putReq.error)
+        }
+        getReq.onerror = () => reject(getReq.error)
+      })
+  )
+}
+
 export function countPending(): Promise<number> {
   return getDB().then(
     (db) =>

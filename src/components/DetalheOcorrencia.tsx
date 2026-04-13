@@ -3,7 +3,7 @@ import JSZip from 'jszip'
 import type { Ocorrencia, NivelRisco, StatusOc } from '../types'
 import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS } from '../types'
 import { deletarOcorrencia, atualizarOcorrencia } from '../api'
-import { geocodificarEndereco } from '../offline'
+import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
 
 interface Props {
@@ -45,10 +45,6 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const dataFormatada = o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : ''
 
   function iniciarEdicao() {
-    if (o._offline || o.id < 0) {
-      setErroEdit('Esta ocorrência ainda não foi sincronizada. Aguarde a conexão e sincronize antes de editar.')
-      return
-    }
     const eh = !TIPOS_OCORRENCIA.includes(o.tipo) || o.tipo === 'Outro'
     setETipo(eh ? 'Outro' : o.tipo)
     setETipoOutro(eh && o.tipo !== 'Outro' ? o.tipo : '')
@@ -103,7 +99,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setSalvando(true)
     setErroEdit('')
     try {
-      const atualizado = await atualizarOcorrencia(o.id, {
+      const dadosEditados = {
         tipo: tipoFinal,
         natureza: eNatureza,
         subnatureza: precisaSubnatureza ? eSubnatureza || null : null,
@@ -116,7 +112,14 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         endereco: eEndereco || null,
         proprietario: eProprietario || null,
         observacoes: eObservacoes || null,
-      })
+      }
+      let atualizado: Ocorrencia
+      if (o._offline && o._localId != null) {
+        await updatePending(o._localId, dadosEditados)
+        atualizado = { ...o, ...dadosEditados }
+      } else {
+        atualizado = await atualizarOcorrencia(o.id, dadosEditados)
+      }
       setO(atualizado)
       onAtualizado(atualizado)
       setEditando(false)
@@ -182,7 +185,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
               </div>
             </div>
             <div className="modal-header-acoes">
-              {!editando && !(o._offline || o.id < 0) && (
+              {!editando && (
                 <button className="btn-editar-header" onClick={iniciarEdicao} title="Editar ocorrência">
                   ✏️
                 </button>
@@ -196,7 +199,6 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
 
             {!editando ? (
               <>
-                {erroEdit && <div className="erro-msg" style={{ margin: '0 0 0.75rem' }}>⚠️ {erroEdit}</div>}
                 <div className="info-badges">
                   <span className={`nivel-badge nivel-${o.nivel_risco}`}>
                     {o.nivel_risco === 'baixo' ? '🟢 Baixo' : o.nivel_risco === 'medio' ? '🟡 Médio' : '🔴 Alto'}
@@ -411,12 +413,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
           <div className="modal-footer">
             {!editando ? (
               <>
-                <button
-                  className="btn-editar"
-                  onClick={iniciarEdicao}
-                  disabled={!!(o._offline || o.id < 0)}
-                  title={o._offline ? 'Sincronize antes de editar' : undefined}
-                >✏️ Editar</button>
+                <button className="btn-editar" onClick={iniciarEdicao}>✏️ Editar</button>
                 <button className="btn-excel" onClick={() => exportarOcorrenciaExcel(o)}>📊 Excel</button>
                 <button className="btn-kmz" onClick={exportarKMZ}>🌍 KMZ</button>
                 <button className="btn-deletar" onClick={confirmarDelete}>🗑️</button>
