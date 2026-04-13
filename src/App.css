@@ -285,6 +285,34 @@ input, select, textarea { font-family: inherit; }
 .filtro-btn.filtro-medio.ativo { background: #d97706; border-color: #d97706; }
 .filtro-btn.filtro-baixo.ativo { background: #16a34a; border-color: #16a34a; }
 
+.filtros-data-row { gap: 0.5rem; }
+
+.filtro-data-select {
+  flex: 1;
+  border: 1.5px solid #1a4b8c;
+  border-radius: 8px;
+  padding: 0.38rem 0.6rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1a4b8c;
+  background: #eff6ff;
+  outline: none;
+  cursor: pointer;
+  appearance: auto;
+}
+
+.btn-hoje {
+  border: 1.5px solid #1a4b8c;
+  background: #1a4b8c;
+  color: white;
+  padding: 0.35rem 0.7rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .btn-kmz-global {
   border: 1.5px solid #059669;
   background: white;

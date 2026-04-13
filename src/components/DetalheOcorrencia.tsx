@@ -348,20 +348,26 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                   <div className="gps-edit-row">
                     <input
                       className="campo-input"
-                      type="number"
-                      step="any"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="Latitude"
                       value={eLat ?? ''}
-                      onChange={(e) => setELat(e.target.value ? parseFloat(e.target.value) : null)}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setELat(v === '' || v === '-' ? null : isNaN(parseFloat(v)) ? eLat : parseFloat(v))
+                      }}
                       style={{ flex: 1 }}
                     />
                     <input
                       className="campo-input"
-                      type="number"
-                      step="any"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="Longitude"
                       value={eLng ?? ''}
-                      onChange={(e) => setELng(e.target.value ? parseFloat(e.target.value) : null)}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setELng(v === '' || v === '-' ? null : isNaN(parseFloat(v)) ? eLng : parseFloat(v))
+                      }}
                       style={{ flex: 1 }}
                     />
                     <button

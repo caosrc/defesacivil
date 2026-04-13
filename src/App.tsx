@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import './App.css'
 import MapaOcorrencias from './components/MapaOcorrencias'
 import NovaOcorrencia from './components/NovaOcorrencia'
@@ -11,6 +11,20 @@ import { cacheOcorrencias, getCachedOcorrencias, getPending, removePending, coun
 import { exportarTodasExcel } from './exportExcel'
 
 type Aba = 'lista' | 'mapa' | 'nova'
+
+function dataLocal(iso: string): string {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function hojeStr(): string {
+  return dataLocal(new Date().toISOString())
+}
+
+function formatarDataExibicao(yyyymmdd: string): string {
+  const [y, m, d] = yyyymmdd.split('-')
+  return `${d}/${m}/${y}`
+}
 
 function NivelBadge({ nivel }: { nivel: NivelRisco }) {
   return (
@@ -27,6 +41,7 @@ export default function App() {
   const [selecionada, setSelecionada] = useState<Ocorrencia | null>(null)
   const [filtroNivel, setFiltroNivel] = useState<NivelRisco | 'todos'>('todos')
   const [filtroStatus, setFiltroStatus] = useState<'todos' | 'ativo' | 'resolvido'>('todos')
+  const [filtroData, setFiltroData] = useState<string>(hojeStr())
   const [buscando, setBuscando] = useState('')
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [pendingCount, setPendingCount] = useState(0)
@@ -160,7 +175,14 @@ export default function App() {
     URL.revokeObjectURL(url)
   }
 
+  const datasDisponiveis = useMemo(() => {
+    const set = new Set(ocorrencias.map((o) => dataLocal(o.created_at)))
+    set.add(hojeStr())
+    return Array.from(set).sort((a, b) => b.localeCompare(a))
+  }, [ocorrencias])
+
   const ocorrenciasFiltradas = ocorrencias.filter((o) => {
+    if (dataLocal(o.created_at) !== filtroData) return false
     if (filtroNivel !== 'todos' && o.nivel_risco !== filtroNivel) return false
     if (filtroStatus !== 'todos' && o.status_oc !== filtroStatus) return false
     if (buscando) {
@@ -262,6 +284,25 @@ export default function App() {
         {aba === 'lista' && (
           <>
             <div className="filtros-box">
+              <div className="filtros-row filtros-data-row">
+                <span className="filtros-label">📅 Data:</span>
+                <select
+                  className="filtro-data-select"
+                  value={filtroData}
+                  onChange={(e) => setFiltroData(e.target.value)}
+                >
+                  {datasDisponiveis.map((d) => {
+                    const hoje = hojeStr()
+                    const label = d === hoje
+                      ? `Hoje — ${formatarDataExibicao(d)}`
+                      : formatarDataExibicao(d)
+                    return <option key={d} value={d}>{label}</option>
+                  })}
+                </select>
+                {filtroData !== hojeStr() && (
+                  <button className="btn-hoje" onClick={() => setFiltroData(hojeStr())}>Hoje</button>
+                )}
+              </div>
               <input
                 className="busca-input"
                 type="text"
@@ -298,8 +339,14 @@ export default function App() {
             ) : ocorrenciasFiltradas.length === 0 ? (
               <div className="lista-vazia">
                 <div style={{ fontSize: '3rem' }}>📋</div>
-                <div>Nenhuma ocorrência encontrada.</div>
-                <button className="btn-nova-vazia" onClick={() => setAba('nova')}>+ Registrar nova</button>
+                <div>
+                  {filtroData === hojeStr()
+                    ? 'Nenhuma ocorrência registrada hoje.'
+                    : `Nenhuma ocorrência em ${formatarDataExibicao(filtroData)}.`}
+                </div>
+                {filtroData === hojeStr() && (
+                  <button className="btn-nova-vazia" onClick={() => setAba('nova')}>+ Registrar nova</button>
+                )}
               </div>
             ) : (
               <div className="lista">
