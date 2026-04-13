@@ -6,6 +6,11 @@ const LARANJA = 'E05F00'
 const CINZA_CLARO = 'f3f4f6'
 const BRANCO = 'FFFFFF'
 
+const FOTO_W = 120  // largura da miniatura em pixels
+const FOTO_H = 90   // altura da miniatura em pixels
+const FOTO_COL_W = 17  // largura da coluna em caracteres (≈ 120px)
+const ROW_H_PX_TO_PT = 0.75  // 1pt ≈ 1.33px
+
 function nivelLabel(n: string) {
   return n === 'alto' ? 'Alto 🔴' : n === 'medio' ? 'Médio 🟡' : 'Baixo 🟢'
 }
@@ -23,16 +28,14 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
     pageSetup: { orientation: 'landscape', fitToPage: true },
   })
 
-  // Column widths
   ws.columns = [
-    { width: 28 }, // A - label
-    { width: 38 }, // B - value
-    { width: 4 },  // C - spacer
-    { width: 32 }, // D - photo 1
-    { width: 32 }, // E - photo 2
+    { width: 28 },
+    { width: 38 },
+    { width: 4 },
+    { width: 32 },
+    { width: 32 },
   ]
 
-  // ── Title row ────────────────────────────────────────────────────────────────
   ws.mergeCells('A1:E1')
   const titleCell = ws.getCell('A1')
   titleCell.value = 'DEFESA CIVIL OURO BRANCO — RELATÓRIO DE OCORRÊNCIA'
@@ -48,7 +51,6 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
   subCell.alignment = { horizontal: 'center' }
   ws.getRow(2).height = 18
 
-  // ── Section header helper ────────────────────────────────────────────────────
   let row = 4
 
   function secao(titulo: string) {
@@ -78,7 +80,6 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
     row++
   }
 
-  // ── Dados básicos ─────────────────────────────────────────────────────────────
   secao('IDENTIFICAÇÃO')
   linha('ID', String(o.id))
   linha('Data da Ocorrência', o.data_ocorrencia ? new Date(o.data_ocorrencia + 'T00:00:00').toLocaleDateString('pt-BR') : '—')
@@ -109,7 +110,6 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
   ws.getRow(row).height = 18
   row += 4
 
-  // ── Photos ───────────────────────────────────────────────────────────────────
   if (o.fotos && o.fotos.length > 0) {
     row++
     ws.mergeCells(`A${row}:E${row}`)
@@ -121,12 +121,9 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
     ws.getRow(row).height = 20
     row++
 
-    const FOTO_H = 150 // pixels
-    const ROW_H_PT = Math.round(FOTO_H * 0.75) // Excel uses points (1pt ≈ 1.33px)
-
-    // Two photos per row, columns D and E (index 3 and 4)
+    const ROW_H_PT = Math.round(FOTO_H / ROW_H_PX_TO_PT)
     let fotoRow = row
-    let col = 3 // 0-indexed: col 3 = D, col 4 = E
+    let col = 3
 
     for (let i = 0; i < o.fotos.length; i++) {
       const fotoBase64 = o.fotos[i]
@@ -137,11 +134,11 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
         const imageId = wb.addImage({ base64: base64Data, extension: ext })
         ws.addImage(imageId, {
           tl: { col: col, row: fotoRow - 1 },
-          ext: { width: 200, height: FOTO_H },
+          ext: { width: FOTO_W, height: FOTO_H },
         })
         ws.getRow(fotoRow).height = ROW_H_PT
       } catch {
-        // skip image if it fails
+        // ignora imagem inválida
       }
 
       col++
@@ -153,13 +150,11 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
     }
   }
 
-  // ── Apply outer border ────────────────────────────────────────────────────────
   ws.getCell('A1').border = {
     top: { style: 'medium', color: { argb: AZUL } },
     left: { style: 'medium', color: { argb: AZUL } },
   }
 
-  // ── Download ──────────────────────────────────────────────────────────────────
   const buffer = await wb.xlsx.writeBuffer()
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -172,7 +167,7 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
   URL.revokeObjectURL(url)
 }
 
-// ── Export all occurrences (tabular) ─────────────────────────────────────────
+// ── Export all occurrences (tabular) with embedded photo thumbnails ───────────
 export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<void> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Defesa Civil Ouro Branco'
@@ -180,7 +175,11 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
 
   const ws = wb.addWorksheet('Ocorrências')
 
-  ws.columns = [
+  // Descobre o maior número de fotos entre todas as ocorrências
+  const maxFotos = ocorrencias.reduce((max, o) => Math.max(max, o.fotos?.length ?? 0), 0)
+
+  // Colunas de dados fixas
+  const colsDados: Partial<ExcelJS.Column>[] = [
     { header: 'ID',              key: 'id',              width: 6  },
     { header: 'Data Ocorrência', key: 'data_ocorrencia', width: 16 },
     { header: 'Registrado em',   key: 'created_at',      width: 20 },
@@ -194,10 +193,18 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
     { header: 'Longitude',       key: 'lng',             width: 12 },
     { header: 'Proprietário',    key: 'proprietario',    width: 26 },
     { header: 'Observações',     key: 'observacoes',     width: 40 },
-    { header: 'Qtd Fotos',       key: 'qtd_fotos',       width: 10 },
   ]
 
-  // Style header row
+  // Colunas de foto dinâmicas
+  const colsFoto: Partial<ExcelJS.Column>[] = Array.from({ length: maxFotos }, (_, i) => ({
+    header: `Foto ${i + 1}`,
+    key: `foto_${i}`,
+    width: FOTO_COL_W,
+  }))
+
+  ws.columns = [...colsDados, ...colsFoto]
+
+  // Cabeçalho
   const headerRow = ws.getRow(1)
   headerRow.height = 22
   headerRow.eachCell((cell) => {
@@ -206,9 +213,20 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
     cell.alignment = { horizontal: 'center', vertical: 'middle' }
     cell.border = { bottom: { style: 'thin', color: { argb: BRANCO } } }
   })
+  // Cabeçalhos de foto em laranja para destacar
+  if (maxFotos > 0) {
+    for (let i = 0; i < maxFotos; i++) {
+      const colIdx = colsDados.length + i + 1
+      const cell = headerRow.getCell(colIdx)
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LARANJA } }
+    }
+  }
 
-  // Data rows
+  const ROW_H_PT = Math.round(FOTO_H / ROW_H_PX_TO_PT)
+
+  // Linhas de dados
   ocorrencias.forEach((o, idx) => {
+    const temFotos = o.fotos && o.fotos.length > 0
     const r = ws.addRow({
       id: o.id,
       data_ocorrencia: o.data_ocorrencia ? new Date(o.data_ocorrencia + 'T00:00:00').toLocaleDateString('pt-BR') : '—',
@@ -223,10 +241,11 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
       lng: o.lng ?? '—',
       proprietario: o.proprietario || '—',
       observacoes: o.observacoes || '—',
-      qtd_fotos: o.fotos?.length ?? 0,
     })
 
-    r.height = 18
+    // Altura da linha: se tem fotos, usa a altura da miniatura; senão, altura padrão
+    r.height = temFotos ? ROW_H_PT : 18
+
     const isEven = idx % 2 === 1
     r.eachCell({ includeEmpty: true }, (cell) => {
       cell.font = { size: 10 }
@@ -236,22 +255,40 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
       }
     })
 
-    // Color nivel_risco cell
+    // Cor do nível de risco
     const nivelCell = r.getCell('nivel_risco')
     if (o.nivel_risco === 'alto') nivelCell.font = { bold: true, size: 10, color: { argb: 'dc2626' } }
     else if (o.nivel_risco === 'medio') nivelCell.font = { bold: true, size: 10, color: { argb: 'd97706' } }
     else nivelCell.font = { bold: true, size: 10, color: { argb: '059669' } }
+
+    // Incorpora fotos nas últimas colunas
+    if (temFotos) {
+      o.fotos!.forEach((fotoBase64, fotoIdx) => {
+        const base64Data = fotoBase64.includes(',') ? fotoBase64.split(',')[1] : fotoBase64
+        const ext = fotoBase64.startsWith('data:image/png') ? 'png' : 'jpeg'
+        const colIdx = colsDados.length + fotoIdx  // índice 0-based da coluna de foto
+
+        try {
+          const imageId = wb.addImage({ base64: base64Data, extension: ext })
+          ws.addImage(imageId, {
+            tl: { col: colIdx, row: r.number - 1 },
+            ext: { width: FOTO_W, height: FOTO_H },
+          })
+        } catch {
+          // ignora imagem inválida
+        }
+      })
+    }
   })
 
-  // Auto-filter
-  ws.autoFilter = { from: 'A1', to: { row: 1, column: ws.columns.length } }
+  // Filtro automático e linha congelada
+  const totalCols = colsDados.length + maxFotos
+  ws.autoFilter = { from: 'A1', to: { row: 1, column: totalCols } }
+  ws.views = [{ state: 'frozen', ySplit: 2 }]
 
-  // Freeze top row
-  ws.views = [{ state: 'frozen', ySplit: 1 }]
-
-  // Title row at very top
+  // Título no topo
   ws.spliceRows(1, 0, [])
-  ws.mergeCells(`A1:N1`)
+  ws.mergeCells(1, 1, 1, totalCols)
   const t = ws.getCell('A1')
   t.value = `DEFESA CIVIL OURO BRANCO — TODAS AS OCORRÊNCIAS — Gerado em ${new Date().toLocaleString('pt-BR')}`
   t.font = { bold: true, size: 12, color: { argb: BRANCO } }
