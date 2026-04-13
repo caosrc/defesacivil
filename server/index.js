@@ -54,12 +54,13 @@ app.put('/api/ocorrencias/:id', async (req, res) => {
   const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, observacoes, data_ocorrencia } = req.body
   try {
     const result = await pool.query(
-      `UPDATE ocorrencias SET tipo=$1,natureza=$2,subnatureza=$3,nivel_risco=$4,status_oc=$5,fotos=$6,lat=$7,lng=$8,endereco=$9,proprietario=$10,observacoes=$11,data_ocorrencia=$12
+      `UPDATE ocorrencias SET tipo=$1,natureza=$2,subnatureza=$3,nivel_risco=$4,status_oc=$5,fotos=$6::jsonb,lat=$7,lng=$8,endereco=$9,proprietario=$10,observacoes=$11,data_ocorrencia=$12
        WHERE id=$13 RETURNING *`,
-      [tipo, natureza, subnatureza || null, nivel_risco, status_oc, fotos, lat || null, lng || null, endereco || null, proprietario || null, observacoes || null, data_ocorrencia || null, req.params.id]
+      [tipo, natureza, subnatureza || null, nivel_risco, status_oc, JSON.stringify(fotos ?? []), lat || null, lng || null, endereco || null, proprietario || null, observacoes || null, data_ocorrencia || null, req.params.id]
     )
     res.json(result.rows[0])
   } catch (err) {
+    console.error('PUT /api/ocorrencias error:', err)
     res.status(500).json({ error: err.message })
   }
 })

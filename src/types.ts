@@ -19,7 +19,7 @@ export interface Ocorrencia {
   _offline?: boolean
 }
 
-export const TIPOS_OCORRENCIA = ['Vistoria', 'Diligência', 'Apoio', 'Outro']
+export const TIPOS_OCORRENCIA = ['Diligência', 'Vistoria de Engenharia', 'Vistoria Ambiental', 'Apoio', 'Outro']
 
 export const NATUREZAS = [
   'Árvore Gerando Risco (Caída ou Não)',

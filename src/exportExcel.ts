@@ -175,103 +175,102 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
 
   const ws = wb.addWorksheet('Ocorrências')
 
-  // Descobre o maior número de fotos entre todas as ocorrências
   const maxFotos = ocorrencias.reduce((max, o) => Math.max(max, o.fotos?.length ?? 0), 0)
+  const totalCols = 13 + maxFotos
 
-  // Colunas de dados fixas
-  const colsDados: Partial<ExcelJS.Column>[] = [
-    { header: 'ID',              key: 'id',              width: 6  },
-    { header: 'Data Ocorrência', key: 'data_ocorrencia', width: 16 },
-    { header: 'Registrado em',   key: 'created_at',      width: 20 },
-    { header: 'Tipo',            key: 'tipo',            width: 14 },
-    { header: 'Natureza',        key: 'natureza',        width: 26 },
-    { header: 'Detalhe',         key: 'subnatureza',     width: 20 },
-    { header: 'Nível de Risco',  key: 'nivel_risco',     width: 14 },
-    { header: 'Status',          key: 'status_oc',       width: 12 },
-    { header: 'Endereço',        key: 'endereco',        width: 32 },
-    { header: 'Latitude',        key: 'lat',             width: 12 },
-    { header: 'Longitude',       key: 'lng',             width: 12 },
-    { header: 'Proprietário',    key: 'proprietario',    width: 26 },
-    { header: 'Observações',     key: 'observacoes',     width: 40 },
+  // ── Linha 1: título ───────────────────────────────────────────────────────
+  ws.mergeCells(1, 1, 1, totalCols)
+  const titulo = ws.getCell('A1')
+  titulo.value = `DEFESA CIVIL OURO BRANCO — TODAS AS OCORRÊNCIAS — Gerado em ${new Date().toLocaleString('pt-BR')}`
+  titulo.font = { bold: true, size: 12, color: { argb: BRANCO } }
+  titulo.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LARANJA } }
+  titulo.alignment = { horizontal: 'center', vertical: 'middle' }
+  ws.getRow(1).height = 26
+
+  // ── Linha 2: cabeçalhos das colunas ──────────────────────────────────────
+  const cabecalhos = [
+    'ID', 'Data Ocorrência', 'Registrado em', 'Tipo', 'Natureza', 'Detalhe',
+    'Nível de Risco', 'Status', 'Endereço', 'Latitude', 'Longitude',
+    'Proprietário', 'Observações',
+    ...Array.from({ length: maxFotos }, (_, i) => `Foto ${i + 1}`),
   ]
 
-  // Colunas de foto dinâmicas
-  const colsFoto: Partial<ExcelJS.Column>[] = Array.from({ length: maxFotos }, (_, i) => ({
-    header: `Foto ${i + 1}`,
-    key: `foto_${i}`,
-    width: FOTO_COL_W,
-  }))
+  const larguras = [6, 16, 20, 14, 26, 20, 14, 12, 32, 12, 12, 26, 40,
+    ...Array(maxFotos).fill(FOTO_COL_W)]
 
-  ws.columns = [...colsDados, ...colsFoto]
+  ws.columns = larguras.map((w) => ({ width: w }))
 
-  // Cabeçalho
-  const headerRow = ws.getRow(1)
-  headerRow.height = 22
-  headerRow.eachCell((cell) => {
+  const headerRow = ws.getRow(2)
+  cabecalhos.forEach((h, i) => {
+    const cell = headerRow.getCell(i + 1)
+    cell.value = h
     cell.font = { bold: true, size: 10, color: { argb: BRANCO } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL } }
+    cell.fill = {
+      type: 'pattern', pattern: 'solid',
+      fgColor: { argb: i >= 13 ? LARANJA : AZUL },
+    }
     cell.alignment = { horizontal: 'center', vertical: 'middle' }
     cell.border = { bottom: { style: 'thin', color: { argb: BRANCO } } }
   })
-  // Cabeçalhos de foto em laranja para destacar
-  if (maxFotos > 0) {
-    for (let i = 0; i < maxFotos; i++) {
-      const colIdx = colsDados.length + i + 1
-      const cell = headerRow.getCell(colIdx)
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LARANJA } }
-    }
-  }
+  headerRow.height = 22
 
+  // ── Filtro e freeze ───────────────────────────────────────────────────────
+  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: totalCols } }
+  ws.views = [{ state: 'frozen', ySplit: 2 }]
+
+  // ── Linhas de dados (começam na linha 3) ─────────────────────────────────
   const ROW_H_PT = Math.round(FOTO_H / ROW_H_PX_TO_PT)
+  const LINHA_INICIO = 3  // primeira linha de dados (1-indexed)
 
-  // Linhas de dados
   ocorrencias.forEach((o, idx) => {
     const temFotos = o.fotos && o.fotos.length > 0
-    const r = ws.addRow({
-      id: o.id,
-      data_ocorrencia: o.data_ocorrencia ? new Date(o.data_ocorrencia + 'T00:00:00').toLocaleDateString('pt-BR') : '—',
-      created_at: o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—',
-      tipo: o.tipo,
-      natureza: o.natureza,
-      subnatureza: o.subnatureza || '—',
-      nivel_risco: nivelLabel(o.nivel_risco),
-      status_oc: statusLabel(o.status_oc),
-      endereco: o.endereco || '—',
-      lat: o.lat ?? '—',
-      lng: o.lng ?? '—',
-      proprietario: o.proprietario || '—',
-      observacoes: o.observacoes || '—',
-    })
+    const linhaNum = LINHA_INICIO + idx
+    const r = ws.getRow(linhaNum)
 
-    // Altura da linha: se tem fotos, usa a altura da miniatura; senão, altura padrão
+    const valores = [
+      o.id,
+      o.data_ocorrencia ? new Date(o.data_ocorrencia + 'T00:00:00').toLocaleDateString('pt-BR') : '—',
+      o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—',
+      o.tipo,
+      o.natureza,
+      o.subnatureza || '—',
+      nivelLabel(o.nivel_risco),
+      statusLabel(o.status_oc),
+      o.endereco || '—',
+      o.lat ?? '—',
+      o.lng ?? '—',
+      o.proprietario || '—',
+      o.observacoes || '—',
+    ]
+
+    valores.forEach((v, i) => { r.getCell(i + 1).value = v as ExcelJS.CellValue })
+
     r.height = temFotos ? ROW_H_PT : 18
 
     const isEven = idx % 2 === 1
     r.eachCell({ includeEmpty: true }, (cell) => {
       cell.font = { size: 10 }
       cell.alignment = { vertical: 'middle', wrapText: false }
-      if (isEven) {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'f0f4ff' } }
-      }
+      if (isEven) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'f0f4ff' } }
     })
 
-    // Cor do nível de risco
-    const nivelCell = r.getCell('nivel_risco')
+    // Cor do nível de risco (coluna 7)
+    const nivelCell = r.getCell(7)
     if (o.nivel_risco === 'alto') nivelCell.font = { bold: true, size: 10, color: { argb: 'dc2626' } }
     else if (o.nivel_risco === 'medio') nivelCell.font = { bold: true, size: 10, color: { argb: 'd97706' } }
     else nivelCell.font = { bold: true, size: 10, color: { argb: '059669' } }
 
-    // Incorpora fotos nas últimas colunas
+    // Incorpora fotos — linha 0-indexed = linhaNum - 1
     if (temFotos) {
       o.fotos!.forEach((fotoBase64, fotoIdx) => {
         const base64Data = fotoBase64.includes(',') ? fotoBase64.split(',')[1] : fotoBase64
         const ext = fotoBase64.startsWith('data:image/png') ? 'png' : 'jpeg'
-        const colIdx = colsDados.length + fotoIdx  // índice 0-based da coluna de foto
+        const colIdx = 13 + fotoIdx  // 0-indexed: coluna 14 em diante
 
         try {
           const imageId = wb.addImage({ base64: base64Data, extension: ext })
           ws.addImage(imageId, {
-            tl: { col: colIdx, row: r.number - 1 },
+            tl: { col: colIdx, row: linhaNum - 1 },
             ext: { width: FOTO_W, height: FOTO_H },
           })
         } catch {
@@ -280,21 +279,6 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
       })
     }
   })
-
-  // Filtro automático e linha congelada
-  const totalCols = colsDados.length + maxFotos
-  ws.autoFilter = { from: 'A1', to: { row: 1, column: totalCols } }
-  ws.views = [{ state: 'frozen', ySplit: 2 }]
-
-  // Título no topo
-  ws.spliceRows(1, 0, [])
-  ws.mergeCells(1, 1, 1, totalCols)
-  const t = ws.getCell('A1')
-  t.value = `DEFESA CIVIL OURO BRANCO — TODAS AS OCORRÊNCIAS — Gerado em ${new Date().toLocaleString('pt-BR')}`
-  t.font = { bold: true, size: 12, color: { argb: BRANCO } }
-  t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: LARANJA } }
-  t.alignment = { horizontal: 'center', vertical: 'middle' }
-  ws.getRow(1).height = 26
 
   const buffer = await wb.xlsx.writeBuffer()
   const blob = new Blob([buffer], {

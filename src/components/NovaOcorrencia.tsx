@@ -13,6 +13,7 @@ interface Props {
 export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const hoje = new Date().toISOString().split('T')[0]
   const [tipo, setTipo] = useState('')
+  const [tipoOutro, setTipoOutro] = useState('')
   const [natureza, setNatureza] = useState('')
   const [subnatureza, setSubnatureza] = useState('')
   const [nivelRisco, setNivelRisco] = useState<NivelRisco>('baixo')
@@ -102,8 +103,10 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       if (geo) { finalLat = geo.lat; finalLng = geo.lng }
     }
 
+    const tipoFinal = tipo === 'Outro' ? (tipoOutro.trim() || 'Outro') : tipo
+
     const payload = {
-      tipo,
+      tipo: tipoFinal,
       natureza,
       subnatureza: precisaSubnatureza ? subnatureza : null,
       nivel_risco: nivelRisco,
@@ -162,10 +165,20 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
           {/* 1 - Tipo */}
           <div className="campo">
             <label className="campo-label">1 — Tipo de Ocorrência</label>
-            <select className="campo-select" value={tipo} onChange={(e) => { setTipo(e.target.value); setNatureza('') }}>
+            <select className="campo-select" value={tipo} onChange={(e) => { setTipo(e.target.value); setTipoOutro(''); setNatureza('') }}>
               <option value="">Selecione...</option>
               {TIPOS_OCORRENCIA.map((t) => <option key={t}>{t}</option>)}
             </select>
+            {tipo === 'Outro' && (
+              <input
+                className="campo-input"
+                style={{ marginTop: '0.5rem' }}
+                type="text"
+                placeholder="Descreva o tipo de ocorrência..."
+                value={tipoOutro}
+                onChange={(e) => setTipoOutro(e.target.value)}
+              />
+            )}
           </div>
 
           {/* 2 - Natureza */}
