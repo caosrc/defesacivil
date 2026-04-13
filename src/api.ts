@@ -24,8 +24,14 @@ export async function atualizarOcorrencia(id: number, data: Partial<Ocorrencia>)
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   })
-  if (!res.ok) throw new Error('Erro ao atualizar ocorrência')
-  return res.json()
+  const text = await res.text()
+  if (!res.ok) {
+    let msg = 'Erro ao atualizar ocorrência'
+    try { msg = JSON.parse(text)?.error ?? msg } catch { /* ignore */ }
+    throw new Error(msg)
+  }
+  if (!text) throw new Error('Resposta vazia do servidor')
+  return JSON.parse(text)
 }
 
 export async function deletarOcorrencia(id: number): Promise<void> {

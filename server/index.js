@@ -51,17 +51,46 @@ app.get('/api/ocorrencias/:id', async (req, res) => {
 })
 
 app.put('/api/ocorrencias/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10)
+  if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' })
+
   const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, observacoes, data_ocorrencia } = req.body
+  console.log(`PUT /api/ocorrencias/${id} — tipo=${tipo} natureza=${natureza}`)
+
   try {
-    const result = await pool.query(
-      `UPDATE ocorrencias SET tipo=$1,natureza=$2,subnatureza=$3,nivel_risco=$4,status_oc=$5,fotos=$6::jsonb,lat=$7,lng=$8,endereco=$9,proprietario=$10,observacoes=$11,data_ocorrencia=$12
-       WHERE id=$13 RETURNING *`,
-      [tipo, natureza, subnatureza || null, nivel_risco, status_oc, JSON.stringify(fotos ?? []), lat || null, lng || null, endereco || null, proprietario || null, observacoes || null, data_ocorrencia || null, req.params.id]
+    // UPDATE sem RETURNING para evitar problemas com payload grande de fotos
+    await pool.query(
+      `UPDATE ocorrencias
+       SET tipo=$1, natureza=$2, subnatureza=$3, nivel_risco=$4, status_oc=$5,
+           fotos=$6::jsonb, lat=$7, lng=$8, endereco=$9, proprietario=$10,
+           observacoes=$11, data_ocorrencia=$12
+       WHERE id=$13`,
+      [
+        tipo,
+        natureza,
+        subnatureza || null,
+        nivel_risco,
+        status_oc,
+        JSON.stringify(Array.isArray(fotos) ? fotos : []),
+        lat != null && lat !== '' ? lat : null,
+        lng != null && lng !== '' ? lng : null,
+        endereco || null,
+        proprietario || null,
+        observacoes || null,
+        data_ocorrencia || null,
+        id,
+      ]
     )
-    res.json(result.rows[0])
+
+    // Busca o registro atualizado separadamente
+    const sel = await pool.query('SELECT * FROM ocorrencias WHERE id=$1', [id])
+    if (!sel.rows.length) return res.status(404).json({ error: 'Ocorrência não encontrada' })
+
+    console.log(`PUT /api/ocorrencias/${id} — salvo com sucesso`)
+    return res.json(sel.rows[0])
   } catch (err) {
     console.error('PUT /api/ocorrencias error:', err)
-    res.status(500).json({ error: err.message })
+    return res.status(500).json({ error: err.message })
   }
 })
 
