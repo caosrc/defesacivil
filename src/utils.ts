@@ -73,24 +73,43 @@ export async function adicionarMarcaDagua(
       linhas.push('DEFESA CIVIL - OURO BRANCO')
 
       const fontSize = Math.max(24, Math.round(img.width * 0.038))
-      const padding = fontSize * 0.7
-      const lineHeight = fontSize * 1.55
-      const boxHeight = linhas.length * lineHeight + padding * 1.5
-
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.58)'
-      ctx.fillRect(0, img.height - boxHeight, img.width, boxHeight)
+      const padding = Math.round(fontSize * 0.5)
+      const lineHeight = fontSize * 1.5
+      const margem = Math.round(img.width * 0.025)
 
       ctx.font = `bold ${fontSize}px Arial, sans-serif`
+
+      const larguraMax = Math.max(...linhas.map((l) => ctx.measureText(l).width))
+      const boxW = larguraMax + padding * 2
+      const boxH = linhas.length * lineHeight + padding * 1.4
+      const boxX = img.width - boxW - margem
+      const boxY = img.height - boxH - margem
+
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.50)'
+      const r = fontSize * 0.25
+      ctx.beginPath()
+      ctx.moveTo(boxX + r, boxY)
+      ctx.lineTo(boxX + boxW - r, boxY)
+      ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + r)
+      ctx.lineTo(boxX + boxW, boxY + boxH - r)
+      ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - r, boxY + boxH)
+      ctx.lineTo(boxX + r, boxY + boxH)
+      ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - r)
+      ctx.lineTo(boxX, boxY + r)
+      ctx.quadraticCurveTo(boxX, boxY, boxX + r, boxY)
+      ctx.closePath()
+      ctx.fill()
+
       ctx.fillStyle = '#ffffff'
-      ctx.textAlign = 'center'
-      ctx.shadowColor = 'rgba(0,0,0,0.9)'
-      ctx.shadowBlur = 6
+      ctx.textAlign = 'right'
+      ctx.shadowColor = 'rgba(0,0,0,0.95)'
+      ctx.shadowBlur = 5
 
       linhas.forEach((linha, i) => {
         ctx.fillText(
           linha,
-          img.width / 2,
-          img.height - boxHeight + padding + fontSize + i * lineHeight
+          boxX + boxW - padding,
+          boxY + padding + fontSize + i * lineHeight
         )
       })
 
