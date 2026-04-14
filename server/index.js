@@ -130,8 +130,8 @@ async function gerarRelatorioVistoria(ocorrencia) {
     '“cordenadas do local”': xmlEscape(formatarCoordenadas(ocorrencia.lat, ocorrencia.lng)),
     '(informações da situação descrita na ocorrência, quadro 9)': xmlEscape(situacao),
     '(informações da recomendação descrita na ocorrência, quadro 10)': xmlEscape(recomendacao),
-    '(informações da situação descrita na conclusão, quadro 11) “descreva a conclusão”': xmlEscape(conclusao),
-    '(informações da situação descrita na conclusão, quadro 11) "descreva a conclusão"': xmlEscape(conclusao),
+    '(informações da situação descrita na conclusão, quadro 11)': xmlEscape(conclusao),
+
   }
 
   for (const [alvo, valor] of Object.entries(substituicoes)) {
