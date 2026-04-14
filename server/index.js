@@ -1,9 +1,10 @@
 import express from 'express'
 import cors from 'cors'
 import pg from 'pg'
+import JSZip from 'jszip'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync, readdirSync } from 'fs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -14,6 +15,154 @@ const app = express()
 
 app.use(cors())
 app.use(express.json({ limit: '100mb' }))
+
+const MESES = [
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+]
+
+function xmlEscape(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+function formatarDataCurta(data = new Date()) {
+  return data.toLocaleDateString('pt-BR')
+}
+
+function formatarDataExtenso(data = new Date()) {
+  return `${data.getDate()} de ${MESES[data.getMonth()]} de ${data.getFullYear()}`
+}
+
+function decimalParaGms(valor, positivo, negativo) {
+  const absoluto = Math.abs(Number(valor))
+  const graus = Math.floor(absoluto)
+  const minutosFloat = (absoluto - graus) * 60
+  const minutos = Math.floor(minutosFloat)
+  const segundos = ((minutosFloat - minutos) * 60).toFixed(2).replace('.', ',')
+  return `${graus}° ${minutos}' ${segundos}" ${Number(valor) >= 0 ? positivo : negativo}`
+}
+
+function formatarCoordenadas(lat, lng) {
+  if (lat == null || lng == null || lat === '' || lng === '') return 'Não informadas'
+  return `${decimalParaGms(lat, 'N', 'S')}, ${decimalParaGms(lng, 'L', 'O')}`
+}
+
+function limparNomeArquivo(valor, fallback) {
+  const limpo = String(valor || fallback)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  return limpo || fallback
+}
+
+function nomeRua(endereco) {
+  const texto = String(endereco || '').trim()
+  if (!texto) return 'Endereco'
+  return texto.split(',')[0].trim() || texto
+}
+
+function relatorioFileName(ocorrencia) {
+  const numero = limparNomeArquivo(ocorrencia.id, 'numero')
+  const rua = limparNomeArquivo(nomeRua(ocorrencia.endereco), 'Nome_da_Rua')
+  const requerente = limparNomeArquivo(ocorrencia.proprietario, 'Nome_do_requerente')
+  return `RelVist_${numero}_${rua}_${requerente}.docx`
+}
+
+function getRelatorioTemplatePath() {
+  const assetsPath = join(__dirname, '..', 'attached_assets')
+  const arquivo = readdirSync(assetsPath).find((nome) => nome.startsWith('RelVist_') && nome.endsWith('.docx'))
+  if (!arquivo) throw new Error('Modelo de relatório não encontrado em attached_assets')
+  return join(assetsPath, arquivo)
+}
+
+function parseDataUrl(dataUrl) {
+  const match = String(dataUrl || '').match(/^data:(image\/(?:png|jpeg|jpg));base64,(.+)$/)
+  if (!match) return null
+  const mime = match[1] === 'image/jpg' ? 'image/jpeg' : match[1]
+  const extension = mime === 'image/png' ? 'png' : 'jpeg'
+  return { mime, extension, buffer: Buffer.from(match[2], 'base64') }
+}
+
+function imageDrawingXml(rId, index) {
+  const cx = 2850000
+  const cy = 3000000
+  return `<w:p><w:pPr><w:spacing w:after="0"/><w:jc w:val="center"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${200 + index}" name="Foto ${index}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="0"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="${300 + index}" name="Foto ${index}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`
+}
+
+async function gerarRelatorioVistoria(ocorrencia) {
+  const template = readFileSync(getRelatorioTemplatePath())
+  const zip = await JSZip.loadAsync(template)
+  const hoje = new Date()
+  const natureza = ocorrencia.natureza || 'Não informada'
+  const requerente = ocorrencia.proprietario || 'Não informado'
+  const endereco = ocorrencia.endereco || 'Não informado'
+  let documentXml = await zip.file('word/document.xml').async('string')
+
+  const substituicoes = {
+    '“data 1”': formatarDataCurta(hoje),
+    '“Nome do requerente”': xmlEscape(requerente),
+    '“Natureza da Ocorrência”': xmlEscape(natureza),
+    'Natureza da Ocorrência': xmlEscape(natureza),
+    '“data 2”': xmlEscape(formatarDataExtenso(hoje)),
+    '“Endereço”': xmlEscape(endereco),
+    '“cordenadas do local”': xmlEscape(formatarCoordenadas(ocorrencia.lat, ocorrencia.lng)),
+  }
+
+  for (const [alvo, valor] of Object.entries(substituicoes)) {
+    documentXml = documentXml.split(alvo).join(valor)
+  }
+
+  let relsXml = await zip.file('word/_rels/document.xml.rels').async('string')
+  const contentTypesFile = zip.file('[Content_Types].xml')
+  let contentTypesXml = await contentTypesFile.async('string')
+  const ids = [...relsXml.matchAll(/Id="rId(\d+)"/g)].map((match) => Number(match[1]))
+  let proximoId = Math.max(0, ...ids) + 1
+
+  const fotos = Array.isArray(ocorrencia.fotos) ? ocorrencia.fotos.slice(0, 6) : []
+  fotos.forEach((foto, index) => {
+    const imagem = parseDataUrl(foto)
+    if (!imagem) return
+    const numero = index + 1
+    const rId = `rId${proximoId++}`
+    const target = `media/relatorio_foto_${numero}.${imagem.extension}`
+    zip.file(`word/${target}`, imagem.buffer)
+    relsXml = relsXml.replace(
+      '</Relationships>',
+      `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${target}" /></Relationships>`
+    )
+
+    if (!contentTypesXml.includes(`Extension="${imagem.extension}"`)) {
+      contentTypesXml = contentTypesXml.replace(
+        '</Types>',
+        `<Default Extension="${imagem.extension}" ContentType="${imagem.mime}"/></Types>`
+      )
+    }
+
+    const captionRegex = new RegExp(`(<w:p\\\\b[\\\\s\\\\S]*?SEQ Figura[\\\\s\\\\S]*?<w:t[^>]*>\\\\s*${numero}\\\\s*<\\\\/w:t>[\\\\s\\\\S]*?<\\\\/w:p>)`)
+    documentXml = documentXml.replace(captionRegex, `${imageDrawingXml(rId, numero)}$1`)
+  })
+
+  zip.file('word/document.xml', documentXml)
+  zip.file('word/_rels/document.xml.rels', relsXml)
+  zip.file('[Content_Types].xml', contentTypesXml)
+  return zip.generateAsync({ type: 'nodebuffer' })
+}
 
 async function initDb() {
   if (!process.env.DATABASE_URL) {
@@ -147,6 +296,23 @@ app.delete('/api/ocorrencias/:id', async (req, res) => {
 })
 
 app.get('/api/health', (req, res) => res.json({ ok: true }))
+
+app.post('/api/relatorio-vistoria', async (req, res) => {
+  try {
+    const ocorrencia = req.body
+    if (!ocorrencia || typeof ocorrencia !== 'object') {
+      return res.status(400).json({ error: 'Dados da ocorrência não informados' })
+    }
+    const buffer = await gerarRelatorioVistoria(ocorrencia)
+    const filename = relatorioFileName(ocorrencia)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`)
+    res.send(buffer)
+  } catch (err) {
+    console.error('POST /api/relatorio-vistoria error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // ── Checklists Viatura ──
 app.get('/api/checklists', async (req, res) => {

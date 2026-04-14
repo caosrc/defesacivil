@@ -9,6 +9,7 @@ Sistema web completo de registro e gerenciamento de ocorrências para a Defesa C
 - **Banco de Dados**: Replit PostgreSQL (DATABASE_URL)
 - **Mapa**: React-Leaflet com OpenStreetMap
 - **Exportação**: KMZ via JSZip, Excel via ExcelJS
+- **Relatórios**: DOCX gerado a partir do modelo anexado em `attached_assets`
 
 ## Estrutura
 ```
@@ -84,6 +85,7 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 - Mapa OpenStreetMap centrado em Ouro Branco com marcadores por tipo (emoji + cor)
 - Popup no marcador com botão "Ver detalhes"
 - Modal de detalhe com exportação KMZ individual
+- Botão “Salvar relatório” no detalhe da ocorrência, gerando DOCX com dados, coordenadas em graus/minutos/segundos e até 6 fotos
 - Exportação KMZ global de todas as ocorrências com GPS
 - Exportação Excel de todas as ocorrências
 - Filtros por nível, status e busca de texto

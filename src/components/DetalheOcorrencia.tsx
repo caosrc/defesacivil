@@ -21,6 +21,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [geoMsg, setGeoMsg] = useState('')
   const [erroEdit, setErroEdit] = useState('')
   const [fotoAmpliada, setFotoAmpliada] = useState<number | null>(null)
+  const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
 
   // Detecta se o tipo salvo é um valor personalizado ("Outro")
   const tipoEhOutro = !TIPOS_OCORRENCIA.includes(o.tipo) || o.tipo === 'Outro'
@@ -163,6 +164,42 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     a.download = `ocorrencia_${o.id}.kmz`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  async function salvarRelatorio() {
+    setGerandoRelatorio(true)
+    try {
+      const res = await fetch('/api/relatorio-vistoria', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(o),
+      })
+      if (!res.ok) {
+        let msg = 'Erro ao salvar relatório'
+        try {
+          const data = await res.json()
+          msg = data?.error || msg
+        } catch {
+          msg = await res.text() || msg
+        }
+        throw new Error(msg)
+      }
+      const blob = await res.blob()
+      const disposition = res.headers.get('Content-Disposition') || ''
+      const utf8Name = disposition.match(/filename\*=UTF-8''([^;]+)/)?.[1]
+      const normalName = disposition.match(/filename="?([^"]+)"?/)?.[1]
+      const filename = utf8Name ? decodeURIComponent(utf8Name) : (normalName || `RelVist_${o.id}.docx`)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao salvar relatório')
+    } finally {
+      setGerandoRelatorio(false)
+    }
   }
 
   async function confirmarDelete() {
@@ -447,6 +484,9 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
             {!editando ? (
               <>
                 <button className="btn-editar" onClick={iniciarEdicao}>✏️ Editar</button>
+                <button className="btn-relatorio" onClick={salvarRelatorio} disabled={gerandoRelatorio}>
+                  {gerandoRelatorio ? '⏳ Salvando...' : '📄 Salvar relatório'}
+                </button>
                 <button className="btn-excel" onClick={() => exportarOcorrenciaExcel(o)}>📊 Excel</button>
                 <button className="btn-kmz" onClick={exportarKMZ}>🌍 KMZ</button>
                 <button className="btn-deletar" onClick={confirmarDelete}>🗑️</button>

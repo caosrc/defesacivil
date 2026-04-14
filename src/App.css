@@ -1078,6 +1078,7 @@ input, select, textarea { font-family: inherit; }
   display: flex; gap: 0.75rem;
   padding: 0.85rem 1rem 1.1rem;
   border-top: 1px solid #f3f4f6;
+  flex-wrap: wrap;
 }
 
 .btn-excel {
@@ -1095,6 +1096,20 @@ input, select, textarea { font-family: inherit; }
   transition: background 0.15s;
 }
 .btn-kmz:hover { background: #047857; }
+
+.btn-relatorio {
+  flex: 1 1 100%;
+  background: #7c3aed;
+  color: white;
+  border: none;
+  padding: 0.7rem;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  transition: background 0.15s;
+}
+.btn-relatorio:hover:not(:disabled) { background: #6d28d9; }
+.btn-relatorio:disabled { opacity: 0.65; cursor: default; }
 
 .btn-excel-global {
   background: #166534; color: white;
