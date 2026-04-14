@@ -147,7 +147,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
         <button className="btn-voltar" onClick={onVoltar}>‹</button>
         <div className="header-logo-mini">
           <img src="/logo-dc.png" alt="Defesa Civil" className="logo-img-mini" />
-          <span className="header-titulo-texto">Nova Vistoria</span>
+          <span className="header-titulo-texto">Nova Ocorrência</span>
         </div>
         <div style={{ width: 36 }}>
           {!isOnline && <span title="Sem conexão — salvo localmente" style={{ fontSize: '1.2rem' }}>📵</span>}
