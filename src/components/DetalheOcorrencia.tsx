@@ -5,6 +5,7 @@ import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES } fr
 import { deletarOcorrencia, atualizarOcorrencia } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
+import { formatarCoordenadas } from '../utils'
 
 interface Props {
   ocorrencia: Ocorrencia
@@ -81,7 +82,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     if (res) {
       setELat(res.lat)
       setELng(res.lng)
-      setGeoMsg(`✅ Lat ${res.lat.toFixed(4)}, Lng ${res.lng.toFixed(4)}`)
+      setGeoMsg(`✅ ${formatarCoordenadas(res.lat, res.lng)}`)
     } else {
       setGeoMsg('⚠️ Endereço não encontrado')
     }
@@ -257,7 +258,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                 )}
 
                 {(o.lat && o.lng) && (
-                  <InfoRow icone="🛰️" label="Coordenadas GPS" valor={`Lat: ${o.lat}, Lng: ${o.lng}`} />
+                  <InfoRow icone="🛰️" label="Coordenadas GPS" valor={formatarCoordenadas(o.lat, o.lng)} />
                 )}
                 {o.endereco && (
                   <InfoRow icone="📍" label="Endereço" valor={o.endereco} />

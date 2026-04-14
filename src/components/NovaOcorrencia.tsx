@@ -3,6 +3,7 @@ import { TIPOS_OCORRENCIA, NATUREZAS, AGENTES } from '../types'
 import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
 import { savePending, geocodificarEndereco } from '../offline'
+import { formatarCoordenadas } from '../utils'
 
 interface Props {
   onSalvo: (offline: boolean) => void
@@ -63,7 +64,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     if (resultado) {
       setLat(resultado.lat)
       setLng(resultado.lng)
-      setGeoMsg(`✅ Localizado: Lat ${resultado.lat.toFixed(4)}, Lng ${resultado.lng.toFixed(4)}`)
+      setGeoMsg(`✅ Localizado: ${formatarCoordenadas(resultado.lat, resultado.lng)}`)
     } else {
       setGeoMsg('⚠️ Endereço não encontrado. Tente ser mais específico.')
     }
@@ -279,7 +280,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
               <div className="gps-info">
                 <span>📍</span>
                 {lat
-                  ? <span className="gps-val">Lat: {lat}  Lng: {lng}</span>
+                  ? <span className="gps-val">{formatarCoordenadas(lat, lng)}</span>
                   : <span className="gps-vazio">Sem GPS</span>}
               </div>
               <button className="btn-gps" onClick={obterGps} disabled={buscandoGps}>
