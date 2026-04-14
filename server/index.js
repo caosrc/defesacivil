@@ -318,9 +318,17 @@ app.get('/api/health', (req, res) => res.json({ ok: true }))
 
 app.post('/api/relatorio-vistoria', async (req, res) => {
   try {
-    const ocorrencia = req.body
+    let ocorrencia = req.body
     if (!ocorrencia || typeof ocorrencia !== 'object') {
       return res.status(400).json({ error: 'Dados da ocorrência não informados' })
+    }
+    if (ocorrencia.id && Number(ocorrencia.id) > 0) {
+      try {
+        const fresh = await pool.query('SELECT * FROM ocorrencias WHERE id=$1', [Number(ocorrencia.id)])
+        if (fresh.rows.length > 0) ocorrencia = fresh.rows[0]
+      } catch (dbErr) {
+        console.warn('Não foi possível buscar dados frescos do banco:', dbErr.message)
+      }
     }
     const buffer = await gerarRelatorioVistoria(ocorrencia)
     const filename = relatorioFileName(ocorrencia)
