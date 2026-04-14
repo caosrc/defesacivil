@@ -90,6 +90,27 @@ interface SlotProps {
   large?: boolean
 }
 
+function redimensionarImagem(dataUrl: string, maxW: number, maxH: number): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      let w = img.width
+      let h = img.height
+      if (w > maxW || h > maxH) {
+        const ratio = Math.min(maxW / w, maxH / h)
+        w = Math.round(w * ratio)
+        h = Math.round(h * ratio)
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+      resolve(canvas.toDataURL('image/jpeg', 0.88))
+    }
+    img.src = dataUrl
+  })
+}
+
 function FotoSlot({ label, foto, onFoto, children, large }: SlotProps) {
   const ref = useRef<HTMLInputElement>(null)
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -98,7 +119,8 @@ function FotoSlot({ label, foto, onFoto, children, large }: SlotProps) {
     const reader = new FileReader()
     reader.onload = async (ev) => {
       if (ev.target?.result) {
-        const comMarca = await adicionarMarcaDagua(ev.target.result as string)
+        const redim = await redimensionarImagem(ev.target.result as string, 1200, 900)
+        const comMarca = await adicionarMarcaDagua(redim)
         onFoto(comMarca)
       }
     }
