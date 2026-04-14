@@ -105,6 +105,40 @@ app.delete('/api/ocorrencias/:id', async (req, res) => {
 
 app.get('/api/health', (req, res) => res.json({ ok: true }))
 
+// ── Checklists Viatura ──
+app.get('/api/checklists', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM checklists_viatura ORDER BY created_at DESC')
+    res.json(result.rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/checklists', async (req, res) => {
+  const { data_checklist, km, motorista, fotos_avarias, foto_principal, foto_frontal, foto_traseira, foto_direita, foto_esquerda, observacoes } = req.body
+  try {
+    const result = await pool.query(
+      `INSERT INTO checklists_viatura (data_checklist, km, motorista, fotos_avarias, foto_principal, foto_frontal, foto_traseira, foto_direita, foto_esquerda, observacoes)
+       VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [data_checklist, km || null, motorista || null, JSON.stringify(Array.isArray(fotos_avarias) ? fotos_avarias : []), foto_principal || null, foto_frontal || null, foto_traseira || null, foto_direita || null, foto_esquerda || null, observacoes || null]
+    )
+    res.status(201).json(result.rows[0])
+  } catch (err) {
+    console.error('POST /api/checklists error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.delete('/api/checklists/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM checklists_viatura WHERE id=$1', [req.params.id])
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 const distPath = join(__dirname, '..', 'dist')
 if (existsSync(distPath)) {
   app.use(express.static(distPath))

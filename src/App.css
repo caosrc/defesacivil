@@ -1177,3 +1177,117 @@ input, select, textarea { font-family: inherit; }
 }
 .btn-salvar-edit:hover:not(:disabled) { background: #c45500; }
 .btn-salvar-edit:disabled { opacity: 0.6; }
+
+/* ── Checklist Viatura ── */
+.conteudo-viatura {
+  flex: 1; overflow-y: auto; padding: 0.75rem;
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+.cl-lista-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.25rem 0 0.5rem;
+}
+.cl-titulo {
+  font-size: 1.05rem; font-weight: 700; color: #1a4b8c;
+}
+.btn-novo-checklist {
+  background: #E05F00; color: white; border: none;
+  padding: 0.45rem 1rem; border-radius: 8px;
+  font-size: 0.88rem; font-weight: 700; cursor: pointer;
+}
+.cl-row-2 {
+  display: flex; gap: 0.75rem;
+}
+.cl-motorista-box {
+  display: flex; align-items: center; justify-content: space-between;
+  border: 1.5px solid #d1d5db; border-radius: 8px;
+  padding: 0.6rem 0.75rem; background: #f9fafb; cursor: pointer;
+  min-height: 2.6rem;
+}
+.cl-motorista-selecionado { font-weight: 600; color: #1a202c; font-size: 0.95rem; }
+.cl-motorista-placeholder { color: #9ca3af; font-size: 0.9rem; }
+.cl-motorista-arrow { color: #6b7280; font-size: 0.8rem; }
+.cl-motorista-lista {
+  margin-top: 0.4rem; border: 1.5px solid #d1d5db; border-radius: 8px;
+  overflow: hidden; background: white; box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+}
+.cl-motorista-item {
+  width: 100%; text-align: left; padding: 0.75rem 1rem;
+  border: none; background: white; font-size: 0.95rem;
+  cursor: pointer; border-bottom: 1px solid #f3f4f6;
+  transition: background 0.1s;
+}
+.cl-motorista-item:last-child { border-bottom: none; }
+.cl-motorista-item.ativo { background: #eff6ff; color: #1a4b8c; font-weight: 600; }
+.cl-motorista-item:hover { background: #f9fafb; }
+.cl-motorista-fechar { color: #ef4444; font-weight: 600; }
+.cl-dica {
+  font-size: 0.8rem; color: #6b7280; margin-bottom: 0.5rem; margin-top: -0.25rem;
+}
+.cl-slot {
+  border: 2px dashed #d1d5db; border-radius: 12px; cursor: pointer;
+  overflow: hidden; background: #f9fafb; position: relative;
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; min-height: 130px;
+  transition: border-color 0.15s, background 0.15s;
+  margin-bottom: 0.75rem;
+}
+.cl-slot-large { min-height: 180px; }
+.cl-slot:hover { border-color: #1a4b8c; background: #eff6ff; }
+.cl-slot-foto { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cl-slot-vazio {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 0.4rem; padding: 1rem;
+}
+.cl-slot-icon { opacity: 0.6; }
+.cl-slot-label { font-size: 0.85rem; font-weight: 700; color: #374151; }
+.cl-slot-hint { font-size: 0.72rem; color: #6b7280; }
+.cl-slot-nome {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(0,0,0,0.55); color: white;
+  font-size: 0.75rem; font-weight: 600; text-align: center; padding: 0.3rem;
+}
+.cl-grid-2 {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
+}
+.cl-grid-2 .cl-slot { margin-bottom: 0; }
+.cl-detalhe-header {
+  display: flex; align-items: center; gap: 1rem;
+  margin-bottom: 0.75rem; padding-bottom: 0.75rem;
+  border-bottom: 2px solid #dbeafe;
+}
+.cl-detalhe-data { font-size: 1.05rem; font-weight: 700; color: #1a4b8c; }
+.cl-detalhe-km { font-size: 0.9rem; color: #6b7280; font-weight: 500; }
+.cl-detalhe-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.95rem; color: #1f2937; margin-bottom: 0.5rem;
+}
+.cl-detalhe-icon { font-size: 1rem; }
+.cl-angulos-detalhe {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-top: 0.5rem;
+}
+.cl-angulos-detalhe .cl-angulo-item:first-child {
+  grid-column: 1 / -1;
+}
+.cl-angulo-item {
+  display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
+}
+.cl-angulo-foto {
+  width: 100%; border-radius: 8px; object-fit: cover;
+  max-height: 140px;
+}
+.cl-angulo-vazio {
+  width: 100%; background: #f3f4f6; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0.75rem; opacity: 0.5; min-height: 80px;
+}
+.cl-angulo-label {
+  font-size: 0.72rem; font-weight: 600; color: #6b7280; text-transform: uppercase;
+}
+.cl-obs-text {
+  background: #f9fafb; border: 1.5px solid #e5e7eb; border-radius: 8px;
+  padding: 0.75rem; font-size: 0.9rem; color: #374151; white-space: pre-wrap;
+}
+.btn-deletar-header {
+  background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 0.25rem;
+}

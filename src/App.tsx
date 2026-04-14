@@ -3,6 +3,7 @@ import './App.css'
 import MapaOcorrencias from './components/MapaOcorrencias'
 import NovaOcorrencia from './components/NovaOcorrencia'
 import DetalheOcorrencia from './components/DetalheOcorrencia'
+import ChecklistViatura from './components/ChecklistViatura'
 import JSZip from 'jszip'
 import type { Ocorrencia, NivelRisco } from './types'
 import { NATUREZA_ICONE } from './types'
@@ -10,7 +11,7 @@ import { listarOcorrencias, criarOcorrencia } from './api'
 import { cacheOcorrencias, getCachedOcorrencias, getPending, removePending, countPending } from './offline'
 import { exportarTodasExcel } from './exportExcel'
 
-type Aba = 'lista' | 'mapa' | 'nova'
+type Aba = 'lista' | 'mapa' | 'nova' | 'viatura'
 
 function dataLocal(iso: string): string {
   const d = new Date(iso)
@@ -387,6 +388,8 @@ export default function App() {
             onSelecionar={(o) => setSelecionada(o)}
           />
         )}
+
+        {aba === 'viatura' && <ChecklistViatura />}
       </div>
 
       {/* Bottom nav */}
@@ -401,6 +404,10 @@ export default function App() {
         <button className={`nav-btn ${aba === 'mapa' ? 'ativo' : ''}`} onClick={() => setAba('mapa')}>
           <span className="nav-emoji">🗺️</span>
           <span>Mapa</span>
+        </button>
+        <button className={`nav-btn ${aba === 'viatura' ? 'ativo' : ''}`} onClick={() => setAba('viatura')}>
+          <span className="nav-emoji">🚗</span>
+          <span>Viatura</span>
         </button>
       </nav>
 
