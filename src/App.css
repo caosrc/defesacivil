@@ -1306,3 +1306,164 @@ input, select, textarea { font-family: inherit; }
 .btn-deletar-header {
   background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 0.25rem;
 }
+
+/* ═══════════════════════════════════════════════════════
+   CHECKLIST VIATURA — redesign 2025
+   ═══════════════════════════════════════════════════════ */
+
+/* Header fields (Motorista / Data / Placa / KM) */
+.ck-header-fields {
+  border: 1.5px solid #1a4b8c; border-radius: 6px;
+  overflow: hidden; margin-bottom: 0.6rem;
+}
+.ck-hf-row {
+  display: flex; border-bottom: 1px solid #c7d9f0;
+}
+.ck-hf-row:last-child { border-bottom: none; }
+.ck-hf-field {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.4rem 0.6rem; border-right: 1px solid #c7d9f0;
+  min-width: 0;
+}
+.ck-hf-field:last-child { border-right: none; }
+.ck-hf-label {
+  font-size: 0.78rem; font-weight: 700; color: #1a4b8c;
+  white-space: nowrap; min-width: 54px;
+}
+.ck-hf-input {
+  flex: 1; border: none; outline: none; background: transparent;
+  font-size: 0.88rem; color: #1f2937; min-width: 0;
+  font-family: inherit;
+}
+
+/* Section title bars */
+.ck-section-title {
+  background: #1a4b8c; color: white;
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em;
+  text-align: center; padding: 0.3rem 0.5rem;
+  border-radius: 4px; margin-bottom: 0.4rem;
+}
+
+/* 4-column photo grid */
+.ck-fotos-4col {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+  margin-bottom: 0.6rem;
+}
+
+/* Individual photo slot */
+.ck-foto-slot {
+  border: 2px solid #1a4b8c; border-radius: 4px;
+  overflow: hidden; position: relative;
+  height: 90px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  background: #f0f4fa;
+  transition: background 0.15s;
+}
+.ck-foto-slot:hover { background: #dbeafe; }
+.ck-foto-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ck-foto-nome {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: rgba(26,75,140,0.75); color: white;
+  font-size: 0.65rem; font-weight: 700; text-align: center; padding: 0.18rem;
+}
+.ck-foto-empty {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 2px; padding: 0.4rem;
+}
+.ck-foto-icon { opacity: 0.65; }
+.ck-foto-label { font-size: 0.65rem; font-weight: 700; color: #1a4b8c; }
+.ck-foto-hint { font-size: 0.6rem; color: #6b7280; }
+
+/* Avaria slot */
+.ck-avaria-slot {
+  border: 2px solid #1a4b8c; border-radius: 4px;
+  min-height: 80px; cursor: pointer; padding: 0.5rem;
+  background: #f0f4fa; display: flex; align-items: center;
+  justify-content: center; margin-bottom: 0.4rem;
+  transition: background 0.15s;
+}
+.ck-avaria-slot:hover { background: #dbeafe; }
+.ck-avaria-grid {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+}
+.btn-add-foto-mini {
+  background: #1a4b8c; color: white; border: none; border-radius: 6px;
+  padding: 0.35rem 0.6rem; font-size: 0.75rem; font-weight: 700; cursor: pointer;
+}
+
+/* Checklist tables */
+.ck-table-wrap {
+  border: 1.5px solid #1a4b8c; border-radius: 4px;
+  overflow: hidden; font-size: 0.72rem;
+}
+.ck-with-side { display: flex; }
+.ck-side-label {
+  writing-mode: vertical-rl; text-orientation: mixed;
+  transform: rotate(180deg);
+  background: #1a4b8c; color: white;
+  font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0.3rem 0.25rem; min-width: 20px;
+}
+.ck-header-row {
+  display: grid; grid-template-columns: 1fr repeat(3, 26px);
+  background: #1a4b8c; color: white;
+}
+.ck-header-cell {
+  font-size: 0.65rem; font-weight: 700;
+  text-align: center; padding: 0.25rem 0.1rem;
+}
+.ck-row {
+  display: grid; grid-template-columns: 1fr repeat(3, 26px);
+  align-items: center; border-bottom: 1px solid #e5e7eb;
+  min-height: 24px;
+}
+.ck-row:last-child { border-bottom: none; }
+.ck-row:nth-child(even) { background: #f0f4fa; }
+.ck-row-label {
+  padding: 0.15rem 0.35rem; font-size: 0.7rem; color: #1f2937;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ck-row-cell {
+  display: flex; align-items: center; justify-content: center;
+}
+.ck-dot {
+  width: 14px; height: 14px; border: 1.5px solid #9ca3af;
+  border-radius: 2px; cursor: pointer; background: white;
+  transition: all 0.1s; flex-shrink: 0;
+}
+.ck-dot:hover { border-color: #1a4b8c; }
+.ck-dot-bom   { background: #16a34a; border-color: #15803d; }
+.ck-dot-medio { background: #f59e0b; border-color: #d97706; }
+.ck-dot-ruim  { background: #dc2626; border-color: #b91c1c; }
+.ck-dot-sim   { background: #16a34a; border-color: #15803d; }
+.ck-dot-nao   { background: #dc2626; border-color: #b91c1c; }
+.ck-dot-na    { background: #9ca3af; border-color: #6b7280; }
+.ck-sec-row {
+  background: #dbeafe; color: #1a4b8c;
+  font-size: 0.68rem; font-weight: 700;
+  padding: 0.18rem 0.35rem; border-bottom: 1px solid #bfdbfe;
+  grid-column: 1 / -1;
+}
+
+/* 2-column layout for tables */
+.ck-2col {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+}
+@media (max-width: 480px) {
+  .ck-2col { grid-template-columns: 1fr; }
+  .ck-fotos-4col { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Detail view */
+.ck-detalhe-info {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  align-items: center; padding-bottom: 0.5rem;
+  border-bottom: 2px solid #dbeafe; margin-bottom: 0.5rem;
+}
+.ck-det-data { font-size: 1rem; font-weight: 700; color: #1a4b8c; }
+.ck-det-badge {
+  background: #eff6ff; border: 1px solid #bfdbfe;
+  color: #1a4b8c; font-size: 0.8rem; font-weight: 600;
+  padding: 0.2rem 0.5rem; border-radius: 20px;
+}

@@ -1,43 +1,67 @@
 import { useState, useEffect, useRef } from 'react'
 import { adicionarMarcaDagua } from '../utils'
+import { exportarChecklistExcel } from '../exportExcel'
 
-const MOTORISTAS_CL = ['Moisés', 'Valteir', 'Arthur', 'Gustavo', 'Dyonathan']
+const MOTORISTAS = ['Moisés', 'Arthur', 'Gustavo', 'Valteir', 'Dyonathan']
 
-interface Checklist {
+type Opc3 = 'bom' | 'medio' | 'ruim' | ''
+type OpcSN = 'sim' | 'nao' | 'na' | ''
+
+interface Itens {
+  limpezaExterna: Opc3; limpezaInterna: Opc3; pneus: Opc3; estepe: Opc3
+  ltzPlaca: OpcSN; ltzDirLuz: OpcSN; ltzDirLuzRe: OpcSN; ltzDirFreio: OpcSN; ltzDirSeta: OpcSN
+  ltzEsqLuz: OpcSN; ltzEsqLuzRe: OpcSN; ltzEsqFreio: OpcSN; ltzEsqSeta: OpcSN
+  ldzPlaca: OpcSN; ldzDirFarolAlto: OpcSN; ldzDirFarolBaixo: OpcSN; ldzDirNeblina: OpcSN
+  ldzEsqFarolAlto: OpcSN; ldzEsqFarolBaixo: OpcSN; ldzEsqSeta: OpcSN; ldzEsqNeblina: OpcSN
+  segAlarme: OpcSN; segBuzina: OpcSN; segChaveRoda: OpcSN; segCintos: OpcSN
+  segDocumentos: OpcSN; segExtintor: OpcSN; segLimpadores: OpcSN; segMacaco: OpcSN
+  segPainel: OpcSN; segRetrovisorInterno: OpcSN; segRetrovisorDireito: OpcSN
+  segRetrovisorEsquerdo: OpcSN; segTravas: OpcSN; segTriangulo: OpcSN
+  motAcelerador: OpcSN; motAguaLimpador: OpcSN; motAguaRadiador: OpcSN
+  motEmbreagem: OpcSN; motFreio: OpcSN; motFreioMao: OpcSN
+  motOleoFreio: OpcSN; motOleoMoto: OpcSN; motTanquePartida: OpcSN
+}
+
+function itensIniciais(): Itens {
+  return {
+    limpezaExterna: '', limpezaInterna: '', pneus: '', estepe: '',
+    ltzPlaca: '', ltzDirLuz: '', ltzDirLuzRe: '', ltzDirFreio: '', ltzDirSeta: '',
+    ltzEsqLuz: '', ltzEsqLuzRe: '', ltzEsqFreio: '', ltzEsqSeta: '',
+    ldzPlaca: '', ldzDirFarolAlto: '', ldzDirFarolBaixo: '', ldzDirNeblina: '',
+    ldzEsqFarolAlto: '', ldzEsqFarolBaixo: '', ldzEsqSeta: '', ldzEsqNeblina: '',
+    segAlarme: '', segBuzina: '', segChaveRoda: '', segCintos: '', segDocumentos: '',
+    segExtintor: '', segLimpadores: '', segMacaco: '', segPainel: '',
+    segRetrovisorInterno: '', segRetrovisorDireito: '', segRetrovisorEsquerdo: '',
+    segTravas: '', segTriangulo: '',
+    motAcelerador: '', motAguaLimpador: '', motAguaRadiador: '', motEmbreagem: '',
+    motFreio: '', motFreioMao: '', motOleoFreio: '', motOleoMoto: '', motTanquePartida: '',
+  }
+}
+
+export interface ChecklistData {
   id: number
   data_checklist: string
   km: string | null
+  placa: string | null
   motorista: string | null
   fotos_avarias: string[]
-  foto_principal: string | null
   foto_frontal: string | null
   foto_traseira: string | null
   foto_direita: string | null
   foto_esquerda: string | null
+  itens: Itens | null
   observacoes: string | null
   created_at: string
 }
 
 type Modo = 'lista' | 'form' | 'detalhe'
 
-function CarTop() {
-  return (
-    <svg viewBox="0 0 80 130" fill="none" xmlns="http://www.w3.org/2000/svg" width="64" height="104">
-      <rect x="0" y="22" width="11" height="20" rx="3" fill="#94a3b8"/>
-      <rect x="69" y="22" width="11" height="20" rx="3" fill="#94a3b8"/>
-      <rect x="0" y="88" width="11" height="20" rx="3" fill="#94a3b8"/>
-      <rect x="69" y="88" width="11" height="20" rx="3" fill="#94a3b8"/>
-      <rect x="9" y="12" width="62" height="106" rx="18" fill="#cbd5e1"/>
-      <rect x="18" y="28" width="44" height="30" rx="4" fill="#bfdbfe" opacity="0.9"/>
-      <rect x="18" y="72" width="44" height="24" rx="4" fill="#bfdbfe" opacity="0.9"/>
-      <rect x="24" y="60" width="32" height="12" rx="3" fill="#94a3b8"/>
-    </svg>
-  )
-}
+const OPT_BMR = ['bom', 'medio', 'ruim']
+const OPT_SN = ['sim', 'nao', 'na']
 
 function CarFront() {
   return (
-    <svg viewBox="0 0 120 75" fill="none" xmlns="http://www.w3.org/2000/svg" width="100" height="62">
+    <svg viewBox="0 0 120 75" fill="none" xmlns="http://www.w3.org/2000/svg" width="72" height="45">
       <rect x="6" y="28" width="108" height="40" rx="7" fill="#cbd5e1"/>
       <path d="M28 28 L38 8 L82 8 L92 28 Z" fill="#b8c4ce"/>
       <path d="M32 28 L41 11 L79 11 L88 28 Z" fill="#bfdbfe" opacity="0.9"/>
@@ -52,7 +76,7 @@ function CarFront() {
 
 function CarRear() {
   return (
-    <svg viewBox="0 0 120 75" fill="none" xmlns="http://www.w3.org/2000/svg" width="100" height="62">
+    <svg viewBox="0 0 120 75" fill="none" xmlns="http://www.w3.org/2000/svg" width="72" height="45">
       <rect x="6" y="28" width="108" height="40" rx="7" fill="#cbd5e1"/>
       <path d="M28 28 L38 8 L82 8 L92 28 Z" fill="#b8c4ce"/>
       <path d="M34 28 L43 12 L77 12 L86 28 Z" fill="#bfdbfe" opacity="0.9"/>
@@ -67,7 +91,7 @@ function CarRear() {
 
 function CarSide({ flip }: { flip?: boolean }) {
   return (
-    <svg viewBox="0 0 160 80" fill="none" xmlns="http://www.w3.org/2000/svg" width="130" height="65"
+    <svg viewBox="0 0 160 80" fill="none" xmlns="http://www.w3.org/2000/svg" width="90" height="45"
       style={flip ? { transform: 'scaleX(-1)' } : {}}>
       <path d="M12 54 L12 36 L48 14 L112 14 L142 36 L148 54 Z" fill="#cbd5e1"/>
       <path d="M50 36 L58 17 L110 17 L120 36 Z" fill="#bfdbfe" opacity="0.9"/>
@@ -82,28 +106,17 @@ function CarSide({ flip }: { flip?: boolean }) {
   )
 }
 
-interface SlotProps {
-  label: string
-  foto: string | null
-  onFoto: (b64: string) => void
-  children: React.ReactNode
-  large?: boolean
-}
-
 function redimensionarImagem(dataUrl: string, maxW: number, maxH: number): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
-      let w = img.width
-      let h = img.height
+      let w = img.width; let h = img.height
       if (w > maxW || h > maxH) {
         const ratio = Math.min(maxW / w, maxH / h)
-        w = Math.round(w * ratio)
-        h = Math.round(h * ratio)
+        w = Math.round(w * ratio); h = Math.round(h * ratio)
       }
       const canvas = document.createElement('canvas')
-      canvas.width = w
-      canvas.height = h
+      canvas.width = w; canvas.height = h
       canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
       resolve(canvas.toDataURL('image/jpeg', 0.88))
     }
@@ -111,7 +124,14 @@ function redimensionarImagem(dataUrl: string, maxW: number, maxH: number): Promi
   })
 }
 
-function FotoSlot({ label, foto, onFoto, children, large }: SlotProps) {
+interface FotoSlotHProps {
+  label: string
+  foto: string | null
+  onFoto: (b64: string) => void
+  children: React.ReactNode
+}
+
+function FotoSlotH({ label, foto, onFoto, children }: FotoSlotHProps) {
   const ref = useRef<HTMLInputElement>(null)
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -128,43 +148,95 @@ function FotoSlot({ label, foto, onFoto, children, large }: SlotProps) {
     e.target.value = ''
   }
   return (
-    <div className={`cl-slot ${large ? 'cl-slot-large' : ''}`} onClick={() => ref.current?.click()}>
+    <div className="ck-foto-slot" onClick={() => ref.current?.click()}>
       <input ref={ref} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleChange} />
       {foto ? (
-        <img src={foto} alt={label} className="cl-slot-foto" />
+        <>
+          <img src={foto} alt={label} className="ck-foto-img" />
+          <span className="ck-foto-nome">{label}</span>
+        </>
       ) : (
-        <div className="cl-slot-vazio">
-          <div className="cl-slot-icon">{children}</div>
-          <div className="cl-slot-label">{label}</div>
-          <div className="cl-slot-hint">📷 Toque para fotografar</div>
+        <div className="ck-foto-empty">
+          <div className="ck-foto-icon">{children}</div>
+          <span className="ck-foto-label">{label}</span>
+          <span className="ck-foto-hint">📷</span>
         </div>
       )}
-      {foto && <div className="cl-slot-nome">{label}</div>}
     </div>
   )
 }
 
+function RadioDot({ value, atual, onChange }: { value: string; atual: string; onChange: (v: string) => void }) {
+  const ativo = atual === value
+  return (
+    <div
+      className={`ck-dot${ativo ? ` ck-dot-${value}` : ''}`}
+      onClick={(e) => { e.stopPropagation(); onChange(ativo ? '' : value) }}
+    />
+  )
+}
+
+function CkRow({ label, campo, itens, onChange, opcoes }: {
+  label: string; campo: keyof Itens; itens: Itens
+  onChange: (k: keyof Itens, v: string) => void; opcoes: string[]
+}) {
+  return (
+    <div className="ck-row">
+      <span className="ck-row-label">{label}</span>
+      {opcoes.map(o => (
+        <div key={o} className="ck-row-cell">
+          <RadioDot value={o} atual={itens[campo] as string} onChange={(v) => onChange(campo, v)} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CkSecRow({ label }: { label: string }) {
+  return <div className="ck-sec-row">{label}</div>
+}
+
+function CkHeader({ cols }: { cols: string[] }) {
+  return (
+    <div className="ck-header-row">
+      <span className="ck-row-label" />
+      {cols.map(c => <span key={c} className="ck-header-cell">{c}</span>)}
+    </div>
+  )
+}
+
+function formatarData(iso: string) {
+  const [y, m, d] = iso.split('-')
+  const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+  const dt = new Date(`${iso}T12:00:00`)
+  return `${dias[dt.getDay()]}, ${d}/${m}/${y}`
+}
+
 export default function ChecklistViatura() {
   const [modo, setModo] = useState<Modo>('lista')
-  const [checklists, setChecklists] = useState<Checklist[]>([])
+  const [checklists, setChecklists] = useState<ChecklistData[]>([])
   const [carregando, setCarregando] = useState(true)
-  const [selecionado, setSelecionado] = useState<Checklist | null>(null)
+  const [selecionado, setSelecionado] = useState<ChecklistData | null>(null)
 
   const hoje = new Date().toISOString().split('T')[0]
   const [data, setData] = useState(hoje)
   const [km, setKm] = useState('')
+  const [placa, setPlaca] = useState('')
   const [motorista, setMotorista] = useState('')
   const [fotosAvarias, setFotosAvarias] = useState<string[]>([])
-  const [fotoPrincipal, setFotoPrincipal] = useState<string | null>(null)
   const [fotoFrontal, setFotoFrontal] = useState<string | null>(null)
   const [fotoTraseira, setFotoTraseira] = useState<string | null>(null)
   const [fotoDireita, setFotoDireita] = useState<string | null>(null)
   const [fotoEsquerda, setFotoEsquerda] = useState<string | null>(null)
+  const [itens, setItens] = useState<Itens>(itensIniciais())
   const [observacoes, setObservacoes] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
-  const [showMotoristas, setShowMotoristas] = useState(false)
   const avariaRef = useRef<HTMLInputElement>(null)
+
+  function setItem(k: keyof Itens, v: string) {
+    setItens(prev => ({ ...prev, [k]: v }))
+  }
 
   async function carregar() {
     setCarregando(true)
@@ -179,17 +251,10 @@ export default function ChecklistViatura() {
   useEffect(() => { carregar() }, [])
 
   function resetForm() {
-    setData(hoje)
-    setKm('')
-    setMotorista('')
-    setFotosAvarias([])
-    setFotoPrincipal(null)
-    setFotoFrontal(null)
-    setFotoTraseira(null)
-    setFotoDireita(null)
-    setFotoEsquerda(null)
-    setObservacoes('')
-    setErro('')
+    setData(hoje); setKm(''); setPlaca(''); setMotorista('')
+    setFotosAvarias([]); setFotoFrontal(null); setFotoTraseira(null)
+    setFotoDireita(null); setFotoEsquerda(null)
+    setItens(itensIniciais()); setObservacoes(''); setErro('')
   }
 
   function adicionarAvaria(e: React.ChangeEvent<HTMLInputElement>) {
@@ -199,8 +264,9 @@ export default function ChecklistViatura() {
       const reader = new FileReader()
       reader.onload = async (ev) => {
         if (ev.target?.result) {
-          const comMarca = await adicionarMarcaDagua(ev.target.result as string)
-          setFotosAvarias((p) => [...p, comMarca])
+          const redim = await redimensionarImagem(ev.target.result as string, 1200, 900)
+          const comMarca = await adicionarMarcaDagua(redim)
+          setFotosAvarias(p => [...p, comMarca])
         }
       }
       reader.readAsDataURL(file)
@@ -210,47 +276,28 @@ export default function ChecklistViatura() {
 
   async function salvar() {
     if (!motorista) { setErro('Selecione o motorista.'); return }
-    setSalvando(true)
-    setErro('')
+    setSalvando(true); setErro('')
     try {
       await fetch('/api/checklists', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          data_checklist: data,
-          km,
-          motorista,
+          data_checklist: data, km, placa, motorista,
           fotos_avarias: fotosAvarias,
-          foto_principal: fotoPrincipal,
-          foto_frontal: fotoFrontal,
-          foto_traseira: fotoTraseira,
-          foto_direita: fotoDireita,
-          foto_esquerda: fotoEsquerda,
-          observacoes: observacoes || null,
+          foto_frontal: fotoFrontal, foto_traseira: fotoTraseira,
+          foto_direita: fotoDireita, foto_esquerda: fotoEsquerda,
+          itens, observacoes: observacoes || null,
         }),
       })
-      await carregar()
-      resetForm()
-      setModo('lista')
-    } catch {
-      setErro('Erro ao salvar. Tente novamente.')
-    }
+      await carregar(); resetForm(); setModo('lista')
+    } catch { setErro('Erro ao salvar. Tente novamente.') }
     setSalvando(false)
   }
 
   async function deletar(id: number) {
     if (!confirm('Excluir este checklist?')) return
     await fetch(`/api/checklists/${id}`, { method: 'DELETE' })
-    setSelecionado(null)
-    setModo('lista')
-    await carregar()
-  }
-
-  function formatarData(iso: string) {
-    const [y, m, d] = iso.split('-')
-    const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-    const dt = new Date(`${iso}T12:00:00`)
-    return `${dias[dt.getDay()]}, ${d}/${m}/${y}`
+    setSelecionado(null); setModo('lista'); await carregar()
   }
 
   if (modo === 'form') {
@@ -259,102 +306,180 @@ export default function ChecklistViatura() {
         <header className="header">
           <button className="btn-voltar" onClick={() => { resetForm(); setModo('lista') }}>‹</button>
           <div className="header-logo-mini">
-            <span style={{ fontSize: '1.4rem' }}>🚗</span>
+            <span style={{ fontSize: '1.3rem' }}>🚗</span>
             <span className="header-titulo-texto">Checklist da Viatura</span>
           </div>
           <div style={{ width: 36 }} />
         </header>
 
         <div className="form-scroll">
-          <div className="form-card">
+          <div className="form-card" style={{ padding: '0.75rem', gap: 0 }}>
 
-            {/* Data + KM */}
-            <div className="cl-row-2">
-              <div className="campo" style={{ flex: 1 }}>
-                <label className="campo-label">📅 Data do Checklist</label>
-                <input className="campo-input" type="date" value={data} max={hoje}
-                  onChange={(e) => setData(e.target.value)} />
+            {/* ── Cabeçalho: Motorista / Data / Placa ── */}
+            <div className="ck-header-fields">
+              <div className="ck-hf-row">
+                <div className="ck-hf-field" style={{ flex: 2 }}>
+                  <label className="ck-hf-label">Motorista</label>
+                  <select
+                    className="ck-hf-input"
+                    value={motorista}
+                    onChange={e => setMotorista(e.target.value)}
+                  >
+                    <option value="">— Selecionar —</option>
+                    {MOTORISTAS.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div className="ck-hf-field" style={{ flex: 1 }}>
+                  <label className="ck-hf-label">Data</label>
+                  <input className="ck-hf-input" type="date" value={data} max={hoje}
+                    onChange={e => setData(e.target.value)} />
+                </div>
               </div>
-              <div className="campo" style={{ flex: 1 }}>
-                <label className="campo-label">🔢 Quilometragem</label>
-                <input className="campo-input" type="text" inputMode="numeric" placeholder="Ex: 52.340"
-                  value={km} onChange={(e) => setKm(e.target.value)} />
+              <div className="ck-hf-row">
+                <div className="ck-hf-field" style={{ flex: 1 }}>
+                  <label className="ck-hf-label">Placa</label>
+                  <input className="ck-hf-input" type="text" placeholder="Ex: ABC-1234"
+                    value={placa} onChange={e => setPlaca(e.target.value.toUpperCase())} />
+                </div>
+                <div className="ck-hf-field" style={{ flex: 1 }}>
+                  <label className="ck-hf-label">KM</label>
+                  <input className="ck-hf-input" type="text" inputMode="numeric" placeholder="Ex: 52.340"
+                    value={km} onChange={e => setKm(e.target.value)} />
+                </div>
               </div>
             </div>
 
-            {/* Motorista */}
-            <div className="campo">
-              <label className="campo-label">👤 Motorista</label>
-              <div className="cl-motorista-box" onClick={() => setShowMotoristas(true)}>
-                <span className={motorista ? 'cl-motorista-selecionado' : 'cl-motorista-placeholder'}>
-                  {motorista || 'Selecionar motorista...'}
-                </span>
-                <span className="cl-motorista-arrow">▾</span>
-              </div>
-              {showMotoristas && (
-                <div className="cl-motorista-lista">
-                  {MOTORISTAS_CL.map((nome) => (
-                    <button key={nome} className={`cl-motorista-item ${motorista === nome ? 'ativo' : ''}`}
-                      onClick={() => { setMotorista(nome); setShowMotoristas(false) }}>
-                      {motorista === nome ? '✅ ' : ''}{nome}
-                    </button>
+            {/* ── Fotos do Veículo ── */}
+            <div className="ck-section-title">FOTOS DO VEÍCULO</div>
+            <div className="ck-fotos-4col">
+              <FotoSlotH label="Esquerda" foto={fotoEsquerda} onFoto={setFotoEsquerda}><CarSide /></FotoSlotH>
+              <FotoSlotH label="Frontal" foto={fotoFrontal} onFoto={setFotoFrontal}><CarFront /></FotoSlotH>
+              <FotoSlotH label="Traseira" foto={fotoTraseira} onFoto={setFotoTraseira}><CarRear /></FotoSlotH>
+              <FotoSlotH label="Direita" foto={fotoDireita} onFoto={setFotoDireita}><CarSide flip /></FotoSlotH>
+            </div>
+
+            {/* ── Fotos de Avaria ── */}
+            <div className="ck-section-title">FOTOS DE AVARIA</div>
+            <div
+              className="ck-avaria-slot"
+              onClick={() => fotosAvarias.length === 0 && avariaRef.current?.click()}
+            >
+              {fotosAvarias.length === 0 ? (
+                <div className="ck-foto-empty">
+                  <span style={{ fontSize: '1.8rem' }}>🔧</span>
+                  <span className="ck-foto-label">Adicionar foto de avaria</span>
+                  <span className="ck-foto-hint">📷 Toque para fotografar</span>
+                </div>
+              ) : (
+                <div className="ck-avaria-grid">
+                  {fotosAvarias.map((f, i) => (
+                    <div key={i} className="foto-wrap">
+                      <img src={f} alt="" className="foto-thumb" />
+                      <button className="foto-del" onClick={e => { e.stopPropagation(); setFotosAvarias(p => p.filter((_, j) => j !== i)) }}>✕</button>
+                    </div>
                   ))}
-                  <button className="cl-motorista-item cl-motorista-fechar"
-                    onClick={() => setShowMotoristas(false)}>Cancelar</button>
+                  <button className="btn-add-foto-mini" onClick={e => { e.stopPropagation(); avariaRef.current?.click() }}>
+                    + foto
+                  </button>
                 </div>
               )}
+              <input ref={avariaRef} type="file" accept="image/*" multiple capture="environment"
+                style={{ display: 'none' }} onChange={adicionarAvaria} />
             </div>
 
-            {/* Fotos de Avarias */}
-            <div className="campo">
-              <label className="campo-label">🔧 Fotos de Avarias</label>
-              <div className="fotos-area">
-                {fotosAvarias.map((f, i) => (
-                  <div key={i} className="foto-wrap">
-                    <img src={f} alt="" className="foto-thumb" />
-                    <button className="foto-del" onClick={() => setFotosAvarias((p) => p.filter((_, j) => j !== i))}>✕</button>
-                  </div>
-                ))}
-                <button className="btn-add-foto" onClick={() => avariaRef.current?.click()}>
-                  <span className="btn-foto-emoji">📷</span>
-                  <span>Adicionar Avaria</span>
-                </button>
-                <input ref={avariaRef} type="file" accept="image/*" multiple capture="environment"
-                  style={{ display: 'none' }} onChange={adicionarAvaria} />
+            {/* ── Conservação ── */}
+            <div className="ck-table-wrap" style={{ marginTop: '0.75rem' }}>
+              <CkHeader cols={['Bom', 'Médio', 'Ruim']} />
+              <CkRow label="Limpeza Externa" campo="limpezaExterna" itens={itens} onChange={setItem} opcoes={OPT_BMR} />
+              <CkRow label="Limpeza Interna" campo="limpezaInterna" itens={itens} onChange={setItem} opcoes={OPT_BMR} />
+              <CkRow label="Pneus" campo="pneus" itens={itens} onChange={setItem} opcoes={OPT_BMR} />
+              <CkRow label="Estepe" campo="estepe" itens={itens} onChange={setItem} opcoes={OPT_BMR} />
+            </div>
+
+            {/* ── Luzes Traseiras | Dianteiras ── */}
+            <div className="ck-2col" style={{ marginTop: '0.75rem' }}>
+              <div className="ck-table-wrap ck-with-side">
+                <div className="ck-side-label">Luzes Traseiras</div>
+                <div style={{ flex: 1 }}>
+                  <CkHeader cols={['Sim', 'Não', 'N/A']} />
+                  <CkRow label="Da placa" campo="ltzPlaca" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkSecRow label="Direita" />
+                  <CkRow label="Luz" campo="ltzDirLuz" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Luz de ré" campo="ltzDirLuzRe" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Luz de freio" campo="ltzDirFreio" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Seta" campo="ltzDirSeta" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkSecRow label="Esquerda" />
+                  <CkRow label="Luz" campo="ltzEsqLuz" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Luz de ré" campo="ltzEsqLuzRe" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Luz de freio" campo="ltzEsqFreio" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Seta" campo="ltzEsqSeta" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                </div>
+              </div>
+
+              <div className="ck-table-wrap ck-with-side">
+                <div className="ck-side-label">Luzes Dianteiras</div>
+                <div style={{ flex: 1 }}>
+                  <CkHeader cols={['Sim', 'Não', 'N/A']} />
+                  <CkRow label="Da placa" campo="ldzPlaca" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkSecRow label="Direita" />
+                  <CkRow label="Farol alto" campo="ldzDirFarolAlto" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Farol baixo" campo="ldzDirFarolBaixo" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Neblina" campo="ldzDirNeblina" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkSecRow label="Esquerda" />
+                  <CkRow label="Farol alto" campo="ldzEsqFarolAlto" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Farol baixo" campo="ldzEsqFarolBaixo" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Seta" campo="ldzEsqSeta" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Neblina" campo="ldzEsqNeblina" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                </div>
               </div>
             </div>
 
-            {/* Fotos da Entrada */}
-            <div className="campo">
-              <label className="campo-label">🚗 Fotos da Entrada do Veículo</label>
-              <p className="cl-dica">Toque em cada ângulo para fotografar o veículo</p>
+            {/* ── Segurança | Motor ── */}
+            <div className="ck-2col" style={{ marginTop: '0.75rem' }}>
+              <div className="ck-table-wrap ck-with-side">
+                <div className="ck-side-label">Segurança</div>
+                <div style={{ flex: 1 }}>
+                  <CkHeader cols={['Sim', 'Não', 'N/A']} />
+                  <CkRow label="Alarme" campo="segAlarme" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Buzina" campo="segBuzina" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Chave de Roda" campo="segChaveRoda" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Cintos" campo="segCintos" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Documentos" campo="segDocumentos" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Extintor" campo="segExtintor" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Limpadores" campo="segLimpadores" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Macaco" campo="segMacaco" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Painel" campo="segPainel" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Retrovisor Int." campo="segRetrovisorInterno" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Retrovisor Dir." campo="segRetrovisorDireito" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Retrovisor Esq." campo="segRetrovisorEsquerdo" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Travas" campo="segTravas" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Triângulo" campo="segTriangulo" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                </div>
+              </div>
 
-              <FotoSlot label="Principal" foto={fotoPrincipal} onFoto={setFotoPrincipal} large>
-                <CarTop />
-              </FotoSlot>
-
-              <div className="cl-grid-2">
-                <FotoSlot label="Frontal" foto={fotoFrontal} onFoto={setFotoFrontal}>
-                  <CarFront />
-                </FotoSlot>
-                <FotoSlot label="Traseira" foto={fotoTraseira} onFoto={setFotoTraseira}>
-                  <CarRear />
-                </FotoSlot>
-                <FotoSlot label="Direita" foto={fotoDireita} onFoto={setFotoDireita}>
-                  <CarSide />
-                </FotoSlot>
-                <FotoSlot label="Esquerda" foto={fotoEsquerda} onFoto={setFotoEsquerda}>
-                  <CarSide flip />
-                </FotoSlot>
+              <div className="ck-table-wrap ck-with-side">
+                <div className="ck-side-label">Motor</div>
+                <div style={{ flex: 1 }}>
+                  <CkHeader cols={['Sim', 'Não', 'N/A']} />
+                  <CkRow label="Acelerador" campo="motAcelerador" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Água limpador" campo="motAguaLimpador" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Água radiador" campo="motAguaRadiador" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Embreagem" campo="motEmbreagem" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Freio" campo="motFreio" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Freio de mão" campo="motFreioMao" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Óleo do freio" campo="motOleoFreio" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Óleo do motor" campo="motOleoMoto" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                  <CkRow label="Tanque/Partida" campo="motTanquePartida" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+                </div>
               </div>
             </div>
 
-            {/* Observações */}
-            <div className="campo">
+            {/* ── Observações ── */}
+            <div className="campo" style={{ marginTop: '0.75rem' }}>
               <label className="campo-label">📝 Observações</label>
-              <textarea className="campo-textarea" rows={4}
-                placeholder="Descreva observações sobre a viatura..."
-                value={observacoes} onChange={(e) => setObservacoes(e.target.value)} />
+              <textarea className="campo-textarea" rows={3}
+                placeholder="Observações adicionais sobre a viatura..."
+                value={observacoes} onChange={e => setObservacoes(e.target.value)} />
             </div>
 
             {erro && <div className="erro-msg">⚠️ {erro}</div>}
@@ -372,61 +497,158 @@ export default function ChecklistViatura() {
 
   if (modo === 'detalhe' && selecionado) {
     const c = selecionado
-    const angulos = [
-      { label: 'Principal', foto: c.foto_principal, icone: <CarTop /> },
+    const it = c.itens || itensIniciais()
+    const fotos4 = [
+      { label: 'Esquerda', foto: c.foto_esquerda, icone: <CarSide /> },
       { label: 'Frontal', foto: c.foto_frontal, icone: <CarFront /> },
       { label: 'Traseira', foto: c.foto_traseira, icone: <CarRear /> },
-      { label: 'Direita', foto: c.foto_direita, icone: <CarSide /> },
-      { label: 'Esquerda', foto: c.foto_esquerda, icone: <CarSide flip /> },
+      { label: 'Direita', foto: c.foto_direita, icone: <CarSide flip /> },
     ]
+
+    function CkRowRO({ label, valor, opcoes }: { label: string; valor: string; opcoes: string[] }) {
+      const labelMap: Record<string, string> = { bom: 'Bom', medio: 'Médio', ruim: 'Ruim', sim: 'Sim', nao: 'Não', na: 'N/A' }
+      const colorMap: Record<string, string> = { bom: '#15803d', medio: '#d97706', ruim: '#dc2626', sim: '#15803d', nao: '#dc2626', na: '#6b7280' }
+      return (
+        <div className="ck-row">
+          <span className="ck-row-label">{label}</span>
+          {opcoes.map(o => (
+            <div key={o} className="ck-row-cell">
+              <div className={`ck-dot${valor === o ? ` ck-dot-${o}` : ''}`} style={{ cursor: 'default' }} />
+            </div>
+          ))}
+          {valor && (
+            <span style={{ fontSize: '0.7rem', color: colorMap[valor], fontWeight: 700, marginLeft: 4 }}>
+              {labelMap[valor] || valor}
+            </span>
+          )}
+        </div>
+      )
+    }
+
     return (
       <div className="tela">
         <header className="header">
           <button className="btn-voltar" onClick={() => { setSelecionado(null); setModo('lista') }}>‹</button>
           <div className="header-logo-mini">
-            <span style={{ fontSize: '1.4rem' }}>🚗</span>
+            <span style={{ fontSize: '1.3rem' }}>🚗</span>
             <span className="header-titulo-texto">Checklist #{c.id}</span>
           </div>
           <button className="btn-deletar-header" onClick={() => deletar(c.id)}>🗑️</button>
         </header>
 
         <div className="form-scroll">
-          <div className="form-card">
-            <div className="cl-detalhe-header">
-              <div className="cl-detalhe-data">{formatarData(c.data_checklist)}</div>
-              {c.km && <div className="cl-detalhe-km">🔢 {c.km} km</div>}
+          <div className="form-card" style={{ padding: '0.75rem', gap: 0 }}>
+            <div className="ck-detalhe-info">
+              <span className="ck-det-data">{formatarData(c.data_checklist)}</span>
+              {c.motorista && <span className="ck-det-badge">👤 {c.motorista}</span>}
+              {c.placa && <span className="ck-det-badge">🚘 {c.placa}</span>}
+              {c.km && <span className="ck-det-badge">🔢 {c.km} km</span>}
             </div>
-            {c.motorista && (
-              <div className="cl-detalhe-row"><span className="cl-detalhe-icon">👤</span><span>{c.motorista}</span></div>
+
+            <div className="ck-section-title" style={{ marginTop: '0.5rem' }}>FOTOS DO VEÍCULO</div>
+            <div className="ck-fotos-4col">
+              {fotos4.map(({ label, foto, icone }) => (
+                <div key={label} className="ck-foto-slot" style={{ cursor: 'default' }}>
+                  {foto
+                    ? <><img src={foto} alt={label} className="ck-foto-img" /><span className="ck-foto-nome">{label}</span></>
+                    : <div className="ck-foto-empty">{icone}<span className="ck-foto-label">{label}</span></div>}
+                </div>
+              ))}
+            </div>
+
+            {c.fotos_avarias?.length > 0 && (
+              <>
+                <div className="ck-section-title">FOTOS DE AVARIA ({c.fotos_avarias.length})</div>
+                <div className="ck-avaria-slot" style={{ cursor: 'default' }}>
+                  <div className="ck-avaria-grid">
+                    {c.fotos_avarias.map((f, i) => <img key={i} src={f} alt="" className="foto-thumb" />)}
+                  </div>
+                </div>
+              </>
             )}
 
-            {c.fotos_avarias && c.fotos_avarias.length > 0 && (
-              <div className="campo">
-                <label className="campo-label">🔧 Fotos de Avarias ({c.fotos_avarias.length})</label>
-                <div className="fotos-grid">
-                  {c.fotos_avarias.map((f, i) => (
-                    <img key={i} src={f} alt={`Avaria ${i + 1}`} className="foto-detalhe" />
-                  ))}
+            <div className="ck-table-wrap" style={{ marginTop: '0.75rem' }}>
+              <CkHeader cols={['Bom', 'Médio', 'Ruim']} />
+              <CkRowRO label="Limpeza Externa" valor={it.limpezaExterna} opcoes={OPT_BMR} />
+              <CkRowRO label="Limpeza Interna" valor={it.limpezaInterna} opcoes={OPT_BMR} />
+              <CkRowRO label="Pneus" valor={it.pneus} opcoes={OPT_BMR} />
+              <CkRowRO label="Estepe" valor={it.estepe} opcoes={OPT_BMR} />
+            </div>
+
+            <div className="ck-2col" style={{ marginTop: '0.75rem' }}>
+              <div className="ck-table-wrap ck-with-side">
+                <div className="ck-side-label">Luzes Traseiras</div>
+                <div style={{ flex: 1 }}>
+                  <CkHeader cols={['S', 'N', 'N/A']} />
+                  <CkRowRO label="Da placa" valor={it.ltzPlaca} opcoes={OPT_SN} />
+                  <CkSecRow label="Direita" />
+                  <CkRowRO label="Luz" valor={it.ltzDirLuz} opcoes={OPT_SN} />
+                  <CkRowRO label="Luz de ré" valor={it.ltzDirLuzRe} opcoes={OPT_SN} />
+                  <CkRowRO label="Luz de freio" valor={it.ltzDirFreio} opcoes={OPT_SN} />
+                  <CkRowRO label="Seta" valor={it.ltzDirSeta} opcoes={OPT_SN} />
+                  <CkSecRow label="Esquerda" />
+                  <CkRowRO label="Luz" valor={it.ltzEsqLuz} opcoes={OPT_SN} />
+                  <CkRowRO label="Luz de ré" valor={it.ltzEsqLuzRe} opcoes={OPT_SN} />
+                  <CkRowRO label="Luz de freio" valor={it.ltzEsqFreio} opcoes={OPT_SN} />
+                  <CkRowRO label="Seta" valor={it.ltzEsqSeta} opcoes={OPT_SN} />
                 </div>
               </div>
-            )}
+              <div className="ck-table-wrap ck-with-side">
+                <div className="ck-side-label">Luzes Dianteiras</div>
+                <div style={{ flex: 1 }}>
+                  <CkHeader cols={['S', 'N', 'N/A']} />
+                  <CkRowRO label="Da placa" valor={it.ldzPlaca} opcoes={OPT_SN} />
+                  <CkSecRow label="Direita" />
+                  <CkRowRO label="Farol alto" valor={it.ldzDirFarolAlto} opcoes={OPT_SN} />
+                  <CkRowRO label="Farol baixo" valor={it.ldzDirFarolBaixo} opcoes={OPT_SN} />
+                  <CkRowRO label="Neblina" valor={it.ldzDirNeblina} opcoes={OPT_SN} />
+                  <CkSecRow label="Esquerda" />
+                  <CkRowRO label="Farol alto" valor={it.ldzEsqFarolAlto} opcoes={OPT_SN} />
+                  <CkRowRO label="Farol baixo" valor={it.ldzEsqFarolBaixo} opcoes={OPT_SN} />
+                  <CkRowRO label="Seta" valor={it.ldzEsqSeta} opcoes={OPT_SN} />
+                  <CkRowRO label="Neblina" valor={it.ldzEsqNeblina} opcoes={OPT_SN} />
+                </div>
+              </div>
+            </div>
 
-            <div className="campo">
-              <label className="campo-label">🚗 Fotos da Entrada</label>
-              <div className="cl-angulos-detalhe">
-                {angulos.map(({ label, foto, icone }) => (
-                  <div key={label} className="cl-angulo-item">
-                    {foto
-                      ? <img src={foto} alt={label} className="cl-angulo-foto" />
-                      : <div className="cl-angulo-vazio">{icone}</div>}
-                    <div className="cl-angulo-label">{label}</div>
-                  </div>
-                ))}
+            <div className="ck-2col" style={{ marginTop: '0.75rem' }}>
+              <div className="ck-table-wrap ck-with-side">
+                <div className="ck-side-label">Segurança</div>
+                <div style={{ flex: 1 }}>
+                  <CkHeader cols={['S', 'N', 'N/A']} />
+                  {(['segAlarme','segBuzina','segChaveRoda','segCintos','segDocumentos','segExtintor',
+                    'segLimpadores','segMacaco','segPainel','segRetrovisorInterno','segRetrovisorDireito',
+                    'segRetrovisorEsquerdo','segTravas','segTriangulo'] as (keyof Itens)[]).map((k) => {
+                    const labels: Record<string,string> = {
+                      segAlarme:'Alarme',segBuzina:'Buzina',segChaveRoda:'Chave de Roda',segCintos:'Cintos',
+                      segDocumentos:'Documentos',segExtintor:'Extintor',segLimpadores:'Limpadores',
+                      segMacaco:'Macaco',segPainel:'Painel',segRetrovisorInterno:'Retrovisor Int.',
+                      segRetrovisorDireito:'Retrovisor Dir.',segRetrovisorEsquerdo:'Retrovisor Esq.',
+                      segTravas:'Travas',segTriangulo:'Triângulo',
+                    }
+                    return <CkRowRO key={k} label={labels[k]} valor={it[k] as string} opcoes={OPT_SN} />
+                  })}
+                </div>
+              </div>
+              <div className="ck-table-wrap ck-with-side">
+                <div className="ck-side-label">Motor</div>
+                <div style={{ flex: 1 }}>
+                  <CkHeader cols={['S', 'N', 'N/A']} />
+                  {(['motAcelerador','motAguaLimpador','motAguaRadiador','motEmbreagem','motFreio',
+                    'motFreioMao','motOleoFreio','motOleoMoto','motTanquePartida'] as (keyof Itens)[]).map((k) => {
+                    const labels: Record<string,string> = {
+                      motAcelerador:'Acelerador',motAguaLimpador:'Água limpador',motAguaRadiador:'Água radiador',
+                      motEmbreagem:'Embreagem',motFreio:'Freio',motFreioMao:'Freio de mão',
+                      motOleoFreio:'Óleo do freio',motOleoMoto:'Óleo do motor',motTanquePartida:'Tanque/Partida',
+                    }
+                    return <CkRowRO key={k} label={labels[k]} valor={it[k] as string} opcoes={OPT_SN} />
+                  })}
+                </div>
               </div>
             </div>
 
             {c.observacoes && (
-              <div className="campo">
+              <div className="campo" style={{ marginTop: '0.75rem' }}>
                 <label className="campo-label">📝 Observações</label>
                 <div className="cl-obs-text">{c.observacoes}</div>
               </div>
@@ -441,9 +663,16 @@ export default function ChecklistViatura() {
     <div className="conteudo-viatura">
       <div className="cl-lista-header">
         <h2 className="cl-titulo">Checklists da Viatura</h2>
-        <button className="btn-novo-checklist" onClick={() => { resetForm(); setModo('form') }}>
-          + Novo
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {checklists.length > 0 && (
+            <button className="btn-excel-global" onClick={() => exportarChecklistExcel(checklists)}>
+              📊 Excel
+            </button>
+          )}
+          <button className="btn-novo-checklist" onClick={() => { resetForm(); setModo('form') }}>
+            + Novo
+          </button>
+        </div>
       </div>
 
       {carregando ? (
@@ -452,17 +681,13 @@ export default function ChecklistViatura() {
         <div className="lista-vazia">
           <div style={{ fontSize: '3rem' }}>🚗</div>
           <div>Nenhum checklist registrado.</div>
-          <button className="btn-nova-vazia" onClick={() => { resetForm(); setModo('form') }}>
-            + Novo Checklist
-          </button>
+          <button className="btn-nova-vazia" onClick={() => { resetForm(); setModo('form') }}>+ Novo Checklist</button>
         </div>
       ) : (
         <div className="lista">
           {checklists.map((c) => (
             <button key={c.id} className="oc-card" onClick={() => { setSelecionado(c); setModo('detalhe') }}>
-              <div className="oc-card-esq">
-                <span className="oc-emoji">🚗</span>
-              </div>
+              <div className="oc-card-esq"><span className="oc-emoji">🚗</span></div>
               <div className="oc-card-corpo">
                 <div className="oc-card-top">
                   <span className="oc-natureza">{formatarData(c.data_checklist)}</span>
@@ -470,9 +695,10 @@ export default function ChecklistViatura() {
                 </div>
                 <div className="oc-card-meta">
                   {c.motorista && <span>👤 {c.motorista}</span>}
+                  {c.placa && <span>🚘 {c.placa}</span>}
                   {c.km && <span>🔢 {c.km} km</span>}
                   <span>
-                    {[c.foto_principal, c.foto_frontal, c.foto_traseira, c.foto_direita, c.foto_esquerda].filter(Boolean).length}/5 fotos
+                    {[c.foto_frontal, c.foto_traseira, c.foto_direita, c.foto_esquerda].filter(Boolean).length}/4 fotos
                   </span>
                 </div>
               </div>
