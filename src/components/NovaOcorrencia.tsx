@@ -3,7 +3,7 @@ import { TIPOS_OCORRENCIA, NATUREZAS, AGENTES } from '../types'
 import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
 import { savePending, geocodificarEndereco } from '../offline'
-import { formatarCoordenadas } from '../utils'
+import { formatarCoordenadas, adicionarMarcaDagua } from '../utils'
 
 interface Props {
   onSalvo: (offline: boolean) => void
@@ -75,8 +75,11 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     if (!files) return
     Array.from(files).forEach((file) => {
       const reader = new FileReader()
-      reader.onload = (ev) => {
-        if (ev.target?.result) setFotos((prev) => [...prev, ev.target!.result as string])
+      reader.onload = async (ev) => {
+        if (ev.target?.result) {
+          const comMarca = await adicionarMarcaDagua(ev.target.result as string, lat, lng)
+          setFotos((prev) => [...prev, comMarca])
+        }
       }
       reader.readAsDataURL(file)
     })

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { adicionarMarcaDagua } from '../utils'
 
 const MOTORISTAS_CL = ['Moisés', 'Valteir', 'Arthur', 'Gustavo', 'Dyonathan']
 
@@ -95,7 +96,12 @@ function FotoSlot({ label, foto, onFoto, children, large }: SlotProps) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (ev) => { if (ev.target?.result) onFoto(ev.target.result as string) }
+    reader.onload = async (ev) => {
+      if (ev.target?.result) {
+        const comMarca = await adicionarMarcaDagua(ev.target.result as string)
+        onFoto(comMarca)
+      }
+    }
     reader.readAsDataURL(file)
     e.target.value = ''
   }
@@ -169,8 +175,11 @@ export default function ChecklistViatura() {
     if (!files) return
     Array.from(files).forEach((file) => {
       const reader = new FileReader()
-      reader.onload = (ev) => {
-        if (ev.target?.result) setFotosAvarias((p) => [...p, ev.target!.result as string])
+      reader.onload = async (ev) => {
+        if (ev.target?.result) {
+          const comMarca = await adicionarMarcaDagua(ev.target.result as string)
+          setFotosAvarias((p) => [...p, comMarca])
+        }
       }
       reader.readAsDataURL(file)
     })
