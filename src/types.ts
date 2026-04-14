@@ -21,7 +21,7 @@ export interface Ocorrencia {
   _localId?: number
 }
 
-export const AGENTES = ['Moisés', 'Valteir', 'Arthur']
+export const AGENTES = ['Moisés', 'Valteir', 'Arthur', 'Gustavo']
 
 export const TIPOS_OCORRENCIA = ['Diligência', 'Vistoria de Engenharia', 'Vistoria Ambiental', 'Apoio', 'Outro']
 
