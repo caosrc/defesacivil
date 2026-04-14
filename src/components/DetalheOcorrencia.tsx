@@ -38,7 +38,9 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [eLat, setELat] = useState<number | null>(o.lat)
   const [eLng, setELng] = useState<number | null>(o.lng)
   const [eProprietario, setEProprietario] = useState(o.proprietario ?? '')
-  const [eObservacoes, setEObservacoes] = useState(o.observacoes ?? '')
+  const [eSituacao, setESituacao] = useState(o.situacao ?? '')
+  const [eRecomendacao, setERecomendacao] = useState(o.recomendacao ?? '')
+  const [eConclusao, setEConclusao] = useState(o.conclusao ?? '')
   const [eAgentes, setEAgentes] = useState<string[]>(Array.isArray(o.agentes) ? o.agentes : [])
 
   const precisaSubnatureza = eNatureza === 'Queda de Estrutura' || eNatureza === 'Apreensão e Captura de Animal'
@@ -60,7 +62,9 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setELat(o.lat)
     setELng(o.lng)
     setEProprietario(o.proprietario ?? '')
-    setEObservacoes(o.observacoes ?? '')
+    setESituacao(o.situacao ?? '')
+    setERecomendacao(o.recomendacao ?? '')
+    setEConclusao(o.conclusao ?? '')
     setEAgentes(Array.isArray(o.agentes) ? o.agentes : [])
     setGeoMsg('')
     setErroEdit('')
@@ -115,7 +119,9 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         lng: finalLng,
         endereco: eEndereco || null,
         proprietario: eProprietario || null,
-        observacoes: eObservacoes || null,
+        situacao: eSituacao || null,
+        recomendacao: eRecomendacao || null,
+        conclusao: eConclusao || null,
         agentes: eAgentes,
       }
       let atualizado: Ocorrencia
@@ -149,7 +155,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         <b>Status:</b> ${o.status_oc}<br/>
         ${o.endereco ? `<b>Endereço:</b> ${o.endereco}<br/>` : ''}
         ${o.proprietario ? `<b>Proprietário:</b> ${o.proprietario}<br/>` : ''}
-        ${o.observacoes ? `<b>Observações:</b> ${o.observacoes}<br/>` : ''}
+        ${o.situacao ? `<b>Situação:</b> ${o.situacao}<br/>` : ''}
         <b>Data:</b> ${dataFormatada}
       ]]></description>
       ${o.lat && o.lng ? `<Point><coordinates>${o.lng},${o.lat},0</coordinates></Point>` : ''}
@@ -268,7 +274,9 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                 )}
 
                 {o.proprietario && <InfoRow icone="👤" label="Proprietário / Morador" valor={o.proprietario} />}
-                {o.observacoes && <InfoRow icone="📝" label="Observações" valor={o.observacoes} />}
+                {o.situacao && <InfoRow icone="📝" label="Situação" valor={o.situacao} />}
+                {o.recomendacao && <InfoRow icone="💡" label="Recomendação" valor={o.recomendacao} />}
+                {o.conclusao && <InfoRow icone="✅" label="Conclusão" valor={o.conclusao} />}
                 {Array.isArray(o.agentes) && o.agentes.length > 0 && (
                   <InfoRow icone="👷" label="Agentes Empenhados" valor={o.agentes.join(', ')} />
                 )}
@@ -442,21 +450,45 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                   />
                 </div>
 
-                {/* Observações */}
+                {/* Situação */}
                 <div className="campo campo-edit">
-                  <label className="campo-label">📝 Observações</label>
+                  <label className="campo-label">📝 9 — Situação</label>
                   <textarea
                     className="campo-textarea"
                     rows={3}
-                    placeholder="Detalhes da ocorrência..."
-                    value={eObservacoes}
-                    onChange={(e) => setEObservacoes(e.target.value)}
+                    placeholder="Descreva a situação da ocorrência..."
+                    value={eSituacao}
+                    onChange={(e) => setESituacao(e.target.value)}
+                  />
+                </div>
+
+                {/* Recomendação */}
+                <div className="campo campo-edit">
+                  <label className="campo-label">💡 10 — Recomendação</label>
+                  <textarea
+                    className="campo-textarea"
+                    rows={3}
+                    placeholder="Descreva a recomendação..."
+                    value={eRecomendacao}
+                    onChange={(e) => setERecomendacao(e.target.value)}
+                  />
+                </div>
+
+                {/* Conclusão */}
+                <div className="campo campo-edit">
+                  <label className="campo-label">✅ 11 — Conclusão</label>
+                  <textarea
+                    className="campo-textarea"
+                    rows={3}
+                    placeholder="Descreva a conclusão..."
+                    value={eConclusao}
+                    onChange={(e) => setEConclusao(e.target.value)}
                   />
                 </div>
 
                 {/* Agentes Empenhados */}
                 <div className="campo campo-edit">
-                  <label className="campo-label">👷 Agentes Empenhados</label>
+                  <label className="campo-label">👷 12 — Agentes Empenhados na Ocorrência</label>
                   <div className="agentes-lista">
                     {AGENTES.map((nome) => (
                       <label key={nome} className="agente-item">

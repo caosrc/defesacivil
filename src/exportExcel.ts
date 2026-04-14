@@ -101,14 +101,38 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
   linha('Proprietário / Morador', o.proprietario)
 
   row++
-  secao('OBSERVAÇÕES')
+  secao('SITUAÇÃO')
   const obsCell = ws.getCell(`A${row}`)
   ws.mergeCells(`A${row}:B${row + 3}`)
-  obsCell.value = o.observacoes || '—'
+  obsCell.value = o.situacao || '—'
   obsCell.font = { size: 10 }
   obsCell.alignment = { vertical: 'top', wrapText: true, indent: 1 }
   ws.getRow(row).height = 18
   row += 4
+
+  if (o.recomendacao) {
+    row++
+    secao('RECOMENDAÇÃO')
+    const recCell = ws.getCell(`A${row}`)
+    ws.mergeCells(`A${row}:B${row + 3}`)
+    recCell.value = o.recomendacao
+    recCell.font = { size: 10 }
+    recCell.alignment = { vertical: 'top', wrapText: true, indent: 1 }
+    ws.getRow(row).height = 18
+    row += 4
+  }
+
+  if (o.conclusao) {
+    row++
+    secao('CONCLUSÃO')
+    const conCell = ws.getCell(`A${row}`)
+    ws.mergeCells(`A${row}:B${row + 3}`)
+    conCell.value = o.conclusao
+    conCell.font = { size: 10 }
+    conCell.alignment = { vertical: 'top', wrapText: true, indent: 1 }
+    ws.getRow(row).height = 18
+    row += 4
+  }
 
   if (o.fotos && o.fotos.length > 0) {
     row++
@@ -176,7 +200,7 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
   const ws = wb.addWorksheet('Ocorrências')
 
   const maxFotos = ocorrencias.reduce((max, o) => Math.max(max, o.fotos?.length ?? 0), 0)
-  const totalCols = 13 + maxFotos
+  const totalCols = 15 + maxFotos
 
   // ── Linha 1: título ───────────────────────────────────────────────────────
   ws.mergeCells(1, 1, 1, totalCols)
@@ -191,11 +215,11 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
   const cabecalhos = [
     'ID', 'Data Ocorrência', 'Registrado em', 'Tipo', 'Natureza', 'Detalhe',
     'Nível de Risco', 'Status', 'Endereço', 'Latitude', 'Longitude',
-    'Proprietário', 'Observações',
+    'Proprietário', 'Situação', 'Recomendação', 'Conclusão',
     ...Array.from({ length: maxFotos }, (_, i) => `Foto ${i + 1}`),
   ]
 
-  const larguras = [6, 16, 20, 14, 26, 20, 14, 12, 32, 12, 12, 26, 40,
+  const larguras = [6, 16, 20, 14, 26, 20, 14, 12, 32, 12, 12, 26, 40, 40, 40,
     ...Array(maxFotos).fill(FOTO_COL_W)]
 
   ws.columns = larguras.map((w) => ({ width: w }))
@@ -207,7 +231,7 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
     cell.font = { bold: true, size: 10, color: { argb: BRANCO } }
     cell.fill = {
       type: 'pattern', pattern: 'solid',
-      fgColor: { argb: i >= 13 ? LARANJA : AZUL },
+      fgColor: { argb: i >= 15 ? LARANJA : AZUL },
     }
     cell.alignment = { horizontal: 'center', vertical: 'middle' }
     cell.border = { bottom: { style: 'thin', color: { argb: BRANCO } } }
@@ -240,7 +264,9 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
       o.lat ?? '—',
       o.lng ?? '—',
       o.proprietario || '—',
-      o.observacoes || '—',
+      o.situacao || '—',
+      o.recomendacao || '—',
+      o.conclusao || '—',
     ]
 
     valores.forEach((v, i) => { r.getCell(i + 1).value = v as ExcelJS.CellValue })
@@ -265,7 +291,7 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
       o.fotos!.forEach((fotoBase64, fotoIdx) => {
         const base64Data = fotoBase64.includes(',') ? fotoBase64.split(',')[1] : fotoBase64
         const ext = fotoBase64.startsWith('data:image/png') ? 'png' : 'jpeg'
-        const colIdx = 13 + fotoIdx  // 0-indexed: coluna 14 em diante
+        const colIdx = 15 + fotoIdx  // 0-indexed: coluna 16 em diante
 
         try {
           const imageId = wb.addImage({ base64: base64Data, extension: ext })

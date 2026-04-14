@@ -86,9 +86,11 @@ function relatorioFileName(ocorrencia) {
 
 function getRelatorioTemplatePath() {
   const assetsPath = join(__dirname, '..', 'attached_assets')
-  const arquivo = readdirSync(assetsPath).find((nome) => nome.startsWith('RelVist_') && nome.endsWith('.docx'))
-  if (!arquivo) throw new Error('Modelo de relatório não encontrado em attached_assets')
-  return join(assetsPath, arquivo)
+  const arquivos = readdirSync(assetsPath)
+    .filter((nome) => nome.startsWith('RelVist_') && nome.endsWith('.docx'))
+    .sort()
+  if (!arquivos.length) throw new Error('Modelo de relatório não encontrado em attached_assets')
+  return join(assetsPath, arquivos[arquivos.length - 1])
 }
 
 function parseDataUrl(dataUrl) {
@@ -114,6 +116,10 @@ async function gerarRelatorioVistoria(ocorrencia) {
   const endereco = ocorrencia.endereco || 'Não informado'
   let documentXml = await zip.file('word/document.xml').async('string')
 
+  const situacao = ocorrencia.situacao || ''
+  const recomendacao = ocorrencia.recomendacao || ''
+  const conclusao = ocorrencia.conclusao || ''
+
   const substituicoes = {
     '“data 1”': formatarDataCurta(hoje),
     '“Nome do requerente”': xmlEscape(requerente),
@@ -122,6 +128,10 @@ async function gerarRelatorioVistoria(ocorrencia) {
     '“data 2”': xmlEscape(formatarDataExtenso(hoje)),
     '“Endereço”': xmlEscape(endereco),
     '“cordenadas do local”': xmlEscape(formatarCoordenadas(ocorrencia.lat, ocorrencia.lng)),
+    '(informações da situação descrita na ocorrência, quadro 9)': xmlEscape(situacao),
+    '(informações da recomendação descrita na ocorrência, quadro 10)': xmlEscape(recomendacao),
+    '(informações da situação descrita na conclusão, quadro 11) “descreva a conclusão”': xmlEscape(conclusao),
+    '(informações da situação descrita na conclusão, quadro 11) "descreva a conclusão"': xmlEscape(conclusao),
   }
 
   for (const [alvo, valor] of Object.entries(substituicoes)) {
@@ -186,7 +196,9 @@ async function initDb() {
       lng DOUBLE PRECISION,
       endereco TEXT,
       proprietario VARCHAR(255),
-      observacoes TEXT,
+      situacao TEXT,
+      recomendacao TEXT,
+      conclusao TEXT,
       data_ocorrencia TIMESTAMP,
       agentes JSONB NOT NULL DEFAULT '[]'::jsonb,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -222,12 +234,12 @@ app.get('/api/ocorrencias', async (req, res) => {
 })
 
 app.post('/api/ocorrencias', async (req, res) => {
-  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, observacoes, data_ocorrencia, agentes } = req.body
+  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes } = req.body
   try {
     const result = await pool.query(
-      `INSERT INTO ocorrencias (tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, observacoes, data_ocorrencia, agentes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [tipo, natureza, subnatureza || null, nivel_risco, status_oc || 'ativo', JSON.stringify(Array.isArray(fotos) ? fotos : []), lat || null, lng || null, endereco || null, proprietario || null, observacoes || null, data_ocorrencia || null, JSON.stringify(Array.isArray(agentes) ? agentes : [])]
+      `INSERT INTO ocorrencias (tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+      [tipo, natureza, subnatureza || null, nivel_risco, status_oc || 'ativo', JSON.stringify(Array.isArray(fotos) ? fotos : []), lat || null, lng || null, endereco || null, proprietario || null, situacao || null, recomendacao || null, conclusao || null, data_ocorrencia || null, JSON.stringify(Array.isArray(agentes) ? agentes : [])]
     )
     res.status(201).json(result.rows[0])
   } catch (err) {
@@ -250,7 +262,7 @@ app.put('/api/ocorrencias/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10)
   if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' })
 
-  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, observacoes, data_ocorrencia, agentes } = req.body
+  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes } = req.body
   console.log(`PUT /api/ocorrencias/${id} — tipo=${tipo} natureza=${natureza}`)
 
   try {
@@ -258,8 +270,8 @@ app.put('/api/ocorrencias/:id', async (req, res) => {
       `UPDATE ocorrencias
        SET tipo=$1, natureza=$2, subnatureza=$3, nivel_risco=$4, status_oc=$5,
            fotos=$6::jsonb, lat=$7, lng=$8, endereco=$9, proprietario=$10,
-           observacoes=$11, data_ocorrencia=$12, agentes=$13::jsonb
-       WHERE id=$14`,
+           situacao=$11, recomendacao=$12, conclusao=$13, data_ocorrencia=$14, agentes=$15::jsonb
+       WHERE id=$16`,
       [
         tipo,
         natureza,
@@ -271,7 +283,9 @@ app.put('/api/ocorrencias/:id', async (req, res) => {
         lng != null && lng !== '' ? lng : null,
         endereco || null,
         proprietario || null,
-        observacoes || null,
+        situacao || null,
+        recomendacao || null,
+        conclusao || null,
         data_ocorrencia || null,
         JSON.stringify(Array.isArray(agentes) ? agentes : []),
         id,

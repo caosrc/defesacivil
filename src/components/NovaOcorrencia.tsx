@@ -25,7 +25,9 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const [lng, setLng] = useState<number | null>(null)
   const [endereco, setEndereco] = useState('')
   const [proprietario, setProprietario] = useState('')
-  const [observacoes, setObservacoes] = useState('')
+  const [situacao, setSituacao] = useState('')
+  const [recomendacao, setRecomendacao] = useState('')
+  const [conclusao, setConclusao] = useState('')
   const [agentes, setAgentes] = useState<string[]>([])
   const [buscandoGps, setBuscandoGps] = useState(false)
   const [geocodificando, setGeocodificando] = useState(false)
@@ -122,7 +124,9 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       lng: finalLng,
       endereco: endereco || null,
       proprietario: proprietario || null,
-      observacoes: observacoes || null,
+      situacao: situacao || null,
+      recomendacao: recomendacao || null,
+      conclusao: conclusao || null,
       agentes,
     }
 
@@ -332,21 +336,45 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
             />
           </div>
 
-          {/* 9 - Observações */}
+          {/* 9 - Situação */}
           <div className="campo">
-            <label className="campo-label">9 — Observações</label>
+            <label className="campo-label">9 — Situação</label>
             <textarea
               className="campo-textarea"
-              placeholder="Descreva detalhes da ocorrência..."
+              placeholder="Descreva a situação da ocorrência..."
               rows={4}
-              value={observacoes}
-              onChange={(e) => setObservacoes(e.target.value)}
+              value={situacao}
+              onChange={(e) => setSituacao(e.target.value)}
             />
           </div>
 
-          {/* 10 - Agentes Empenhados */}
+          {/* 10 - Recomendação */}
           <div className="campo">
-            <label className="campo-label">10 — Agentes Empenhados na Ocorrência</label>
+            <label className="campo-label">10 — Recomendação</label>
+            <textarea
+              className="campo-textarea"
+              placeholder="Descreva a recomendação..."
+              rows={4}
+              value={recomendacao}
+              onChange={(e) => setRecomendacao(e.target.value)}
+            />
+          </div>
+
+          {/* 11 - Conclusão */}
+          <div className="campo">
+            <label className="campo-label">11 — Conclusão</label>
+            <textarea
+              className="campo-textarea"
+              placeholder="Descreva a conclusão..."
+              rows={4}
+              value={conclusao}
+              onChange={(e) => setConclusao(e.target.value)}
+            />
+          </div>
+
+          {/* 12 - Agentes Empenhados */}
+          <div className="campo">
+            <label className="campo-label">12 — Agentes Empenhados na Ocorrência</label>
             <div className="agentes-lista">
               {AGENTES.map((nome) => (
                 <label key={nome} className="agente-item">
