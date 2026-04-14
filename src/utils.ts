@@ -72,45 +72,23 @@ export async function adicionarMarcaDagua(
       }
       linhas.push('DEFESA CIVIL - OURO BRANCO')
 
-      const fontSize = Math.max(24, Math.round(img.width * 0.038))
-      const padding = Math.round(fontSize * 0.5)
-      const lineHeight = fontSize * 1.5
-      const margem = Math.round(img.width * 0.025)
+      const fontSize = Math.max(14, Math.round(img.width * 0.022))
+      const lineHeight = fontSize * 1.45
+      const margem = Math.round(img.width * 0.022)
 
       ctx.font = `bold ${fontSize}px Arial, sans-serif`
-
-      const larguraMax = Math.max(...linhas.map((l) => ctx.measureText(l).width))
-      const boxW = larguraMax + padding * 2
-      const boxH = linhas.length * lineHeight + padding * 1.4
-      const boxX = img.width - boxW - margem
-      const boxY = img.height - boxH - margem
-
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.50)'
-      const r = fontSize * 0.25
-      ctx.beginPath()
-      ctx.moveTo(boxX + r, boxY)
-      ctx.lineTo(boxX + boxW - r, boxY)
-      ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + r)
-      ctx.lineTo(boxX + boxW, boxY + boxH - r)
-      ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - r, boxY + boxH)
-      ctx.lineTo(boxX + r, boxY + boxH)
-      ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - r)
-      ctx.lineTo(boxX, boxY + r)
-      ctx.quadraticCurveTo(boxX, boxY, boxX + r, boxY)
-      ctx.closePath()
-      ctx.fill()
-
-      ctx.fillStyle = '#ffffff'
       ctx.textAlign = 'right'
-      ctx.shadowColor = 'rgba(0,0,0,0.95)'
-      ctx.shadowBlur = 5
+      ctx.shadowColor = 'rgba(0,0,0,1)'
+      ctx.shadowBlur = 8
+      ctx.shadowOffsetX = 1
+      ctx.shadowOffsetY = 1
+      ctx.fillStyle = '#ffffff'
+
+      const baseY = img.height - margem - (linhas.length - 1) * lineHeight
+      const baseX = img.width - margem
 
       linhas.forEach((linha, i) => {
-        ctx.fillText(
-          linha,
-          boxX + boxW - padding,
-          boxY + padding + fontSize + i * lineHeight
-        )
+        ctx.fillText(linha, baseX, baseY + i * lineHeight)
       })
 
       resolve(canvas.toDataURL('image/jpeg', 0.92))
