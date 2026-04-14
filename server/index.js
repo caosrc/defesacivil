@@ -15,6 +15,49 @@ const app = express()
 app.use(cors())
 app.use(express.json({ limit: '100mb' }))
 
+async function initDb() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL não configurada')
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ocorrencias (
+      id SERIAL PRIMARY KEY,
+      tipo VARCHAR(255) NOT NULL,
+      natureza VARCHAR(255) NOT NULL,
+      subnatureza VARCHAR(255),
+      nivel_risco VARCHAR(100) NOT NULL,
+      status_oc VARCHAR(100) NOT NULL DEFAULT 'ativo',
+      fotos JSONB NOT NULL DEFAULT '[]'::jsonb,
+      lat DOUBLE PRECISION,
+      lng DOUBLE PRECISION,
+      endereco TEXT,
+      proprietario VARCHAR(255),
+      observacoes TEXT,
+      data_ocorrencia TIMESTAMP,
+      agentes JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS checklists_viatura (
+      id SERIAL PRIMARY KEY,
+      data_checklist DATE NOT NULL,
+      km VARCHAR(100),
+      motorista VARCHAR(255),
+      fotos_avarias JSONB NOT NULL DEFAULT '[]'::jsonb,
+      foto_principal TEXT,
+      foto_frontal TEXT,
+      foto_traseira TEXT,
+      foto_direita TEXT,
+      foto_esquerda TEXT,
+      observacoes TEXT,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `)
+}
+
 app.get('/api/ocorrencias', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM ocorrencias ORDER BY created_at DESC')
@@ -148,11 +191,18 @@ if (existsSync(distPath)) {
 }
 
 const PORT = process.env.PORT || 3001
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`API Defesa Civil rodando na porta ${PORT}`)
-})
 
-server.on('error', (err) => {
-  console.error('Server error:', err)
+try {
+  await initDb()
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`API Defesa Civil rodando na porta ${PORT}`)
+  })
+
+  server.on('error', (err) => {
+    console.error('Server error:', err)
+    process.exit(1)
+  })
+} catch (err) {
+  console.error('Erro ao inicializar o servidor:', err)
   process.exit(1)
-})
+}

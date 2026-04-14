@@ -25,6 +25,7 @@ Sistema web completo de registro e gerenciamento de ocorrências para a Defesa C
 │   └── components/
 │       ├── NovaOcorrencia.tsx     # Formulário completo de registro
 │       ├── MapaOcorrencias.tsx    # Mapa Leaflet com marcadores coloridos
+│       ├── ChecklistViatura.tsx   # Checklists de viatura
 │       └── DetalheOcorrencia.tsx  # Modal de detalhe + exportar KMZ individual
 ├── public/
 │   └── sw.js              # Service Worker
@@ -40,7 +41,10 @@ Sistema web completo de registro e gerenciamento de ocorrências para a Defesa C
 - Run: `node server/index.js` (serve API + frontend estático da dist/)
 - Target: autoscale
 
-## Banco de Dados — Tabela `ocorrencias`
+## Banco de Dados
+O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as tabelas necessárias se elas ainda não existirem.
+
+### Tabela `ocorrencias`
 | Campo | Tipo | Descrição |
 |---|---|---|
 | id | SERIAL | Chave primária |
@@ -56,10 +60,27 @@ Sistema web completo de registro e gerenciamento de ocorrências para a Defesa C
 | proprietario | VARCHAR(255) | Nome do proprietário/morador |
 | observacoes | TEXT | Texto livre |
 | data_ocorrencia | TIMESTAMP | Data da ocorrência |
+| agentes | JSONB | Array de agentes empenhados |
+| created_at | TIMESTAMP | Data/hora automática |
+
+### Tabela `checklists_viatura`
+| Campo | Tipo | Descrição |
+|---|---|---|
+| id | SERIAL | Chave primária |
+| data_checklist | DATE | Data do checklist |
+| km | VARCHAR(100) | Quilometragem informada |
+| motorista | VARCHAR(255) | Motorista selecionado |
+| fotos_avarias | JSONB | Fotos de avarias em base64 |
+| foto_principal | TEXT | Foto principal do veículo |
+| foto_frontal | TEXT | Foto frontal do veículo |
+| foto_traseira | TEXT | Foto traseira do veículo |
+| foto_direita | TEXT | Foto lateral direita |
+| foto_esquerda | TEXT | Foto lateral esquerda |
+| observacoes | TEXT | Texto livre |
 | created_at | TIMESTAMP | Data/hora automática |
 
 ## Funcionalidades
-- Formulário com campos (tipo → natureza → subnatureza condicional → nível → status → fotos → GPS/endereço → proprietário → observações → data)
+- Formulário com campos (tipo → natureza → subnatureza condicional → nível → status → fotos → GPS/endereço → proprietário → agentes → observações → data)
 - Mapa OpenStreetMap centrado em Ouro Branco com marcadores por tipo (emoji + cor)
 - Popup no marcador com botão "Ver detalhes"
 - Modal de detalhe com exportação KMZ individual
@@ -67,4 +88,5 @@ Sistema web completo de registro e gerenciamento de ocorrências para a Defesa C
 - Exportação Excel de todas as ocorrências
 - Filtros por nível, status e busca de texto
 - Resumo numérico no topo (Alto, Médio, Baixo, Total)
+- Checklists de viatura com fotos por ângulo e avarias
 - Suporte offline via Service Worker
