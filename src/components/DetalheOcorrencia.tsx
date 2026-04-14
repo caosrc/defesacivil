@@ -5,7 +5,7 @@ import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES } fr
 import { deletarOcorrencia, atualizarOcorrencia } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
-import { formatarCoordenadas } from '../utils'
+import { formatarCoordenadas, parseDateLocal } from '../utils'
 
 interface Props {
   ocorrencia: Ocorrencia
@@ -259,7 +259,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
 
                 {o.data_ocorrencia && (
                   <InfoRow icone="📅" label="Data da Ocorrência"
-                    valor={new Date(o.data_ocorrencia + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                    valor={parseDateLocal(o.data_ocorrencia)?.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) ?? '—'}
                   />
                 )}
 

@@ -1,3 +1,9 @@
+export function parseDateLocal(dateStr: string | null | undefined): Date | null {
+  if (!dateStr) return null
+  const d = new Date(dateStr.slice(0, 10) + 'T00:00:00')
+  return isNaN(d.getTime()) ? null : d
+}
+
 export function decimalParaGms(valor: number, positivo: string, negativo: string): string {
   const absoluto = Math.abs(valor)
   const graus = Math.floor(absoluto)

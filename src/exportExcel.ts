@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs'
 import type { Ocorrencia } from './types'
+import { parseDateLocal } from './utils'
 
 const AZUL = '1a4b8c'
 const LARANJA = 'E05F00'
@@ -82,7 +83,7 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
 
   secao('IDENTIFICAÇÃO')
   linha('ID', String(o.id))
-  linha('Data da Ocorrência', o.data_ocorrencia ? new Date(o.data_ocorrencia + 'T00:00:00').toLocaleDateString('pt-BR') : '—')
+  linha('Data da Ocorrência', parseDateLocal(o.data_ocorrencia)?.toLocaleDateString('pt-BR') ?? '—')
   linha('Registrado em', o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—')
   linha('Tipo', o.tipo)
   linha('Natureza', o.natureza)
@@ -253,7 +254,7 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
 
     const valores = [
       o.id,
-      o.data_ocorrencia ? new Date(o.data_ocorrencia + 'T00:00:00').toLocaleDateString('pt-BR') : '—',
+      parseDateLocal(o.data_ocorrencia)?.toLocaleDateString('pt-BR') ?? '—',
       o.created_at ? new Date(o.created_at).toLocaleString('pt-BR') : '—',
       o.tipo,
       o.natureza,
