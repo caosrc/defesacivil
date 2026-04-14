@@ -87,6 +87,7 @@ export default function App() {
       proprietario: p.proprietario ?? null,
       observacoes: p.observacoes ?? null,
       data_ocorrencia: p.data_ocorrencia ?? null,
+      agentes: Array.isArray(p.agentes) ? p.agentes : [],
       created_at: p._savedAt ?? new Date().toISOString(),
       _offline: true,
       _localId: p.localId,

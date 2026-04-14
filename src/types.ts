@@ -16,9 +16,12 @@ export interface Ocorrencia {
   observacoes: string | null
   data_ocorrencia: string | null
   created_at: string
+  agentes: string[]
   _offline?: boolean
   _localId?: number
 }
+
+export const AGENTES = ['Moisés', 'Valteir', 'Arthur']
 
 export const TIPOS_OCORRENCIA = ['Diligência', 'Vistoria de Engenharia', 'Vistoria Ambiental', 'Apoio', 'Outro']
 

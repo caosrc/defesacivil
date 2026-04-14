@@ -817,6 +817,41 @@ input, select, textarea { font-family: inherit; }
 }
 .campo-textarea { resize: vertical; min-height: 90px; }
 
+/* Agentes */
+.agentes-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+.agente-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  cursor: pointer;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1.5px solid #e5e7eb;
+  background: #f9fafb;
+  transition: background 0.12s, border-color 0.12s;
+}
+.agente-item:has(.agente-checkbox:checked) {
+  background: #eff6ff;
+  border-color: #1a4b8c;
+}
+.agente-checkbox {
+  width: 1.2rem;
+  height: 1.2rem;
+  accent-color: #1a4b8c;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.agente-nome {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #1f2937;
+}
+
 /* Toggle */
 .toggle-group {
   display: flex;

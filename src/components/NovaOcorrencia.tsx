@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { TIPOS_OCORRENCIA, NATUREZAS } from '../types'
+import { TIPOS_OCORRENCIA, NATUREZAS, AGENTES } from '../types'
 import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
 import { savePending, geocodificarEndereco } from '../offline'
@@ -25,6 +25,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const [endereco, setEndereco] = useState('')
   const [proprietario, setProprietario] = useState('')
   const [observacoes, setObservacoes] = useState('')
+  const [agentes, setAgentes] = useState<string[]>([])
   const [buscandoGps, setBuscandoGps] = useState(false)
   const [geocodificando, setGeocodificando] = useState(false)
   const [geoMsg, setGeoMsg] = useState('')
@@ -118,6 +119,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       endereco: endereco || null,
       proprietario: proprietario || null,
       observacoes: observacoes || null,
+      agentes,
     }
 
     if (isOnline) {
@@ -326,7 +328,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
             />
           </div>
 
-          {/* 8 - Observações */}
+          {/* 9 - Observações */}
           <div className="campo">
             <label className="campo-label">9 — Observações</label>
             <textarea
@@ -336,6 +338,27 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
             />
+          </div>
+
+          {/* 10 - Agentes Empenhados */}
+          <div className="campo">
+            <label className="campo-label">10 — Agentes Empenhados na Ocorrência</label>
+            <div className="agentes-lista">
+              {AGENTES.map((nome) => (
+                <label key={nome} className="agente-item">
+                  <input
+                    type="checkbox"
+                    className="agente-checkbox"
+                    checked={agentes.includes(nome)}
+                    onChange={(e) => {
+                      if (e.target.checked) setAgentes((p) => [...p, nome])
+                      else setAgentes((p) => p.filter((a) => a !== nome))
+                    }}
+                  />
+                  <span className="agente-nome">{nome}</span>
+                </label>
+              ))}
+            </div>
           </div>
 
           {erro && <div className="erro-msg">⚠️ {erro}</div>}

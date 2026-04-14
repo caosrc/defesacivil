@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import JSZip from 'jszip'
 import type { Ocorrencia, NivelRisco, StatusOc } from '../types'
-import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS } from '../types'
+import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES } from '../types'
 import { deletarOcorrencia, atualizarOcorrencia } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
@@ -37,6 +37,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [eLng, setELng] = useState<number | null>(o.lng)
   const [eProprietario, setEProprietario] = useState(o.proprietario ?? '')
   const [eObservacoes, setEObservacoes] = useState(o.observacoes ?? '')
+  const [eAgentes, setEAgentes] = useState<string[]>(Array.isArray(o.agentes) ? o.agentes : [])
 
   const precisaSubnatureza = eNatureza === 'Queda de Estrutura' || eNatureza === 'Apreensão e Captura de Animal'
   const labelSubnatureza = eNatureza === 'Queda de Estrutura' ? 'Qual é a estrutura?' : 'Qual é o animal?'
@@ -58,6 +59,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setELng(o.lng)
     setEProprietario(o.proprietario ?? '')
     setEObservacoes(o.observacoes ?? '')
+    setEAgentes(Array.isArray(o.agentes) ? o.agentes : [])
     setGeoMsg('')
     setErroEdit('')
     setEditando(true)
@@ -112,6 +114,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         endereco: eEndereco || null,
         proprietario: eProprietario || null,
         observacoes: eObservacoes || null,
+        agentes: eAgentes,
       }
       let atualizado: Ocorrencia
       if (o._offline && o._localId != null) {
@@ -228,6 +231,9 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
 
                 {o.proprietario && <InfoRow icone="👤" label="Proprietário / Morador" valor={o.proprietario} />}
                 {o.observacoes && <InfoRow icone="📝" label="Observações" valor={o.observacoes} />}
+                {Array.isArray(o.agentes) && o.agentes.length > 0 && (
+                  <InfoRow icone="👷" label="Agentes Empenhados" valor={o.agentes.join(', ')} />
+                )}
                 <InfoRow icone="🕐" label="Registrado em" valor={dataFormatada} />
 
                 {totalFotos > 0 && (
@@ -408,6 +414,27 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                     value={eObservacoes}
                     onChange={(e) => setEObservacoes(e.target.value)}
                   />
+                </div>
+
+                {/* Agentes Empenhados */}
+                <div className="campo campo-edit">
+                  <label className="campo-label">👷 Agentes Empenhados</label>
+                  <div className="agentes-lista">
+                    {AGENTES.map((nome) => (
+                      <label key={nome} className="agente-item">
+                        <input
+                          type="checkbox"
+                          className="agente-checkbox"
+                          checked={eAgentes.includes(nome)}
+                          onChange={(e) => {
+                            if (e.target.checked) setEAgentes((p) => [...p, nome])
+                            else setEAgentes((p) => p.filter((a) => a !== nome))
+                          }}
+                        />
+                        <span className="agente-nome">{nome}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
                 {erroEdit && <div className="erro-msg">⚠️ {erroEdit}</div>}

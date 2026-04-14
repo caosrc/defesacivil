@@ -26,12 +26,12 @@ app.get('/api/ocorrencias', async (req, res) => {
 })
 
 app.post('/api/ocorrencias', async (req, res) => {
-  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, observacoes, data_ocorrencia } = req.body
+  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, observacoes, data_ocorrencia, agentes } = req.body
   try {
     const result = await pool.query(
-      `INSERT INTO ocorrencias (tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, observacoes, data_ocorrencia)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [tipo, natureza, subnatureza || null, nivel_risco, status_oc || 'ativo', fotos || [], lat || null, lng || null, endereco || null, proprietario || null, observacoes || null, data_ocorrencia || null]
+      `INSERT INTO ocorrencias (tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, observacoes, data_ocorrencia, agentes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [tipo, natureza, subnatureza || null, nivel_risco, status_oc || 'ativo', JSON.stringify(Array.isArray(fotos) ? fotos : []), lat || null, lng || null, endereco || null, proprietario || null, observacoes || null, data_ocorrencia || null, JSON.stringify(Array.isArray(agentes) ? agentes : [])]
     )
     res.status(201).json(result.rows[0])
   } catch (err) {
@@ -54,17 +54,16 @@ app.put('/api/ocorrencias/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10)
   if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' })
 
-  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, observacoes, data_ocorrencia } = req.body
+  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, observacoes, data_ocorrencia, agentes } = req.body
   console.log(`PUT /api/ocorrencias/${id} — tipo=${tipo} natureza=${natureza}`)
 
   try {
-    // UPDATE sem RETURNING para evitar problemas com payload grande de fotos
     await pool.query(
       `UPDATE ocorrencias
        SET tipo=$1, natureza=$2, subnatureza=$3, nivel_risco=$4, status_oc=$5,
            fotos=$6::jsonb, lat=$7, lng=$8, endereco=$9, proprietario=$10,
-           observacoes=$11, data_ocorrencia=$12
-       WHERE id=$13`,
+           observacoes=$11, data_ocorrencia=$12, agentes=$13::jsonb
+       WHERE id=$14`,
       [
         tipo,
         natureza,
@@ -78,6 +77,7 @@ app.put('/api/ocorrencias/:id', async (req, res) => {
         proprietario || null,
         observacoes || null,
         data_ocorrencia || null,
+        JSON.stringify(Array.isArray(agentes) ? agentes : []),
         id,
       ]
     )
@@ -108,7 +108,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true }))
 const distPath = join(__dirname, '..', 'dist')
 if (existsSync(distPath)) {
   app.use(express.static(distPath))
-  app.get('*', (req, res) => {
+  app.get(/(.*)/, (req, res) => {
     res.sendFile(join(distPath, 'index.html'))
   })
 }
