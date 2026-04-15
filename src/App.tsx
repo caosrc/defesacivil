@@ -421,24 +421,24 @@ export default function App() {
 
       {/* Bottom nav */}
       <nav className="bottom-nav">
+        <button className={`nav-btn ${aba === 'escala' ? 'ativo' : ''}`} onClick={() => setAba('escala')}>
+          <span className="nav-emoji">👥</span>
+          <span>Escala</span>
+        </button>
         <button className={`nav-btn ${aba === 'lista' ? 'ativo' : ''}`} onClick={() => setAba('lista')}>
           <span className="nav-emoji">📋</span>
           <span>Ocorrências</span>
+        </button>
+        <button className="nav-btn nav-nova" onClick={() => setAba('nova')}>
+          <span className="nav-nova-icone">+</span>
         </button>
         <button className={`nav-btn ${aba === 'mapa' ? 'ativo' : ''}`} onClick={() => setAba('mapa')}>
           <span className="nav-emoji">🗺️</span>
           <span>Mapa</span>
         </button>
-        <button className="nav-btn nav-nova" onClick={() => setAba('nova')}>
-          <span className="nav-nova-icone">+</span>
-        </button>
         <button className={`nav-btn ${aba === 'viatura' ? 'ativo' : ''}`} onClick={() => setAba('viatura')}>
           <span className="nav-emoji">🚗</span>
           <span>Viatura</span>
-        </button>
-        <button className={`nav-btn ${aba === 'escala' ? 'ativo' : ''}`} onClick={() => setAba('escala')}>
-          <span className="nav-emoji">👥</span>
-          <span>Escala</span>
         </button>
       </nav>
 
