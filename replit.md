@@ -4,7 +4,7 @@
 Sistema web completo de registro e gerenciamento de ocorrências para a Defesa Civil de Ouro Branco (MG).
 
 ## Arquitetura
-- **Frontend**: React 19 + TypeScript + Vite (porta 5000 em desenvolvimento)
+- **Frontend**: React 19 + TypeScript + Vite 5 (porta 5000 em desenvolvimento)
 - **Backend**: Express.js API REST (porta 3001 em desenvolvimento, PORT env em produção)
 - **Banco de Dados**: Replit PostgreSQL (DATABASE_URL)
 - **Mapa**: React-Leaflet com OpenStreetMap
@@ -94,9 +94,11 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 - Checklists de viatura com fotos por ângulo, avarias, assinatura digital, histórico, exportação Excel geral e PDF individual via impressão do navegador
 - Aba Escala no menu inferior, atualmente com tela “Em desenvolvimento” para futura gestão de escala de trabalho
 - Suporte offline completo via PWA (Service Worker + IndexedDB + manifest)
+- Rastreamento em tempo real no mapa via WebSocket: a aba Mapa conecta ao servidor mesmo com o GPS local desligado, permitindo ver outros agentes online que estejam com GPS ativo.
 
 ## Suporte Offline Completo (PWA)
 - **PWA instalável**: `manifest.json` + meta tags para instalação no celular (Android e iOS)
+- **Convite de instalação**: banner no app para criar ícone na tela inicial do celular; no iPhone orienta usar Compartilhar → Adicionar à Tela de Início.
 - **Service Worker (sw.js)**: cache separado para tiles do mapa e app shell; tiles OSM cacheados automaticamente; placeholder cinza quando offline; recebe mensagens do app para pré-cachear região de Ouro Branco (zoom 12–16)
 - **Botão "📥 Offline" no mapa**: baixa tiles da região (zoom 12–16, ~700–1000 tiles), mostra progresso, e permite apagar cache
 - **GPS offline**: `navigator.geolocation.watchPosition` funciona por hardware do dispositivo, independente de conexão

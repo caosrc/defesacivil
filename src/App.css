@@ -5,6 +5,8 @@ body {
   background: #f0f4f8;
   color: #1a202c;
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
 }
 button { cursor: pointer; font-family: inherit; }
 input, select, textarea { font-family: inherit; }
@@ -13,6 +15,7 @@ input, select, textarea { font-family: inherit; }
 /* ── App shell ────────────────────────────────────────────────── */
 .app {
   min-height: 100vh;
+  min-height: 100dvh;
   max-width: 480px;
   margin: 0 auto;
   display: flex;
@@ -29,12 +32,13 @@ input, select, textarea { font-family: inherit; }
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  background: #1a4b8c;
+  background: linear-gradient(100deg, #123b73 0%, #1a6bbf 100%);
   color: white;
-  padding: 0.7rem 0.9rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
-  z-index: 200;
-  position: relative;
+  padding: calc(0.75rem + env(safe-area-inset-top)) 0.9rem 0.75rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+  z-index: 250;
+  position: sticky;
+  top: 0;
 }
 .pwa-banner-icone img {
   width: 38px;
@@ -69,6 +73,7 @@ input, select, textarea { font-family: inherit; }
   font-weight: 700;
   flex-shrink: 0;
   white-space: nowrap;
+  min-height: 38px;
 }
 .pwa-banner-fechar {
   background: none;
@@ -78,6 +83,8 @@ input, select, textarea { font-family: inherit; }
   padding: 0.2rem 0.1rem;
   flex-shrink: 0;
   line-height: 1;
+  min-width: 32px;
+  min-height: 32px;
 }
 
 /* ── Offline / Sync banners ───────────────────────────────────── */
@@ -2035,6 +2042,31 @@ input, select, textarea { font-family: inherit; }
   display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
 }
 @media (max-width: 480px) {
+  body {
+    background: #f0f4f8;
+  }
+
+  .app {
+    max-width: none;
+    width: 100%;
+  }
+
+  .header {
+    padding-top: max(0.8rem, env(safe-area-inset-top));
+  }
+
+  .conteudo {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  .bottom-nav {
+    padding-bottom: max(0.45rem, env(safe-area-inset-bottom));
+  }
+
+  .pwa-banner {
+    border-radius: 0 0 18px 18px;
+  }
+
   .ck-2col { grid-template-columns: 1fr; }
   .ck-fotos-4col { grid-template-columns: repeat(2, 1fr); }
 }

@@ -70,23 +70,42 @@ interface BeforeInstallPromptEvent extends Event {
 function BannerInstalar() {
   const [promptEvento, setPromptEvento] = useState<BeforeInstallPromptEvent | null>(null)
   const [descartado, setDescartado] = useState(() => localStorage.getItem('pwa-instalar-descartado') === '1')
+  const [ios, setIos] = useState(false)
+  const [instalado, setInstalado] = useState(false)
 
   useEffect(() => {
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true
+    setInstalado(standalone)
+    setIos(/iphone|ipad|ipod/i.test(navigator.userAgent) && !standalone)
+
     const handler = (e: Event) => {
       e.preventDefault()
       setPromptEvento(e as BeforeInstallPromptEvent)
     }
     window.addEventListener('beforeinstallprompt', handler)
-    return () => window.removeEventListener('beforeinstallprompt', handler)
+    const instaladoHandler = () => {
+      setInstalado(true)
+      setDescartado(true)
+      localStorage.setItem('pwa-instalar-descartado', '1')
+    }
+    window.addEventListener('appinstalled', instaladoHandler)
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler)
+      window.removeEventListener('appinstalled', instaladoHandler)
+    }
   }, [])
 
-  if (!promptEvento || descartado) return null
+  if (instalado || descartado || (!promptEvento && !ios)) return null
 
   async function instalar() {
-    if (!promptEvento) return
+    if (!promptEvento) {
+      setDescartado(true)
+      localStorage.setItem('pwa-instalar-descartado', '1')
+      return
+    }
     await promptEvento.prompt()
     const { outcome } = await promptEvento.userChoice
-    if (outcome === 'accepted' || outcome === 'dismissed') {
+    if (outcome === 'accepted') {
       setDescartado(true)
       localStorage.setItem('pwa-instalar-descartado', '1')
     }
@@ -104,8 +123,12 @@ function BannerInstalar() {
         <img src="/icon-192.png" alt="" />
       </div>
       <div className="pwa-banner-texto">
-        <strong>Instale o app</strong>
-        <span>Acesse a Defesa Civil direto da tela inicial do celular</span>
+        <strong>Instale no celular</strong>
+        <span>
+          {ios
+            ? 'No iPhone: toque em Compartilhar e depois “Adicionar à Tela de Início”.'
+            : 'Crie o ícone do app na tela inicial para acessar mais rápido.'}
+        </span>
       </div>
       <button className="pwa-banner-btn" onClick={instalar}>Instalar</button>
       <button className="pwa-banner-fechar" onClick={descartar}>✕</button>

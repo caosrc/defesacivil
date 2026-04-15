@@ -1,4 +1,4 @@
-const APP_CACHE = 'defesacivil-app-v5'
+const APP_CACHE = 'defesacivil-app-v6'
 const TILE_CACHE = 'defesacivil-tiles-v3'
 
 // Arquivos do app shell que serão cacheados na instalação
@@ -6,6 +6,9 @@ const PRECACHE = [
   '/',
   '/index.html',
   '/logo-dc.png',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
   '/manifest.json',
 ]
 
@@ -157,6 +160,11 @@ self.addEventListener('fetch', (e) => {
 // ------------------------------------------------------------------
 self.addEventListener('message', (e) => {
   const { tipo } = e.data || {}
+
+  if (tipo === 'SKIP_WAITING') {
+    self.skipWaiting()
+    return
+  }
 
   // Pré-cacheia tiles da região de Ouro Branco via proxy local
   if (tipo === 'CACHEAR_MAPA_OURO_BRANCO') {

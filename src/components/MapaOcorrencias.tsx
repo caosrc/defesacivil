@@ -197,6 +197,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
 
   const conectarWs = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
+    if (wsRef.current?.readyState === WebSocket.CONNECTING) return
     wsDesligandoRef.current = false
     setStatusWs('conectando')
 
@@ -245,8 +246,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
 
     ws.onclose = () => {
       setStatusWs('desconectado')
-      if (!wsDesligandoRef.current && statusGps === 'ativo') {
-        // reconecta em 4 segundos se o GPS ainda estiver ativo
+      if (!wsDesligandoRef.current) {
         setTimeout(() => {
           if (!wsDesligandoRef.current) conectarWs()
         }, 4000)
@@ -256,17 +256,11 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     ws.onerror = () => {
       setStatusWs('desconectado')
     }
-  }, [getIndice, statusGps])
+  }, [getIndice])
 
-  const desconectarWs = useCallback(() => {
-    wsDesligandoRef.current = true
-    if (wsRef.current) {
-      wsRef.current.close()
-      wsRef.current = null
-    }
-    setStatusWs('desconectado')
-    setDispositivos(new Map())
-  }, [])
+  useEffect(() => {
+    conectarWs()
+  }, [conectarWs])
 
   const enviarPosicao = useCallback((lat: number, lng: number, prec: number, vel: number | null) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -343,7 +337,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
       navigator.geolocation.clearWatch(watchIdRef.current)
       watchIdRef.current = null
     }
-    desconectarWs()
     setStatusGps('inativo')
     setPosicaoAtual(null)
     setTrilha([])
@@ -637,7 +630,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
             {/* Outros dispositivos */}
             {dispositivosArray.length === 0 && statusGps !== 'ativo' && (
               <div className="mapa-offline-info mapa-offline-info--aviso">
-                Ative o GPS para aparecer no mapa das outras equipes.
+                Você está conectado para ver outras equipes. Ative o GPS apenas se quiser aparecer no mapa delas.
               </div>
             )}
             {dispositivosArray.length === 0 && statusGps === 'ativo' && (
