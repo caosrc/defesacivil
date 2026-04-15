@@ -139,20 +139,20 @@ async function gerarRelatorioVistoria(ocorrencia) {
     documentXml = documentXml.split(alvo).join(valor)
   }
 
-  // Garante sempre o nome padrão (Cristiane) independente do template
-  documentXml = documentXml
-    .split('Talita Oliveira de Ara\u00FAjo').join('Cristiane Caroline Campos Lopes')
-    .split('Talita Oliveira de Araújo').join('Cristiane Caroline Campos Lopes')
-    .split('Analista Ambiental').join('Engenheira Civil - Coordenadoria Municipal de Prote\u00E7\u00E3o e Defesa Civil')
-
-  // Apenas para Vistoria Ambiental, troca para Talita / Analista Ambiental
   if (ocorrencia.tipo === 'Vistoria Ambiental') {
+    // Para Vistoria Ambiental: garante Talita e Analista Ambiental
     documentXml = documentXml
       .split('Cristiane Caroline Campos Lopes').join('Talita Oliveira de Ara\u00FAjo')
       .split('Engenheira Civil - Coordenadoria Municipal de Prote\u00E7\u00E3o e Defesa Civil').join('Analista Ambiental')
       .split('Engenheira Civil \u2013 Coordenadoria Municipal de Prote\u00E7\u00E3o e Defesa Civil').join('Analista Ambiental')
       .split('Engenheira Civil - Coordenadoria Municipal de Proteção e Defesa Civil').join('Analista Ambiental')
       .split('Engenheira Civil – Coordenadoria Municipal de Proteção e Defesa Civil').join('Analista Ambiental')
+  } else {
+    // Para outros tipos: garante Cristiane e Engenheira Civil
+    documentXml = documentXml
+      .split('Talita Oliveira de Ara\u00FAjo').join('Cristiane Caroline Campos Lopes')
+      .split('Talita Oliveira de Araújo').join('Cristiane Caroline Campos Lopes')
+      .split('Analista Ambiental').join('Engenheira Civil - Coordenadoria Municipal de Prote\u00E7\u00E3o e Defesa Civil')
   }
 
   documentXml = documentXml
