@@ -99,7 +99,7 @@ function criarIconeAgente(nome: string, cor = '#1a4b8c') {
 const CORES_EQUIPES = ['#dc2626', '#d97706', '#7c3aed', '#0891b2', '#059669', '#db2777']
 const EMOJIS_EQUIPES = ['🚑', '🚓', '🚛', '🛻', '🏍️', '🚐']
 
-function corParaDispositivo(id: string, idx: number) {
+function corParaDispositivo(_id: string, idx: number) {
   return CORES_EQUIPES[idx % CORES_EQUIPES.length]
 }
 function emojiParaDispositivo(idx: number) {
@@ -823,7 +823,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
             </div>
             {selecionada.endereco && <div className="mapa-painel-end">📍 {selecionada.endereco}</div>}
             {selecionada.proprietario && <div className="mapa-painel-end">👤 {selecionada.proprietario}</div>}
-            {selecionada.observacoes && <div className="mapa-painel-obs">"{selecionada.observacoes}"</div>}
             <div className="mapa-painel-data">🕐 {new Date(selecionada.created_at).toLocaleString('pt-BR')}</div>
             <button className="mapa-painel-btn" onClick={() => { onSelecionar(selecionada); setSelecionada(null) }}>
               Ver detalhes completos →

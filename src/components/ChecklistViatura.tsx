@@ -93,7 +93,6 @@ const ITENS_PDF: [keyof Itens, string, 'bmr' | 'sn'][] = [
   ['motTanquePartida', 'Tanque/Partida', 'sn'],
 ]
 
-const LABELS_VALOR: Record<string, string> = { bom: 'Bom', medio: 'Médio', ruim: 'Ruim', sim: 'Sim', nao: 'Não', na: 'N/A' }
 
 function CarFront() {
   return (
@@ -341,8 +340,9 @@ export default function ChecklistViatura() {
     const canvas = assinaturaRef.current!
     const rect = canvas.getBoundingClientRect()
     const toque = 'touches' in e ? e.touches[0] || e.changedTouches[0] : null
-    const x = (toque ? toque.clientX : e.clientX) - rect.left
-    const y = (toque ? toque.clientY : e.clientY) - rect.top
+    const me = e as React.MouseEvent<HTMLCanvasElement>
+    const x = (toque ? toque.clientX : me.clientX) - rect.left
+    const y = (toque ? toque.clientY : me.clientY) - rect.top
     return { x, y }
   }
 

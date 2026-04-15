@@ -1,3 +1,4 @@
+import type { CellValue as ExcelCellValue } from 'exceljs'
 import type { Ocorrencia } from './types'
 import { parseDateLocal } from './utils'
 
@@ -288,7 +289,7 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
       o.conclusao || '—',
     ]
 
-    valores.forEach((v, i) => { r.getCell(i + 1).value = v as ExcelJS.CellValue })
+    valores.forEach((v, i) => { r.getCell(i + 1).value = v as ExcelCellValue })
 
     r.height = temFotos ? ROW_H_PT : 18
 
@@ -470,7 +471,7 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
       ...fotoHeaders.map((_, fotoIdx) => fotosLinha[fotoIdx] ? 'Foto' : '—'),
     ]
 
-    valores.forEach((v, i) => { r.getCell(i + 1).value = v as ExcelJS.CellValue })
+    valores.forEach((v, i) => { r.getCell(i + 1).value = v as ExcelCellValue })
 
     r.eachCell({ includeEmpty: true }, (cell, colNum) => {
       cell.font = { size: 9 }
