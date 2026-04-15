@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -14,6 +14,23 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
+// ── Dispositivo local (persistido no localStorage) ──────────────
+function getDispositivoId(): string {
+  let id = localStorage.getItem('defesacivil-device-id')
+  if (!id) {
+    id = Math.random().toString(36).substring(2, 7).toUpperCase()
+    localStorage.setItem('defesacivil-device-id', id)
+  }
+  return id
+}
+function getNomeDispositivo(): string {
+  return localStorage.getItem('defesacivil-device-nome') || `Equipe ${getDispositivoId()}`
+}
+function salvarNomeDispositivo(nome: string) {
+  localStorage.setItem('defesacivil-device-nome', nome.trim() || `Equipe ${getDispositivoId()}`)
+}
+
+// ── Ícones ──────────────────────────────────────────────────────
 function criarIcone(natureza: string, selecionado = false) {
   const emoji = NATUREZA_ICONE[natureza] ?? '📋'
   const cor = NATUREZA_COR[natureza] ?? '#1a4b8c'
@@ -21,10 +38,8 @@ function criarIcone(natureza: string, selecionado = false) {
   return L.divIcon({
     className: '',
     html: `<div style="
-      background:${cor};
-      width:${size}px;height:${size}px;
-      border-radius:50% 50% 50% 0;
-      transform:rotate(-45deg);
+      background:${cor};width:${size}px;height:${size}px;
+      border-radius:50% 50% 50% 0;transform:rotate(-45deg);
       border:${selecionado ? '3px solid white' : '2px solid white'};
       box-shadow:${selecionado ? '0 0 0 3px ' + cor + ', 0 4px 12px rgba(0,0,0,0.5)' : '0 2px 6px rgba(0,0,0,0.35)'};
       display:flex;align-items:center;justify-content:center;
@@ -35,38 +50,41 @@ function criarIcone(natureza: string, selecionado = false) {
   })
 }
 
-function criarIconeViatura() {
+function criarIconeViatura(cor = '#1a4b8c', emoji = '🚒') {
   return L.divIcon({
     className: '',
     html: `<div style="
-      width:36px;height:36px;
-      border-radius:50%;
-      background:#1a4b8c;
-      border:3px solid white;
-      box-shadow:0 0 0 3px rgba(26,75,140,0.35), 0 4px 14px rgba(0,0,0,0.4);
-      display:flex;align-items:center;justify-content:center;
-      font-size:18px;
-    ">🚒</div>`,
+      width:36px;height:36px;border-radius:50%;
+      background:${cor};border:3px solid white;
+      box-shadow:0 0 0 3px ${cor}55, 0 4px 14px rgba(0,0,0,0.4);
+      display:flex;align-items:center;justify-content:center;font-size:18px;
+    ">${emoji}</div>`,
     iconSize: [36, 36],
     iconAnchor: [18, 18],
     popupAnchor: [0, -22],
   })
 }
 
+// Cores para outros dispositivos (índice circular)
+const CORES_EQUIPES = ['#dc2626', '#d97706', '#7c3aed', '#0891b2', '#059669', '#db2777']
+const EMOJIS_EQUIPES = ['🚑', '🚓', '🚛', '🛻', '🏍️', '🚐']
+
+function corParaDispositivo(id: string, idx: number) {
+  return CORES_EQUIPES[idx % CORES_EQUIPES.length]
+}
+function emojiParaDispositivo(idx: number) {
+  return EMOJIS_EQUIPES[idx % EMOJIS_EQUIPES.length]
+}
+
+// ── Componentes auxiliares ──────────────────────────────────────
 function MapClickHandler({ onMapClick }: { onMapClick: () => void }) {
   useMapEvents({ click: onMapClick })
   return null
 }
 
-interface GpsCenterProps {
-  position: [number, number]
-  seguir: boolean
-}
-
-function GpsCenter({ position, seguir }: GpsCenterProps) {
+function GpsCenter({ position, seguir }: { position: [number, number]; seguir: boolean }) {
   const map = useMap()
   const initialRef = useRef(false)
-
   useEffect(() => {
     if (!initialRef.current) {
       map.flyTo(position, Math.max(map.getZoom(), 16), { duration: 1.2 })
@@ -75,27 +93,39 @@ function GpsCenter({ position, seguir }: GpsCenterProps) {
       map.panTo(position, { animate: true, duration: 0.5 })
     }
   }, [position, seguir, map])
-
   return null
 }
 
+// ── Tipos ───────────────────────────────────────────────────────
 interface Props {
   ocorrencias: Ocorrencia[]
   onSelecionar: (o: Ocorrencia) => void
 }
 
+interface DispositivoRemoto {
+  id: string
+  nome: string
+  lat: number
+  lng: number
+  precisao: number
+  velocidade: number | null
+  ultimaVez: number
+  indice: number
+}
+
+type StatusGps = 'inativo' | 'aguardando' | 'ativo' | 'erro'
+type StatusOffline = 'idle' | 'baixando' | 'concluido' | 'erro'
+type StatusWs = 'desconectado' | 'conectando' | 'conectado'
+
 const OURO_BRANCO: [number, number] = [-20.5195, -43.6983]
 const MAX_TRILHA = 300
 
-type StatusGps = 'inativo' | 'aguardando' | 'ativo' | 'erro'
-
-type StatusOffline = 'idle' | 'baixando' | 'concluido' | 'erro'
-
+// ── Componente principal ────────────────────────────────────────
 export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const [selecionada, setSelecionada] = useState<Ocorrencia | null>(null)
   const [legendaAberta, setLegendaAberta] = useState(false)
 
-  // GPS state
+  // GPS local
   const [statusGps, setStatusGps] = useState<StatusGps>('inativo')
   const [erroGps, setErroGps] = useState<string | null>(null)
   const [posicaoAtual, setPosicaoAtual] = useState<[number, number] | null>(null)
@@ -105,7 +135,22 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const [seguir, setSeguir] = useState(true)
   const watchIdRef = useRef<number | null>(null)
 
-  // Estado do download offline de mapa
+  // Dispositivos remotos (outros celulares)
+  const [dispositivos, setDispositivos] = useState<Map<string, DispositivoRemoto>>(new Map())
+  const [statusWs, setStatusWs] = useState<StatusWs>('desconectado')
+  const [painelEquipesAberto, setPainelEquipesAberto] = useState(false)
+  const wsRef = useRef<WebSocket | null>(null)
+  const wsDesligandoRef = useRef(false)
+  const proxIndiceRef = useRef(0)
+  const indicesRef = useRef<Map<string, number>>(new Map())
+
+  // Nome e ID do dispositivo local
+  const [nomeLocal, setNomeLocal] = useState(getNomeDispositivo())
+  const [editandoNome, setEditandoNome] = useState(false)
+  const [nomeEditando, setNomeEditando] = useState('')
+  const dispositivoId = useRef(getDispositivoId())
+
+  // Mapa offline
   const [statusOffline, setStatusOffline] = useState<StatusOffline>('idle')
   const [progressoMapa, setProgressoMapa] = useState<ProgressoMapa | null>(null)
   const [tilesCacheados, setTilesCacheados] = useState<number>(0)
@@ -114,7 +159,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const comGeo = ocorrencias.filter((o) => o.lat && o.lng)
   const semGeo = ocorrencias.length - comGeo.length
 
-  // Carrega info do cache ao montar
   useEffect(() => {
     obterInfoCacheMapa().then(setTilesCacheados).catch(() => {})
   }, [statusOffline])
@@ -125,35 +169,144 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  useEffect(() => {
-    return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current)
+  // ── WebSocket ─────────────────────────────────────────────────
+  const getIndice = useCallback((id: string) => {
+    if (!indicesRef.current.has(id)) {
+      indicesRef.current.set(id, proxIndiceRef.current++)
+    }
+    return indicesRef.current.get(id)!
+  }, [])
+
+  const conectarWs = useCallback(() => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) return
+    wsDesligandoRef.current = false
+    setStatusWs('conectando')
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const url = `${protocol}//${window.location.host}/ws`
+    const ws = new WebSocket(url)
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      setStatusWs('conectado')
+    }
+
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data)
+
+        if (msg.tipo === 'posicoes_iniciais') {
+          setDispositivos((prev) => {
+            const next = new Map(prev)
+            for (const p of msg.posicoes) {
+              if (p.id === dispositivoId.current) continue
+              next.set(p.id, { ...p, ultimaVez: Date.now(), indice: getIndice(p.id) })
+            }
+            return next
+          })
+        }
+
+        if (msg.tipo === 'posicao') {
+          if (msg.id === dispositivoId.current) return
+          setDispositivos((prev) => {
+            const next = new Map(prev)
+            next.set(msg.id, { ...msg, ultimaVez: Date.now(), indice: getIndice(msg.id) })
+            return next
+          })
+        }
+
+        if (msg.tipo === 'remover') {
+          setDispositivos((prev) => {
+            const next = new Map(prev)
+            next.delete(msg.id)
+            return next
+          })
+        }
+      } catch { /* ignora */ }
+    }
+
+    ws.onclose = () => {
+      setStatusWs('desconectado')
+      if (!wsDesligandoRef.current && statusGps === 'ativo') {
+        // reconecta em 4 segundos se o GPS ainda estiver ativo
+        setTimeout(() => {
+          if (!wsDesligandoRef.current) conectarWs()
+        }, 4000)
       }
+    }
+
+    ws.onerror = () => {
+      setStatusWs('desconectado')
+    }
+  }, [getIndice, statusGps])
+
+  const desconectarWs = useCallback(() => {
+    wsDesligandoRef.current = true
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
+    }
+    setStatusWs('desconectado')
+    setDispositivos(new Map())
+  }, [])
+
+  const enviarPosicao = useCallback((lat: number, lng: number, prec: number, vel: number | null) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        tipo: 'posicao',
+        id: dispositivoId.current,
+        nome: getNomeDispositivo(),
+        lat, lng,
+        precisao: prec,
+        velocidade: vel,
+      }))
     }
   }, [])
 
+  // Cleanup ao desmontar
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
+      wsDesligandoRef.current = true
+      wsRef.current?.close()
+    }
+  }, [])
+
+  // Heartbeat para manter a conexão viva
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ tipo: 'ping' }))
+      }
+    }, 30000)
+    return () => clearInterval(t)
+  }, [])
+
+  // ── GPS ───────────────────────────────────────────────────────
   function ativarGps() {
     if (!navigator.geolocation) {
       setErroGps('GPS não suportado neste dispositivo.')
       setStatusGps('erro')
       return
     }
-
     setStatusGps('aguardando')
     setErroGps(null)
+    conectarWs()
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude]
+        const prec = pos.coords.accuracy
+        const vel = pos.coords.speed
         setPosicaoAtual(coords)
-        setPrecisao(pos.coords.accuracy)
-        setVelocidade(pos.coords.speed)
+        setPrecisao(prec)
+        setVelocidade(vel)
         setTrilha((prev) => {
           const nova = [...prev, coords]
           return nova.length > MAX_TRILHA ? nova.slice(nova.length - MAX_TRILHA) : nova
         })
         setStatusGps('ativo')
+        enviarPosicao(coords[0], coords[1], prec, vel)
       },
       (err) => {
         let msg = 'Erro ao obter localização.'
@@ -172,6 +325,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
       navigator.geolocation.clearWatch(watchIdRef.current)
       watchIdRef.current = null
     }
+    desconectarWs()
     setStatusGps('inativo')
     setPosicaoAtual(null)
     setTrilha([])
@@ -181,17 +335,19 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   }
 
   function toggleGps() {
-    if (statusGps === 'ativo' || statusGps === 'aguardando') {
-      desativarGps()
-    } else {
-      ativarGps()
-    }
+    if (statusGps === 'ativo' || statusGps === 'aguardando') desativarGps()
+    else ativarGps()
   }
 
-  function selecionarOc(o: Ocorrencia) {
-    setSelecionada((prev) => (prev?.id === o.id ? null : o))
+  // ── Nome do dispositivo ────────────────────────────────────────
+  function salvarNome() {
+    const nome = nomeEditando.trim() || getNomeDispositivo()
+    salvarNomeDispositivo(nome)
+    setNomeLocal(getNomeDispositivo())
+    setEditandoNome(false)
   }
 
+  // ── Mapa offline ──────────────────────────────────────────────
   async function iniciarDownloadMapa() {
     if (statusOffline === 'baixando') return
     setStatusOffline('baixando')
@@ -213,17 +369,22 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     setProgressoMapa(null)
   }
 
+  // ── Misc ──────────────────────────────────────────────────────
+  function selecionarOc(o: Ocorrencia) {
+    setSelecionada((prev) => (prev?.id === o.id ? null : o))
+  }
+
   const naturezasUnicas = [...new Set(comGeo.map((o) => o.natureza))]
   const velocidadeKmh = velocidade != null ? Math.round(velocidade * 3.6) : null
+  const porcentagem = progressoMapa && progressoMapa.total > 0
+    ? Math.round((progressoMapa.concluido / progressoMapa.total) * 100) : 0
 
-  const porcentagem =
-    progressoMapa && progressoMapa.total > 0
-      ? Math.round((progressoMapa.concluido / progressoMapa.total) * 100)
-      : 0
+  const dispositivosArray = Array.from(dispositivos.values())
+  const totalOnline = dispositivosArray.length + (statusGps === 'ativo' ? 1 : 0)
 
+  // ── Render ────────────────────────────────────────────────────
   return (
     <div className="mapa-wrapper">
-      {/* Map */}
       <MapContainer
         center={OURO_BRANCO}
         zoom={14}
@@ -240,6 +401,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
 
         <MapClickHandler onMapClick={() => setSelecionada(null)} />
 
+        {/* Trilha GPS local */}
         {trilha.length >= 2 && (
           <Polyline
             positions={trilha}
@@ -247,6 +409,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
           />
         )}
 
+        {/* Círculo de precisão local */}
         {posicaoAtual && precisao > 0 && (
           <Circle
             center={posicaoAtual}
@@ -255,6 +418,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
           />
         )}
 
+        {/* Marcador da viatura local */}
         {posicaoAtual && (
           <>
             <CircleMarker
@@ -262,21 +426,13 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
               radius={22}
               pathOptions={{ color: '#1a4b8c', fillColor: 'rgba(26,75,140,0.18)', weight: 2, fillOpacity: 1 }}
             />
-            <Marker
-              position={posicaoAtual}
-              icon={criarIconeViatura()}
-              zIndexOffset={1000}
-            >
+            <Marker position={posicaoAtual} icon={criarIconeViatura('#1a4b8c', '🚒')} zIndexOffset={1000}>
               <Popup>
-                <div style={{ minWidth: 150, fontFamily: 'inherit' }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 4 }}>🚒 Sua posição</div>
-                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                    Precisão: ±{Math.round(precisao)} m
-                  </div>
+                <div style={{ minWidth: 155, fontFamily: 'inherit' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 2 }}>🚒 {nomeLocal} (você)</div>
+                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Precisão: ±{Math.round(precisao)} m</div>
                   {velocidadeKmh !== null && (
-                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-                      Velocidade: {velocidadeKmh} km/h
-                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Velocidade: {velocidadeKmh} km/h</div>
                   )}
                   <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 4 }}>
                     {posicaoAtual[0].toFixed(6)}, {posicaoAtual[1].toFixed(6)}
@@ -288,16 +444,50 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
           </>
         )}
 
+        {/* Marcadores dos outros dispositivos */}
+        {dispositivosArray.map((d) => {
+          const cor = corParaDispositivo(d.id, d.indice)
+          const emoji = emojiParaDispositivo(d.indice)
+          const velKmh = d.velocidade != null ? Math.round(d.velocidade * 3.6) : null
+          const segsAtras = Math.round((Date.now() - d.ultimaVez) / 1000)
+          return (
+            <Marker
+              key={d.id}
+              position={[d.lat, d.lng]}
+              icon={criarIconeViatura(cor, emoji)}
+              zIndexOffset={900}
+            >
+              <Popup>
+                <div style={{ minWidth: 155, fontFamily: 'inherit' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 2, color: cor }}>
+                    {emoji} {d.nome}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                    Precisão: ±{Math.round(d.precisao)} m
+                  </div>
+                  {velKmh !== null && (
+                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Velocidade: {velKmh} km/h</div>
+                  )}
+                  <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 4 }}>
+                    {d.lat.toFixed(6)}, {d.lng.toFixed(6)}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#d1d5db', marginTop: 2 }}>
+                    Atualizado há {segsAtras}s
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+          )
+        })}
+
+        {/* Ocorrências */}
         {comGeo.map((o) => (
           <Marker
             key={o.id}
             position={[o.lat!, o.lng!]}
             icon={criarIcone(o.natureza, selecionada?.id === o.id)}
             eventHandlers={{
-              click: (e) => {
-                e.originalEvent.stopPropagation()
-                selecionarOc(o)
-              },
+              click: (e) => { e.originalEvent.stopPropagation(); selecionarOc(o) },
             }}
           >
             <Popup>
@@ -308,9 +498,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
                 <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: 4 }}>
                   {o.tipo} · {o.nivel_risco.charAt(0).toUpperCase() + o.nivel_risco.slice(1)}
                 </div>
-                {o.endereco && (
-                  <div style={{ fontSize: '0.78rem', marginBottom: 6 }}>📍 {o.endereco}</div>
-                )}
+                {o.endereco && <div style={{ fontSize: '0.78rem', marginBottom: 6 }}>📍 {o.endereco}</div>}
                 <button
                   onClick={(e) => { e.stopPropagation(); onSelecionar(o) }}
                   style={{
@@ -339,9 +527,11 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
           <span className="mapa-stat-label">sem GPS</span>
         </div>
         <div className="mapa-stat-div" />
-        <div className="mapa-stat">
-          <span className="mapa-stat-num">{ocorrencias.length}</span>
-          <span className="mapa-stat-label">total</span>
+        <div className="mapa-stat" style={{ cursor: 'pointer' }} onClick={() => setPainelEquipesAberto(v => !v)}>
+          <span className="mapa-stat-num" style={{ color: totalOnline > 0 ? '#15803d' : undefined }}>
+            {totalOnline}
+          </span>
+          <span className="mapa-stat-label">equipes</span>
         </div>
         <button className="mapa-legenda-btn" onClick={() => setLegendaAberta((v) => !v)}>
           🗂 Legenda
@@ -369,23 +559,94 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         </span>
       </button>
 
-      {/* Botão Download Offline */}
+      {/* Botão download offline */}
       <button
         className={`mapa-offline-btn ${statusOffline === 'baixando' ? 'mapa-offline-btn--baixando' : statusOffline === 'concluido' ? 'mapa-offline-btn--ok' : ''}`}
         onClick={() => setPainelOfflineAberto((v) => !v)}
         title="Baixar mapa para uso offline"
       >
-        <span>
-          {statusOffline === 'baixando' ? '⏳' : statusOffline === 'concluido' ? '✅' : '📥'}
-        </span>
-        <span>
-          {statusOffline === 'baixando'
-            ? `${porcentagem}%`
-            : statusOffline === 'concluido'
-            ? 'Offline OK'
-            : 'Offline'}
-        </span>
+        <span>{statusOffline === 'baixando' ? '⏳' : statusOffline === 'concluido' ? '✅' : '📥'}</span>
+        <span>{statusOffline === 'baixando' ? `${porcentagem}%` : statusOffline === 'concluido' ? 'Offline OK' : 'Offline'}</span>
       </button>
+
+      {/* Painel equipes online */}
+      {painelEquipesAberto && (
+        <div className="mapa-equipes-painel">
+          <div className="mapa-offline-painel-header">
+            <span>📡 Equipes em campo</span>
+            <button onClick={() => setPainelEquipesAberto(false)}>✕</button>
+          </div>
+          <div className="mapa-offline-painel-corpo">
+            {/* Status WS */}
+            <div className={`mapa-ws-status mapa-ws-status--${statusWs}`}>
+              <span className="mapa-ws-dot" />
+              {statusWs === 'conectado' ? 'Conectado ao servidor' : statusWs === 'conectando' ? 'Conectando…' : 'Desconectado'}
+            </div>
+
+            {/* Dispositivo local */}
+            <div className="mapa-equipe-item mapa-equipe-item--local">
+              <span className="mapa-equipe-icone" style={{ background: '#1a4b8c' }}>🚒</span>
+              <div className="mapa-equipe-info">
+                {editandoNome ? (
+                  <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                    <input
+                      className="mapa-equipe-nome-input"
+                      value={nomeEditando}
+                      onChange={(e) => setNomeEditando(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') salvarNome() }}
+                      autoFocus
+                      maxLength={20}
+                      placeholder="Nome da equipe"
+                    />
+                    <button className="mapa-equipe-salvar" onClick={salvarNome}>✓</button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span className="mapa-equipe-nome">{nomeLocal} <em>(você)</em></span>
+                    <button className="mapa-equipe-editar" onClick={() => { setNomeEditando(nomeLocal); setEditandoNome(true) }}>✏️</button>
+                  </div>
+                )}
+                <span className="mapa-equipe-status">
+                  {statusGps === 'ativo' ? '🟢 GPS ativo' : statusGps === 'aguardando' ? '🟡 Aguardando GPS…' : '⚫ GPS desligado'}
+                </span>
+              </div>
+            </div>
+
+            {/* Outros dispositivos */}
+            {dispositivosArray.length === 0 && statusGps !== 'ativo' && (
+              <div className="mapa-offline-info mapa-offline-info--aviso">
+                Ative o GPS para aparecer no mapa das outras equipes.
+              </div>
+            )}
+            {dispositivosArray.length === 0 && statusGps === 'ativo' && (
+              <div className="mapa-offline-info" style={{ background: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' }}>
+                Aguardando outras equipes entrarem online…
+              </div>
+            )}
+            {dispositivosArray.map((d) => {
+              const cor = corParaDispositivo(d.id, d.indice)
+              const emoji = emojiParaDispositivo(d.indice)
+              const segsAtras = Math.round((Date.now() - d.ultimaVez) / 1000)
+              const velKmh = d.velocidade != null ? Math.round(d.velocidade * 3.6) : null
+              return (
+                <div key={d.id} className="mapa-equipe-item">
+                  <span className="mapa-equipe-icone" style={{ background: cor }}>{emoji}</span>
+                  <div className="mapa-equipe-info">
+                    <span className="mapa-equipe-nome">{d.nome}</span>
+                    <span className="mapa-equipe-status" style={{ color: '#6b7280' }}>
+                      🟢 Ativo · {velKmh !== null ? `${velKmh} km/h` : 'parado'} · ±{Math.round(d.precisao)}m · {segsAtras}s atrás
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+
+            <div className="mapa-offline-aviso">
+              Todas as equipes com GPS ativo aparecem aqui e no mapa em tempo real.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Painel Download Mapa Offline */}
       {painelOfflineAberto && (
@@ -405,21 +666,16 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
                 📵 Mapa ainda não baixado. Sem conexão, o mapa ficará cinza.
               </div>
             )}
-
             {statusOffline === 'baixando' && progressoMapa && (
               <div className="mapa-offline-progresso">
                 <div className="mapa-offline-barra-wrap">
-                  <div
-                    className="mapa-offline-barra"
-                    style={{ width: `${porcentagem}%` }}
-                  />
+                  <div className="mapa-offline-barra" style={{ width: `${porcentagem}%` }} />
                 </div>
                 <div className="mapa-offline-pct">
                   {porcentagem}% — {progressoMapa.concluido.toLocaleString('pt-BR')} / {progressoMapa.total.toLocaleString('pt-BR')} tiles
                 </div>
               </div>
             )}
-
             {statusOffline !== 'baixando' && (
               <button
                 className="mapa-offline-btn-acao"
@@ -427,27 +683,23 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
                 disabled={!navigator.onLine}
               >
                 {navigator.onLine
-                  ? tilesCacheados > 0
-                    ? '🔄 Atualizar mapa offline'
-                    : '📥 Baixar mapa offline (zoom 12–16)'
+                  ? tilesCacheados > 0 ? '🔄 Atualizar mapa offline' : '📥 Baixar mapa offline (zoom 12–16)'
                   : '📵 Sem conexão para baixar'}
               </button>
             )}
-
             {tilesCacheados > 0 && statusOffline !== 'baixando' && (
               <button className="mapa-offline-btn-limpar" onClick={limparMapa}>
                 🗑 Apagar mapa offline
               </button>
             )}
-
             <div className="mapa-offline-aviso">
-              O GPS do dispositivo funciona offline por hardware. Apenas os tiles visuais do mapa precisam ser baixados com conexão.
+              O GPS do dispositivo funciona offline por hardware. Apenas os tiles visuais precisam ser baixados com conexão.
             </div>
           </div>
         </div>
       )}
 
-      {/* Painel de info GPS ativo */}
+      {/* Painel GPS ativo */}
       {statusGps === 'ativo' && posicaoAtual && (
         <div className="mapa-gps-info">
           <div className="mapa-gps-info-row">
@@ -459,11 +711,18 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
             <span className="mapa-gps-info-text">±{Math.round(precisao)} m</span>
             <span className="mapa-gps-info-sep">·</span>
             <span className="mapa-gps-info-text">{trilha.length} pts</span>
+            {statusWs === 'conectado' && (
+              <>
+                <span className="mapa-gps-info-sep">·</span>
+                <span className="mapa-gps-info-text" style={{ color: '#15803d' }}>
+                  📡 {dispositivosArray.length + 1} equipe{dispositivosArray.length !== 0 ? 's' : ''}
+                </span>
+              </>
+            )}
           </div>
           <button
             className={`mapa-gps-seguir ${seguir ? 'mapa-gps-seguir--ativo' : ''}`}
             onClick={() => setSeguir((v) => !v)}
-            title={seguir ? 'Parar de seguir posição' : 'Seguir posição'}
           >
             {seguir ? '🔒 Seguindo' : '🔓 Livre'}
           </button>
@@ -490,10 +749,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
               ? <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>Nenhuma ocorrência com GPS</div>
               : naturezasUnicas.map((n) => (
                 <div key={n} className="mapa-legenda-item">
-                  <div
-                    className="mapa-legenda-dot"
-                    style={{ background: NATUREZA_COR[n] ?? '#1a4b8c' }}
-                  >
+                  <div className="mapa-legenda-dot" style={{ background: NATUREZA_COR[n] ?? '#1a4b8c' }}>
                     {NATUREZA_ICONE[n] ?? '📋'}
                   </div>
                   <span>{n}</span>
@@ -503,16 +759,13 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         </div>
       )}
 
-      {/* Bottom panel — slides up when marker selected */}
+      {/* Bottom panel — ocorrência selecionada */}
       {selecionada && (
         <div className="mapa-painel" onClick={(e) => e.stopPropagation()}>
           <div className="mapa-painel-handle" onClick={() => setSelecionada(null)} />
           <div className="mapa-painel-corpo">
             <div className="mapa-painel-topo">
-              <div
-                className="mapa-painel-icone"
-                style={{ background: NATUREZA_COR[selecionada.natureza] ?? '#1a4b8c' }}
-              >
+              <div className="mapa-painel-icone" style={{ background: NATUREZA_COR[selecionada.natureza] ?? '#1a4b8c' }}>
                 {NATUREZA_ICONE[selecionada.natureza] ?? '📋'}
               </div>
               <div className="mapa-painel-info">
@@ -521,7 +774,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
               </div>
               <button className="mapa-painel-fechar" onClick={() => setSelecionada(null)}>✕</button>
             </div>
-
             <div className="mapa-painel-badges">
               <span className={`nivel-badge nivel-${selecionada.nivel_risco}`}>
                 {selecionada.nivel_risco === 'baixo' ? '🟢 Baixo' : selecionada.nivel_risco === 'medio' ? '🟡 Médio' : '🔴 Alto'}
@@ -530,25 +782,11 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
                 {selecionada.status_oc === 'ativo' ? '🔴 Ativo' : '✅ Resolvido'}
               </span>
             </div>
-
-            {selecionada.endereco && (
-              <div className="mapa-painel-end">📍 {selecionada.endereco}</div>
-            )}
-            {selecionada.proprietario && (
-              <div className="mapa-painel-end">👤 {selecionada.proprietario}</div>
-            )}
-            {selecionada.observacoes && (
-              <div className="mapa-painel-obs">"{selecionada.observacoes}"</div>
-            )}
-
-            <div className="mapa-painel-data">
-              🕐 {new Date(selecionada.created_at).toLocaleString('pt-BR')}
-            </div>
-
-            <button
-              className="mapa-painel-btn"
-              onClick={() => { onSelecionar(selecionada); setSelecionada(null) }}
-            >
+            {selecionada.endereco && <div className="mapa-painel-end">📍 {selecionada.endereco}</div>}
+            {selecionada.proprietario && <div className="mapa-painel-end">👤 {selecionada.proprietario}</div>}
+            {selecionada.observacoes && <div className="mapa-painel-obs">"{selecionada.observacoes}"</div>}
+            <div className="mapa-painel-data">🕐 {new Date(selecionada.created_at).toLocaleString('pt-BR')}</div>
+            <button className="mapa-painel-btn" onClick={() => { onSelecionar(selecionada); setSelecionada(null) }}>
               Ver detalhes completos →
             </button>
           </div>

@@ -905,6 +905,112 @@ input, select, textarea { font-family: inherit; }
   padding-top: 0.4rem;
 }
 
+/* ── Painel equipes em campo ─────────────────────────────────── */
+.mapa-equipes-painel {
+  position: absolute;
+  top: 54px;
+  right: 14px;
+  z-index: 600;
+  background: white;
+  border-radius: 18px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.22);
+  width: 290px;
+  max-width: calc(100vw - 28px);
+  overflow: hidden;
+}
+
+.mapa-ws-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.3rem 0.5rem;
+  border-radius: 8px;
+  background: #f3f4f6;
+  color: #6b7280;
+}
+.mapa-ws-status--conectado { background: #f0fdf4; color: #15803d; }
+.mapa-ws-status--conectando { background: #fffbeb; color: #92400e; }
+.mapa-ws-status--desconectado { background: #fef2f2; color: #b91c1c; }
+
+.mapa-ws-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.mapa-equipe-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+.mapa-equipe-item--local {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+.mapa-equipe-icone {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+  color: white;
+}
+.mapa-equipe-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.mapa-equipe-nome {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mapa-equipe-nome em {
+  font-style: normal;
+  font-weight: 400;
+  color: #9ca3af;
+}
+.mapa-equipe-status {
+  font-size: 0.7rem;
+  color: #6b7280;
+}
+.mapa-equipe-nome-input {
+  border: 1px solid #93c5fd;
+  border-radius: 6px;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.8rem;
+  outline: none;
+  width: 130px;
+}
+.mapa-equipe-salvar {
+  background: #1a4b8c;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.mapa-equipe-editar {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.78rem;
+  padding: 0;
+  opacity: 0.6;
+}
+
 /* ── Bottom nav ───────────────────────────────────────────────── */
 .bottom-nav {
   position: fixed;

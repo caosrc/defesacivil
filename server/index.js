@@ -5,6 +5,8 @@ import JSZip from 'jszip'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { existsSync, readFileSync, readdirSync } from 'fs'
+import { createServer } from 'http'
+import { WebSocketServer } from 'ws'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -12,9 +14,94 @@ const __dirname = dirname(__filename)
 const { Pool } = pg
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const app = express()
+const httpServer = createServer(app)
 
 app.use(cors())
 app.use(express.json({ limit: '100mb' }))
+
+// ── WebSocket — Rastreamento em tempo real ──────────────────────
+const wss = new WebSocketServer({ server: httpServer, path: '/ws' })
+
+// id → { ws, nome, lat, lng, precisao, velocidade, ts }
+const dispositivosOnline = new Map()
+
+function broadcastParaTodos(payload, excluirId = null) {
+  const json = JSON.stringify(payload)
+  for (const [id, d] of dispositivosOnline) {
+    if (id !== excluirId && d.ws.readyState === 1) {
+      d.ws.send(json)
+    }
+  }
+}
+
+wss.on('connection', (ws) => {
+  let dispositivoId = null
+
+  // Envia posições atuais de todos os outros para o novo cliente
+  const posicoeAtuais = []
+  for (const [id, d] of dispositivosOnline) {
+    if (d.lat !== null && d.lat !== undefined) {
+      posicoeAtuais.push({ id, nome: d.nome, lat: d.lat, lng: d.lng, precisao: d.precisao, velocidade: d.velocidade })
+    }
+  }
+  if (posicoeAtuais.length > 0) {
+    ws.send(JSON.stringify({ tipo: 'posicoes_iniciais', posicoes: posicoeAtuais }))
+  }
+
+  ws.on('message', (data) => {
+    try {
+      const msg = JSON.parse(data.toString())
+
+      if (msg.tipo === 'posicao') {
+        dispositivoId = msg.id
+        dispositivosOnline.set(dispositivoId, {
+          ws,
+          nome: msg.nome || `Equipe ${msg.id}`,
+          lat: msg.lat,
+          lng: msg.lng,
+          precisao: msg.precisao || 0,
+          velocidade: msg.velocidade ?? null,
+          ts: Date.now(),
+        })
+        broadcastParaTodos({
+          tipo: 'posicao',
+          id: msg.id,
+          nome: msg.nome || `Equipe ${msg.id}`,
+          lat: msg.lat,
+          lng: msg.lng,
+          precisao: msg.precisao || 0,
+          velocidade: msg.velocidade ?? null,
+        }, dispositivoId)
+      }
+
+      if (msg.tipo === 'ping') {
+        ws.send(JSON.stringify({ tipo: 'pong' }))
+      }
+    } catch { /* ignora mensagens malformadas */ }
+  })
+
+  ws.on('close', () => {
+    if (dispositivoId) {
+      dispositivosOnline.delete(dispositivoId)
+      broadcastParaTodos({ tipo: 'remover', id: dispositivoId })
+    }
+  })
+
+  ws.on('error', () => {
+    if (dispositivoId) dispositivosOnline.delete(dispositivoId)
+  })
+})
+
+// Limpa dispositivos silenciosos há mais de 3 minutos
+setInterval(() => {
+  const limite = Date.now() - 3 * 60 * 1000
+  for (const [id, d] of dispositivosOnline) {
+    if (d.ts < limite || d.ws.readyState !== 1) {
+      dispositivosOnline.delete(id)
+      broadcastParaTodos({ tipo: 'remover', id })
+    }
+  }
+}, 60 * 1000)
 
 const MESES = [
   'janeiro',
@@ -422,11 +509,12 @@ const PORT = process.env.PORT || 3001
 
 try {
   await initDb()
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`API Defesa Civil rodando na porta ${PORT}`)
+    console.log(`WebSocket de rastreamento ativo em ws://0.0.0.0:${PORT}/ws`)
   })
 
-  server.on('error', (err) => {
+  httpServer.on('error', (err) => {
     console.error('Server error:', err)
     process.exit(1)
   })
