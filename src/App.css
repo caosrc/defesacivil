@@ -1519,6 +1519,13 @@ input, select, textarea { font-family: inherit; }
   font-weight: 700;
 }
 
+.ck-salvar-final {
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+  position: relative;
+  z-index: 1;
+}
+
 .ck-assinatura-detalhe {
   min-height: 110px;
   border: 1.5px solid #d1d5db;

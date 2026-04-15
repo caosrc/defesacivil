@@ -654,6 +654,10 @@ export default function ChecklistViatura() {
               <button type="button" className="ck-assinatura-limpar" onClick={limparAssinatura}>Limpar assinatura</button>
             </div>
 
+            <button className="btn-salvar ck-salvar-final" onClick={salvar} disabled={salvando}>
+              {salvando ? '⏳ Salvando checklist...' : '💾 Salvar Checklist'}
+            </button>
+
             {erro && <div className="erro-msg">⚠️ {erro}</div>}
           </div>
         </div>
