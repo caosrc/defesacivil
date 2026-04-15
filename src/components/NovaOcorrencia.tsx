@@ -34,7 +34,8 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const [geoMsg, setGeoMsg] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const galeriaRef = useRef<HTMLInputElement>(null)
 
   const precisaSubnatureza = natureza === 'Queda de Estrutura' || natureza === 'Apreensão e Captura de Animal'
   const labelSubnatureza = natureza === 'Queda de Estrutura' ? 'Qual é a estrutura?' : 'Qual é o animal?'
@@ -272,12 +273,19 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
                   <button className="foto-del" onClick={() => setFotos((p) => p.filter((_, j) => j !== i))}>✕</button>
                 </div>
               ))}
-              <button className="btn-add-foto" onClick={() => fileRef.current?.click()}>
-                <span className="btn-foto-emoji">📷</span>
-                <span>Adicionar Foto</span>
-              </button>
-              <input ref={fileRef} type="file" accept="image/*" multiple capture="environment" style={{ display: 'none' }} onChange={adicionarFotos} />
             </div>
+            <div className="fotos-botoes">
+              <button className="btn-foto-camera" onClick={() => cameraRef.current?.click()}>
+                <span>📷</span>
+                <span>Tirar Foto</span>
+              </button>
+              <button className="btn-foto-galeria" onClick={() => galeriaRef.current?.click()}>
+                <span>🖼️</span>
+                <span>Carregar Foto</span>
+              </button>
+            </div>
+            <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={adicionarFotos} />
+            <input ref={galeriaRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={adicionarFotos} />
           </div>
 
           {/* 6 - Localização */}

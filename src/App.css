@@ -1424,6 +1424,38 @@ input, select, textarea { font-family: inherit; }
 .btn-add-foto:hover { border-color: #1a4b8c; background: #eff6ff; color: #1a4b8c; }
 .btn-foto-emoji { font-size: 1.4rem; }
 
+.fotos-botoes {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+.btn-foto-camera,
+.btn-foto-galeria {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.65rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn-foto-camera:active,
+.btn-foto-galeria:active { transform: scale(0.97); opacity: 0.85; }
+.btn-foto-camera {
+  background: #1a4b8c;
+  color: white;
+}
+.btn-foto-galeria {
+  background: #f0f4f8;
+  color: #1a4b8c;
+  border: 1.5px solid #bfdbfe;
+}
+
 /* GPS */
 .gps-row {
   display: flex; align-items: center; gap: 0.5rem;
