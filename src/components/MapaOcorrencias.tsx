@@ -32,23 +32,47 @@ function salvarNomeDispositivo(nome: string) {
 }
 
 // ── Ícones ──────────────────────────────────────────────────────
-function criarIcone(natureza: string, selecionado = false) {
+function criarIcone(natureza: string, selecionado = false, semGps = false) {
   const emoji = NATUREZA_ICONE[natureza] ?? '📋'
   const cor = NATUREZA_COR[natureza] ?? '#1a4b8c'
   const size = selecionado ? 46 : 38
+  const borda = selecionado
+    ? `3px solid white`
+    : semGps ? `2px dashed rgba(255,255,255,0.75)` : `2px solid white`
+  const etiqueta = semGps
+    ? `<div style="position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);
+        background:rgba(0,0,0,0.65);color:white;font-size:7px;padding:1px 4px;
+        border-radius:3px;white-space:nowrap;font-family:sans-serif;letter-spacing:0.03em;">
+        📍 sem GPS</div>`
+    : ''
   return L.divIcon({
     className: '',
-    html: `<div style="
-      background:${cor};width:${size}px;height:${size}px;
-      border-radius:50% 50% 50% 0;transform:rotate(-45deg);
-      border:${selecionado ? '3px solid white' : '2px solid white'};
-      box-shadow:${selecionado ? '0 0 0 3px ' + cor + ', 0 4px 12px rgba(0,0,0,0.5)' : '0 2px 6px rgba(0,0,0,0.35)'};
-      display:flex;align-items:center;justify-content:center;
-    "><span style="transform:rotate(45deg);font-size:${selecionado ? 22 : 18}px;line-height:1;">${emoji}</span></div>`,
-    iconSize: [size, size],
+    html: `<div style="position:relative;">
+      <div style="
+        background:${cor};width:${size}px;height:${size}px;
+        border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+        border:${borda};
+        box-shadow:${selecionado ? '0 0 0 3px ' + cor + ', 0 4px 12px rgba(0,0,0,0.5)' : '0 2px 6px rgba(0,0,0,0.35)'};
+        display:flex;align-items:center;justify-content:center;
+        opacity:${semGps ? 0.78 : 1};
+      "><span style="transform:rotate(45deg);font-size:${selecionado ? 22 : 18}px;line-height:1;">${emoji}</span></div>
+      ${etiqueta}
+    </div>`,
+    iconSize: [size, size + (semGps ? 20 : 0)],
     iconAnchor: [size / 2, size],
     popupAnchor: [0, -(size + 4)],
   })
+}
+
+// Posição com deslocamento em espiral para ocorrências sem GPS
+function coordsSemGps(id: number): [number, number] {
+  const seed = Math.abs(id ?? 0)
+  const angle = (seed * 137.508) * (Math.PI / 180)
+  const r = 0.0012 + (seed % 20) * 0.00015
+  return [
+    OURO_BRANCO[0] + r * Math.cos(angle),
+    OURO_BRANCO[1] + r * Math.sin(angle),
+  ]
 }
 
 function criarIconeAgente(nome: string, cor = '#1a4b8c') {
@@ -495,50 +519,59 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
           )
         })}
 
-        {/* Ocorrências */}
-        {comGeo.map((o) => (
-          <Marker
-            key={o.id}
-            position={[o.lat!, o.lng!]}
-            icon={criarIcone(o.natureza, selecionada?.id === o.id)}
-            eventHandlers={{
-              click: (e) => { e.originalEvent.stopPropagation(); selecionarOc(o) },
-            }}
-          >
-            <Popup>
-              <div style={{ minWidth: 170, fontFamily: 'inherit' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.92rem', marginBottom: 2 }}>
-                  {NATUREZA_ICONE[o.natureza] ?? '📋'} {o.natureza}
+        {/* Ocorrências — todas, com ou sem GPS */}
+        {ocorrencias.map((o) => {
+          const temGps = !!(o.lat && o.lng)
+          const pos: [number, number] = temGps ? [o.lat!, o.lng!] : coordsSemGps(o.id)
+          return (
+            <Marker
+              key={o.id}
+              position={pos}
+              icon={criarIcone(o.natureza, selecionada?.id === o.id, !temGps)}
+              eventHandlers={{
+                click: (e) => { e.originalEvent.stopPropagation(); selecionarOc(o) },
+              }}
+            >
+              <Popup>
+                <div style={{ minWidth: 170, fontFamily: 'inherit' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.92rem', marginBottom: 2 }}>
+                    {NATUREZA_ICONE[o.natureza] ?? '📋'} {o.natureza}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: 4 }}>
+                    {o.tipo} · {o.nivel_risco.charAt(0).toUpperCase() + o.nivel_risco.slice(1)}
+                  </div>
+                  {o.endereco && <div style={{ fontSize: '0.78rem', marginBottom: 4 }}>📍 {o.endereco}</div>}
+                  {!temGps && (
+                    <div style={{ fontSize: '0.72rem', color: '#b45309', marginBottom: 6 }}>
+                      ⚠️ Sem coordenadas GPS — posição aproximada
+                    </div>
+                  )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onSelecionar(o) }}
+                    style={{
+                      width: '100%', background: '#E05F00', color: 'white',
+                      border: 'none', borderRadius: 6, padding: '6px 0',
+                      fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem',
+                    }}
+                  >
+                    Ver detalhes completos
+                  </button>
                 </div>
-                <div style={{ fontSize: '0.78rem', color: '#6b7280', marginBottom: 4 }}>
-                  {o.tipo} · {o.nivel_risco.charAt(0).toUpperCase() + o.nivel_risco.slice(1)}
-                </div>
-                {o.endereco && <div style={{ fontSize: '0.78rem', marginBottom: 6 }}>📍 {o.endereco}</div>}
-                <button
-                  onClick={(e) => { e.stopPropagation(); onSelecionar(o) }}
-                  style={{
-                    width: '100%', background: '#E05F00', color: 'white',
-                    border: 'none', borderRadius: 6, padding: '6px 0',
-                    fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem',
-                  }}
-                >
-                  Ver detalhes completos
-                </button>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+              </Popup>
+            </Marker>
+          )
+        })}
       </MapContainer>
 
       {/* Top stats bar */}
       <div className="mapa-topbar">
         <div className="mapa-stat">
-          <span className="mapa-stat-num">{comGeo.length}</span>
+          <span className="mapa-stat-num">{ocorrencias.length}</span>
           <span className="mapa-stat-label">no mapa</span>
         </div>
         <div className="mapa-stat-div" />
         <div className="mapa-stat">
-          <span className="mapa-stat-num">{semGeo}</span>
+          <span className="mapa-stat-num" style={{ color: semGeo > 0 ? '#b45309' : undefined }}>{semGeo}</span>
           <span className="mapa-stat-label">sem GPS</span>
         </div>
         <div className="mapa-stat-div" />
