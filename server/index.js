@@ -225,6 +225,7 @@ async function initDb() {
   `)
   await pool.query(`ALTER TABLE checklists_viatura ADD COLUMN IF NOT EXISTS placa VARCHAR(20)`)
   await pool.query(`ALTER TABLE checklists_viatura ADD COLUMN IF NOT EXISTS itens JSONB NOT NULL DEFAULT '{}'::jsonb`)
+  await pool.query(`ALTER TABLE checklists_viatura ADD COLUMN IF NOT EXISTS assinatura_data TEXT`)
 }
 
 app.get('/api/ocorrencias', async (req, res) => {
@@ -355,12 +356,12 @@ app.get('/api/checklists', async (req, res) => {
 })
 
 app.post('/api/checklists', async (req, res) => {
-  const { data_checklist, km, placa, motorista, fotos_avarias, foto_frontal, foto_traseira, foto_direita, foto_esquerda, itens, observacoes } = req.body
+  const { data_checklist, km, placa, motorista, fotos_avarias, foto_frontal, foto_traseira, foto_direita, foto_esquerda, itens, observacoes, assinatura_data } = req.body
   try {
     const result = await pool.query(
-      `INSERT INTO checklists_viatura (data_checklist, km, placa, motorista, fotos_avarias, foto_frontal, foto_traseira, foto_direita, foto_esquerda, itens, observacoes)
-       VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10::jsonb,$11) RETURNING *`,
-      [data_checklist, km || null, placa || null, motorista || null, JSON.stringify(Array.isArray(fotos_avarias) ? fotos_avarias : []), foto_frontal || null, foto_traseira || null, foto_direita || null, foto_esquerda || null, JSON.stringify(itens || {}), observacoes || null]
+      `INSERT INTO checklists_viatura (data_checklist, km, placa, motorista, fotos_avarias, foto_frontal, foto_traseira, foto_direita, foto_esquerda, itens, observacoes, assinatura_data)
+       VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9,$10::jsonb,$11,$12) RETURNING *`,
+      [data_checklist, km || null, placa || null, motorista || null, JSON.stringify(Array.isArray(fotos_avarias) ? fotos_avarias : []), foto_frontal || null, foto_traseira || null, foto_direita || null, foto_esquerda || null, JSON.stringify(itens || {}), observacoes || null, assinatura_data || null]
     )
     res.status(201).json(result.rows[0])
   } catch (err) {

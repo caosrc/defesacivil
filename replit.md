@@ -78,6 +78,7 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 | foto_direita | TEXT | Foto lateral direita |
 | foto_esquerda | TEXT | Foto lateral esquerda |
 | observacoes | TEXT | Texto livre |
+| assinatura_data | TEXT | Assinatura digital em base64 capturada via tela sensível ao toque |
 | created_at | TIMESTAMP | Data/hora automática |
 
 ## Funcionalidades
@@ -90,5 +91,5 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 - Exportação Excel de todas as ocorrências
 - Filtros por nível, status e busca de texto
 - Resumo numérico no topo (Alto, Médio, Baixo, Total)
-- Checklists de viatura com fotos por ângulo e avarias
+- Checklists de viatura com fotos por ângulo, avarias, assinatura digital, histórico, exportação Excel geral e PDF individual via impressão do navegador
 - Suporte offline via Service Worker

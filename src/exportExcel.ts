@@ -15,6 +15,7 @@ export interface ChecklistExportData {
   foto_esquerda: string | null
   itens: Record<string, string> | null
   observacoes: string | null
+  assinatura_data: string | null
   created_at: string
 }
 
@@ -395,7 +396,7 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
     ['motTanquePartida', 'Tanque/Partida', 'sn'],
   ]
 
-  const totalCols = 7 + ITENS_LABELS.length
+  const totalCols = 8 + ITENS_LABELS.length
 
   ws.mergeCells(1, 1, 1, totalCols)
   const titulo = ws.getCell('A1')
@@ -406,10 +407,10 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
   ws.getRow(1).height = 26
 
   const cabecalhos = [
-    'ID', 'Data', 'Motorista', 'Placa', 'KM', 'Avarias', 'Observações',
+    'ID', 'Data', 'Motorista', 'Placa', 'KM', 'Avarias', 'Assinado', 'Observações',
     ...ITENS_LABELS.map(([, label]) => label),
   ]
-  const larguras = [5, 12, 14, 10, 10, 8, 28, ...Array(ITENS_LABELS.length).fill(14)]
+  const larguras = [5, 12, 14, 10, 10, 8, 10, 28, ...Array(ITENS_LABELS.length).fill(14)]
   ws.columns = larguras.map(w => ({ width: w }))
 
   const headerRow = ws.getRow(2)
@@ -417,7 +418,7 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
     const cell = headerRow.getCell(i + 1)
     cell.value = h
     cell.font = { bold: true, size: 9, color: { argb: BRANCO } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: i < 7 ? AZUL : LARANJA } }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: i < 8 ? AZUL : LARANJA } }
     cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
     cell.border = { bottom: { style: 'thin', color: { argb: BRANCO } } }
   })
@@ -439,6 +440,7 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
       c.placa || '—',
       c.km || '—',
       c.fotos_avarias?.length ?? 0,
+      c.assinatura_data ? 'Sim' : 'Não',
       c.observacoes || '—',
       ...ITENS_LABELS.map(([campo, , tipo]) => {
         const v = it[campo] || ''
@@ -454,8 +456,8 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
       if (colNum <= 2) cell.alignment = { ...cell.alignment, horizontal: 'left' }
       if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'f0f4ff' } }
 
-      if (colNum > 7) {
-        const itenIdx = colNum - 8
+      if (colNum > 8) {
+        const itenIdx = colNum - 9
         const [campo, , tipo] = ITENS_LABELS[itenIdx]
         const raw = it[campo] || ''
         if (tipo === 'bmr') {

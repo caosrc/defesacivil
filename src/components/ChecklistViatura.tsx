@@ -45,6 +45,55 @@ type Modo = 'lista' | 'form' | 'detalhe'
 const OPT_BMR = ['bom', 'medio', 'ruim']
 const OPT_SN = ['sim', 'nao', 'na']
 
+const ITENS_PDF: [keyof Itens, string, 'bmr' | 'sn'][] = [
+  ['limpezaExterna', 'Limpeza Externa', 'bmr'],
+  ['limpezaInterna', 'Limpeza Interna', 'bmr'],
+  ['pneus', 'Pneus', 'bmr'],
+  ['estepe', 'Estepe', 'bmr'],
+  ['ltzPlaca', 'Luz Placa (Tras.)', 'sn'],
+  ['ltzDirLuz', 'Luz Tras. Dir.', 'sn'],
+  ['ltzDirLuzRe', 'Luz Ré Dir.', 'sn'],
+  ['ltzDirFreio', 'Freio Dir.', 'sn'],
+  ['ltzDirSeta', 'Seta Tras. Dir.', 'sn'],
+  ['ltzEsqLuz', 'Luz Tras. Esq.', 'sn'],
+  ['ltzEsqLuzRe', 'Luz Ré Esq.', 'sn'],
+  ['ltzEsqFreio', 'Freio Esq.', 'sn'],
+  ['ltzEsqSeta', 'Seta Tras. Esq.', 'sn'],
+  ['ldzPlaca', 'Luz Placa (Diant.)', 'sn'],
+  ['ldzDirFarolAlto', 'Farol Alto Dir.', 'sn'],
+  ['ldzDirFarolBaixo', 'Farol Baixo Dir.', 'sn'],
+  ['ldzDirNeblina', 'Neblina Dir.', 'sn'],
+  ['ldzEsqFarolAlto', 'Farol Alto Esq.', 'sn'],
+  ['ldzEsqFarolBaixo', 'Farol Baixo Esq.', 'sn'],
+  ['ldzEsqSeta', 'Seta Diant. Esq.', 'sn'],
+  ['ldzEsqNeblina', 'Neblina Esq.', 'sn'],
+  ['segAlarme', 'Alarme', 'sn'],
+  ['segBuzina', 'Buzina', 'sn'],
+  ['segChaveRoda', 'Chave de Roda', 'sn'],
+  ['segCintos', 'Cintos', 'sn'],
+  ['segDocumentos', 'Documentos', 'sn'],
+  ['segExtintor', 'Extintor', 'sn'],
+  ['segLimpadores', 'Limpadores', 'sn'],
+  ['segMacaco', 'Macaco', 'sn'],
+  ['segPainel', 'Painel', 'sn'],
+  ['segRetrovisorInterno', 'Retrovisor Int.', 'sn'],
+  ['segRetrovisorDireito', 'Retrovisor Dir.', 'sn'],
+  ['segRetrovisorEsquerdo', 'Retrovisor Esq.', 'sn'],
+  ['segTravas', 'Travas', 'sn'],
+  ['segTriangulo', 'Triângulo', 'sn'],
+  ['motAcelerador', 'Acelerador', 'sn'],
+  ['motAguaLimpador', 'Água Limpador', 'sn'],
+  ['motAguaRadiador', 'Água Radiador', 'sn'],
+  ['motEmbreagem', 'Embreagem', 'sn'],
+  ['motFreio', 'Freio', 'sn'],
+  ['motFreioMao', 'Freio de Mão', 'sn'],
+  ['motOleoFreio', 'Óleo Freio', 'sn'],
+  ['motOleoMoto', 'Óleo Motor', 'sn'],
+  ['motTanquePartida', 'Tanque/Partida', 'sn'],
+]
+
+const LABELS_VALOR: Record<string, string> = { bom: 'Bom', medio: 'Médio', ruim: 'Ruim', sim: 'Sim', nao: 'Não', na: 'N/A' }
+
 function CarFront() {
   return (
     <svg viewBox="0 0 120 75" fill="none" xmlns="http://www.w3.org/2000/svg" width="72" height="45">
@@ -216,9 +265,12 @@ export default function ChecklistViatura() {
   const [fotoEsquerda, setFotoEsquerda] = useState<string | null>(null)
   const [itens, setItens] = useState<Itens>(itensIniciais())
   const [observacoes, setObservacoes] = useState('')
+  const [assinaturaData, setAssinaturaData] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const avariaRef = useRef<HTMLInputElement>(null)
+  const assinaturaRef = useRef<HTMLCanvasElement>(null)
+  const assinandoRef = useRef(false)
 
   function setItem(k: keyof Itens, v: string) {
     setItens(prev => ({ ...prev, [k]: v }))
@@ -236,11 +288,126 @@ export default function ChecklistViatura() {
 
   useEffect(() => { carregar() }, [])
 
+  useEffect(() => {
+    if (modo !== 'form') return
+    setTimeout(() => ajustarCanvasAssinatura(), 50)
+  }, [modo])
+
   function resetForm() {
     setData(hoje); setKm(''); setPlaca(''); setMotorista('')
     setFotosAvarias([]); setFotoFrontal(null); setFotoTraseira(null)
     setFotoDireita(null); setFotoEsquerda(null)
-    setItens(itensIniciais()); setObservacoes(''); setErro('')
+    setItens(itensIniciais()); setObservacoes(''); setAssinaturaData(''); setErro('')
+    const canvas = assinaturaRef.current
+    if (canvas) canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+  }
+
+  function ajustarCanvasAssinatura() {
+    const canvas = assinaturaRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const ratio = window.devicePixelRatio || 1
+    const width = Math.max(1, Math.floor(rect.width * ratio))
+    const height = Math.max(1, Math.floor(rect.height * ratio))
+    if (canvas.width === width && canvas.height === height) return
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    ctx.scale(ratio, ratio)
+    ctx.lineWidth = 2.4
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.strokeStyle = '#111827'
+  }
+
+  function pontoAssinatura(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) {
+    const canvas = assinaturaRef.current!
+    const rect = canvas.getBoundingClientRect()
+    const toque = 'touches' in e ? e.touches[0] || e.changedTouches[0] : null
+    const x = (toque ? toque.clientX : e.clientX) - rect.left
+    const y = (toque ? toque.clientY : e.clientY) - rect.top
+    return { x, y }
+  }
+
+  function iniciarAssinatura(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) {
+    e.preventDefault()
+    ajustarCanvasAssinatura()
+    const canvas = assinaturaRef.current
+    const ctx = canvas?.getContext('2d')
+    if (!canvas || !ctx) return
+    const p = pontoAssinatura(e)
+    assinandoRef.current = true
+    ctx.beginPath()
+    ctx.moveTo(p.x, p.y)
+  }
+
+  function moverAssinatura(e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) {
+    if (!assinandoRef.current) return
+    e.preventDefault()
+    const ctx = assinaturaRef.current?.getContext('2d')
+    if (!ctx) return
+    const p = pontoAssinatura(e)
+    ctx.lineTo(p.x, p.y)
+    ctx.stroke()
+    setAssinaturaData(assinaturaRef.current?.toDataURL('image/png') || '')
+  }
+
+  function finalizarAssinatura() {
+    if (!assinandoRef.current) return
+    assinandoRef.current = false
+    setAssinaturaData(assinaturaRef.current?.toDataURL('image/png') || '')
+  }
+
+  function limparAssinatura() {
+    const canvas = assinaturaRef.current
+    if (!canvas) return
+    canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+    setAssinaturaData('')
+  }
+
+  function htmlEscape(v: unknown) {
+    return String(v ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[ch] || ch))
+  }
+
+  function exportarChecklistPdf(c: ChecklistData) {
+    const it = (c.itens || {}) as Record<string, string>
+    const [y, m, d] = c.data_checklist.split('-')
+    const linhas = ITENS_PDF.map(([campo, label]) => {
+      const valor = LABELS_VALOR[it[campo]] || '—'
+      return `<tr><td>${htmlEscape(label)}</td><td>${htmlEscape(valor)}</td></tr>`
+    }).join('')
+    const fotos = [
+      ['Esquerda', c.foto_esquerda],
+      ['Frontal', c.foto_frontal],
+      ['Traseira', c.foto_traseira],
+      ['Direita', c.foto_direita],
+    ].filter(([, foto]) => foto).map(([label, foto]) => `<div><img src="${foto}" /><span>${htmlEscape(label)}</span></div>`).join('')
+    const avarias = (c.fotos_avarias || []).map((foto, i) => `<div><img src="${foto}" /><span>Avaria ${i + 1}</span></div>`).join('')
+    const win = window.open('', '_blank')
+    if (!win) {
+      alert('Permita pop-ups para gerar o PDF do checklist.')
+      return
+    }
+    win.document.write(`<!doctype html><html><head><title>Checklist ${c.id}</title><style>
+      body{font-family:Arial,sans-serif;color:#111827;margin:24px}h1{background:#1a4b8c;color:white;padding:12px;font-size:18px;text-align:center}h2{color:#1a4b8c;border-bottom:2px solid #1a4b8c;font-size:14px;margin-top:18px}.info{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.box{border:1px solid #d1d5db;padding:8px;border-radius:6px}.label{font-size:11px;color:#6b7280;text-transform:uppercase}.valor{font-weight:bold;margin-top:3px}table{width:100%;border-collapse:collapse;margin-top:8px}td,th{border:1px solid #d1d5db;padding:6px;font-size:12px}th{background:#eff6ff}.fotos{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.fotos div{border:1px solid #d1d5db;padding:6px;text-align:center}.fotos img{max-width:100%;max-height:180px;object-fit:contain}.assinatura{border:1px solid #111827;height:120px;display:flex;align-items:center;justify-content:center}.assinatura img{max-height:110px;max-width:100%}.obs{white-space:pre-wrap;border:1px solid #d1d5db;padding:8px;min-height:50px}@media print{button{display:none}body{margin:10mm}}
+    </style></head><body>
+      <button onclick="window.print()" style="position:fixed;right:16px;top:16px;padding:10px 14px;background:#166534;color:white;border:0;border-radius:8px;font-weight:bold">Salvar em PDF</button>
+      <h1>DEFESA CIVIL OURO BRANCO — CHECKLIST DA VIATURA #${htmlEscape(c.id)}</h1>
+      <div class="info">
+        <div class="box"><div class="label">Data</div><div class="valor">${htmlEscape(`${d}/${m}/${y}`)}</div></div>
+        <div class="box"><div class="label">Motorista</div><div class="valor">${htmlEscape(c.motorista || '—')}</div></div>
+        <div class="box"><div class="label">Placa</div><div class="valor">${htmlEscape(c.placa || '—')}</div></div>
+        <div class="box"><div class="label">KM</div><div class="valor">${htmlEscape(c.km || '—')}</div></div>
+      </div>
+      <h2>Itens verificados</h2><table><thead><tr><th>Item</th><th>Resposta</th></tr></thead><tbody>${linhas}</tbody></table>
+      <h2>Fotos do veículo</h2><div class="fotos">${fotos || '<p>Sem fotos do veículo.</p>'}</div>
+      <h2>Fotos de avaria</h2><div class="fotos">${avarias || '<p>Sem fotos de avaria.</p>'}</div>
+      <h2>Observações</h2><div class="obs">${htmlEscape(c.observacoes || '—')}</div>
+      <h2>Assinatura</h2><div class="assinatura">${c.assinatura_data ? `<img src="${c.assinatura_data}" />` : 'Sem assinatura'}</div>
+    </body></html>`)
+    win.document.close()
+    win.focus()
   }
 
   function adicionarAvaria(e: React.ChangeEvent<HTMLInputElement>) {
@@ -272,7 +439,7 @@ export default function ChecklistViatura() {
           fotos_avarias: fotosAvarias,
           foto_frontal: fotoFrontal, foto_traseira: fotoTraseira,
           foto_direita: fotoDireita, foto_esquerda: fotoEsquerda,
-          itens, observacoes: observacoes || null,
+          itens, observacoes: observacoes || null, assinatura_data: assinaturaData || null,
         }),
       })
       await carregar(); resetForm(); setModo('lista')
@@ -468,6 +635,25 @@ export default function ChecklistViatura() {
                 value={observacoes} onChange={e => setObservacoes(e.target.value)} />
             </div>
 
+            <div className="campo ck-assinatura-campo">
+              <label className="campo-label">✍️ Assinatura do responsável</label>
+              <div className="ck-assinatura-box">
+                <canvas
+                  ref={assinaturaRef}
+                  className="ck-assinatura-canvas"
+                  onMouseDown={iniciarAssinatura}
+                  onMouseMove={moverAssinatura}
+                  onMouseUp={finalizarAssinatura}
+                  onMouseLeave={finalizarAssinatura}
+                  onTouchStart={iniciarAssinatura}
+                  onTouchMove={moverAssinatura}
+                  onTouchEnd={finalizarAssinatura}
+                />
+                {!assinaturaData && <span className="ck-assinatura-placeholder">Assine aqui com o dedo</span>}
+              </div>
+              <button type="button" className="ck-assinatura-limpar" onClick={limparAssinatura}>Limpar assinatura</button>
+            </div>
+
             {erro && <div className="erro-msg">⚠️ {erro}</div>}
           </div>
         </div>
@@ -639,6 +825,17 @@ export default function ChecklistViatura() {
                 <div className="cl-obs-text">{c.observacoes}</div>
               </div>
             )}
+
+            <div className="campo" style={{ marginTop: '0.75rem' }}>
+              <label className="campo-label">✍️ Assinatura</label>
+              <div className="ck-assinatura-detalhe">
+                {c.assinatura_data ? <img src={c.assinatura_data} alt="Assinatura" /> : <span>Sem assinatura registrada</span>}
+              </div>
+            </div>
+
+            <button className="btn-relatorio" onClick={() => exportarChecklistPdf(c)}>
+              📄 Exportar este checklist em PDF
+            </button>
           </div>
         </div>
       </div>
@@ -648,7 +845,10 @@ export default function ChecklistViatura() {
   return (
     <div className="conteudo-viatura">
       <div className="cl-lista-header">
-        <h2 className="cl-titulo">Checklists da Viatura</h2>
+        <div>
+          <h2 className="cl-titulo">Checklists da Viatura</h2>
+          <div className="cl-subtitulo">Histórico de checklists realizados</div>
+        </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {checklists.length > 0 && (
             <button className="btn-excel-global" onClick={() => exportarChecklistExcel(checklists)}>
