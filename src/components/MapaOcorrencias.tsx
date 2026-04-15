@@ -51,21 +51,6 @@ function criarIcone(natureza: string, selecionado = false) {
   })
 }
 
-function criarIconeViatura(cor = '#1a4b8c', emoji = '🚒') {
-  return L.divIcon({
-    className: '',
-    html: `<div style="
-      width:36px;height:36px;border-radius:50%;
-      background:${cor};border:3px solid white;
-      box-shadow:0 0 0 3px ${cor}55, 0 4px 14px rgba(0,0,0,0.4);
-      display:flex;align-items:center;justify-content:center;font-size:18px;
-    ">${emoji}</div>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
-    popupAnchor: [0, -22],
-  })
-}
-
 function criarIconeAgente(nome: string, cor = '#1a4b8c') {
   const nomeCurto = nome.length > 12 ? nome.slice(0, 12) + '…' : nome
   return L.divIcon({
@@ -98,13 +83,9 @@ function criarIconeAgente(nome: string, cor = '#1a4b8c') {
 
 // Cores para outros dispositivos (índice circular)
 const CORES_EQUIPES = ['#dc2626', '#d97706', '#7c3aed', '#0891b2', '#059669', '#db2777']
-const EMOJIS_EQUIPES = ['🚑', '🚓', '🚛', '🛻', '🏍️', '🚐']
 
 function corParaDispositivo(_id: string, idx: number) {
   return CORES_EQUIPES[idx % CORES_EQUIPES.length]
-}
-function emojiParaDispositivo(idx: number) {
-  return EMOJIS_EQUIPES[idx % EMOJIS_EQUIPES.length]
 }
 
 // ── Componentes auxiliares ──────────────────────────────────────
@@ -489,20 +470,19 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         {/* Marcadores dos outros dispositivos */}
         {dispositivosArray.map((d) => {
           const cor = corParaDispositivo(d.id, d.indice)
-          const emoji = emojiParaDispositivo(d.indice)
           const velKmh = d.velocidade != null ? Math.round(d.velocidade * 3.6) : null
           const segsAtras = Math.round((Date.now() - d.ultimaVez) / 1000)
           return (
             <Marker
               key={d.id}
               position={[d.lat, d.lng]}
-              icon={criarIconeViatura(cor, emoji)}
+              icon={criarIconeAgente(d.nome, cor)}
               zIndexOffset={900}
             >
               <Popup>
                 <div style={{ minWidth: 155, fontFamily: 'inherit' }}>
                   <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 2, color: cor }}>
-                    {emoji} {d.nome}
+                    🧑 {d.nome}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
                     Precisão: ±{Math.round(d.precisao)} m
@@ -667,12 +647,11 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
             )}
             {dispositivosArray.map((d) => {
               const cor = corParaDispositivo(d.id, d.indice)
-              const emoji = emojiParaDispositivo(d.indice)
               const segsAtras = Math.round((Date.now() - d.ultimaVez) / 1000)
               const velKmh = d.velocidade != null ? Math.round(d.velocidade * 3.6) : null
               return (
                 <div key={d.id} className="mapa-equipe-item">
-                  <span className="mapa-equipe-icone" style={{ background: cor }}>{emoji}</span>
+                  <span className="mapa-equipe-icone" style={{ background: cor }}>🧑</span>
                   <div className="mapa-equipe-info">
                     <span className="mapa-equipe-nome">{d.nome}</span>
                     <span className="mapa-equipe-status" style={{ color: '#6b7280' }}>
