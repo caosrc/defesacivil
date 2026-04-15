@@ -62,6 +62,57 @@ function EscalaEmDesenvolvimento() {
 
 const LazyFallback = () => <div className="carregando">⏳ Carregando...</div>
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt(): Promise<void>
+  readonly userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
+}
+
+function BannerInstalar() {
+  const [promptEvento, setPromptEvento] = useState<BeforeInstallPromptEvent | null>(null)
+  const [descartado, setDescartado] = useState(() => localStorage.getItem('pwa-instalar-descartado') === '1')
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault()
+      setPromptEvento(e as BeforeInstallPromptEvent)
+    }
+    window.addEventListener('beforeinstallprompt', handler)
+    return () => window.removeEventListener('beforeinstallprompt', handler)
+  }, [])
+
+  if (!promptEvento || descartado) return null
+
+  async function instalar() {
+    if (!promptEvento) return
+    await promptEvento.prompt()
+    const { outcome } = await promptEvento.userChoice
+    if (outcome === 'accepted' || outcome === 'dismissed') {
+      setDescartado(true)
+      localStorage.setItem('pwa-instalar-descartado', '1')
+    }
+    setPromptEvento(null)
+  }
+
+  function descartar() {
+    setDescartado(true)
+    localStorage.setItem('pwa-instalar-descartado', '1')
+  }
+
+  return (
+    <div className="pwa-banner">
+      <div className="pwa-banner-icone">
+        <img src="/icon-192.png" alt="" />
+      </div>
+      <div className="pwa-banner-texto">
+        <strong>Instale o app</strong>
+        <span>Acesse a Defesa Civil direto da tela inicial do celular</span>
+      </div>
+      <button className="pwa-banner-btn" onClick={instalar}>Instalar</button>
+      <button className="pwa-banner-fechar" onClick={descartar}>✕</button>
+    </div>
+  )
+}
+
 export default function App() {
   const [logado, setLogado] = useState(estaLogado() && agenteEscolhido())
   const [aba, setAba] = useState<Aba>('lista')
@@ -257,6 +308,8 @@ export default function App() {
 
   return (
     <div className="app">
+      <BannerInstalar />
+
       {!isOnline && (
         <div className="offline-banner">
           📵 Sem conexão — dados salvos localmente

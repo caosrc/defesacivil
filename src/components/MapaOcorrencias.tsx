@@ -174,8 +174,11 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const proxIndiceRef = useRef(0)
   const indicesRef = useRef<Map<string, number>>(new Map())
 
-  // Nome e ID do dispositivo local
-  const [nomeLocal, setNomeLocal] = useState(getNomeDispositivo())
+  // Nome e ID do dispositivo local — usa o agente escolhido no login da sessão
+  const [nomeLocal, setNomeLocal] = useState(() => {
+    return sessionStorage.getItem('defesacivil-agente-sessao') || getNomeDispositivo()
+  })
+  const nomeLocalRef = useRef(nomeLocal)
   const [editandoNome, setEditandoNome] = useState(false)
   const [nomeEditando, setNomeEditando] = useState('')
   const dispositivoId = useRef(getDispositivoId())
@@ -185,6 +188,9 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const [progressoMapa, setProgressoMapa] = useState<ProgressoMapa | null>(null)
   const [tilesCacheados, setTilesCacheados] = useState<number>(0)
   const [painelOfflineAberto, setPainelOfflineAberto] = useState(false)
+
+  // Mantém ref sempre atualizada com o nome atual
+  useEffect(() => { nomeLocalRef.current = nomeLocal }, [nomeLocal])
 
   const comGeo = useMemo(() => ocorrencias.filter((o) => o.lat && o.lng), [ocorrencias])
   const semGeo = ocorrencias.length - comGeo.length
@@ -285,7 +291,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
       wsRef.current.send(JSON.stringify({
         tipo: 'posicao',
         id: dispositivoId.current,
-        nome: getNomeDispositivo(),
+        nome: nomeLocalRef.current,
         lat, lng,
         precisao: prec,
         velocidade: vel,
@@ -601,7 +607,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         title="Baixar mapa para uso offline"
       >
         <span>{statusOffline === 'baixando' ? '⏳' : statusOffline === 'concluido' ? '✅' : '📥'}</span>
-        <span>{statusOffline === 'baixando' ? `${porcentagem}%` : statusOffline === 'concluido' ? 'Offline OK' : 'Offline'}</span>
+        <span>{statusOffline === 'baixando' ? `${porcentagem}%` : statusOffline === 'concluido' ? 'Salvo offline' : 'Salvar offline'}</span>
       </button>
 
       {/* Painel equipes online */}
