@@ -7,6 +7,7 @@ body {
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
 }
 button { cursor: pointer; font-family: inherit; }
 input, select, textarea { font-family: inherit; }
@@ -1223,6 +1224,7 @@ input, select, textarea { font-family: inherit; }
   display: flex;
   flex-direction: column;
   background: #f0f4f8;
+  overflow-x: hidden;
 }
 
 .header-logo-mini {
@@ -1259,6 +1261,7 @@ input, select, textarea { font-family: inherit; }
 .form-scroll {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 1rem;
   padding-bottom: 5.5rem;
 }
@@ -2041,6 +2044,10 @@ input, select, textarea { font-family: inherit; }
 .ck-2col {
   display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
 }
+@media (max-width: 640px) {
+  .ck-2col { grid-template-columns: 1fr; }
+  .ck-fotos-4col { grid-template-columns: repeat(2, 1fr); }
+}
 @media (max-width: 480px) {
   body {
     background: #f0f4f8;
@@ -2066,9 +2073,6 @@ input, select, textarea { font-family: inherit; }
   .pwa-banner {
     border-radius: 0 0 18px 18px;
   }
-
-  .ck-2col { grid-template-columns: 1fr; }
-  .ck-fotos-4col { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* Detail view */
