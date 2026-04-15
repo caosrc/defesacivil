@@ -1,4 +1,3 @@
-import ExcelJS from 'exceljs'
 import type { Ocorrencia } from './types'
 import { parseDateLocal } from './utils'
 
@@ -38,6 +37,7 @@ function statusLabel(s: string) {
 
 // ── Export single occurrence with photos ──────────────────────────────────────
 export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
+  const { default: ExcelJS } = await import('exceljs')
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Defesa Civil Ouro Branco'
   wb.created = new Date()
@@ -211,6 +211,7 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
 
 // ── Export all occurrences (tabular) with embedded photo thumbnails ───────────
 export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<void> {
+  const { default: ExcelJS } = await import('exceljs')
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Defesa Civil Ouro Branco'
   wb.created = new Date()
@@ -338,6 +339,7 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
 
 // ── Export checklists da viatura ──────────────────────────────────────────────
 export async function exportarChecklistExcel(checklists: ChecklistExportData[]): Promise<void> {
+  const { default: ExcelJS } = await import('exceljs')
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Defesa Civil Ouro Branco'
   wb.created = new Date()

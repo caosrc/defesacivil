@@ -1,23 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
+import { AGENTES } from '../types'
 
 const LOGIN_KEY = 'defesacivil-logado'
 const AGENTE_SESSION_KEY = 'defesacivil-agente-sessao'
 const AGENTE_NOME_KEY = 'defesacivil-device-nome'
 const USUARIO_CORRETO = 'defesacivilob@gmail.com'
 const SENHA_CORRETA = 'dc-2026'
-
-const AGENTES = [
-  'Moisés',
-  'Valteir',
-  'Arthur',
-  'Gustavo',
-  'Vânia',
-  'Graça',
-  'Talita',
-  'Cristiane',
-  'Dyonathan',
-  'Sócrates',
-]
 
 export function estaLogado(): boolean {
   return localStorage.getItem(LOGIN_KEY) === '1'

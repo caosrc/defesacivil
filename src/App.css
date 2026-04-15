@@ -627,23 +627,6 @@ input, select, textarea { font-family: inherit; }
 }
 .mapa-painel-btn:hover { background: #c45500; }
 
-/* Empty state */
-.mapa-sem-geo {
-  position: absolute;
-  bottom: 75px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0,0,0,0.7);
-  color: white;
-  padding: 0.6rem 1.1rem;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  pointer-events: none;
-  z-index: 500;
-  white-space: nowrap;
-  max-width: 90%;
-  text-align: center;
-}
 
 /* ── GPS tracking controls ────────────────────────────────────── */
 .mapa-gps-btn {

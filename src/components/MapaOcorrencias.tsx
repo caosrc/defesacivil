@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -186,7 +186,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const [tilesCacheados, setTilesCacheados] = useState<number>(0)
   const [painelOfflineAberto, setPainelOfflineAberto] = useState(false)
 
-  const comGeo = ocorrencias.filter((o) => o.lat && o.lng)
+  const comGeo = useMemo(() => ocorrencias.filter((o) => o.lat && o.lng), [ocorrencias])
   const semGeo = ocorrencias.length - comGeo.length
 
   useEffect(() => {
@@ -404,12 +404,17 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     setSelecionada((prev) => (prev?.id === o.id ? null : o))
   }
 
-  const naturezasUnicas = [...new Set(comGeo.map((o) => o.natureza))]
-  const velocidadeKmh = velocidade != null ? Math.round(velocidade * 3.6) : null
-  const porcentagem = progressoMapa && progressoMapa.total > 0
-    ? Math.round((progressoMapa.concluido / progressoMapa.total) * 100) : 0
-
-  const dispositivosArray = Array.from(dispositivos.values())
+  const naturezasUnicas = useMemo(() => [...new Set(comGeo.map((o) => o.natureza))], [comGeo])
+  const velocidadeKmh = useMemo(
+    () => velocidade != null ? Math.round(velocidade * 3.6) : null,
+    [velocidade]
+  )
+  const porcentagem = useMemo(
+    () => progressoMapa && progressoMapa.total > 0
+      ? Math.round((progressoMapa.concluido / progressoMapa.total) * 100) : 0,
+    [progressoMapa]
+  )
+  const dispositivosArray = useMemo(() => Array.from(dispositivos.values()), [dispositivos])
   const totalOnline = dispositivosArray.length + (statusGps === 'ativo' ? 1 : 0)
 
   // ── Render ────────────────────────────────────────────────────

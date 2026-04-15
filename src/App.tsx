@@ -1,16 +1,15 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
 import './App.css'
-import MapaOcorrencias from './components/MapaOcorrencias'
-import NovaOcorrencia from './components/NovaOcorrencia'
-import DetalheOcorrencia from './components/DetalheOcorrencia'
-import ChecklistViatura from './components/ChecklistViatura'
 import Login, { estaLogado, agenteEscolhido } from './components/Login'
-import JSZip from 'jszip'
 import type { Ocorrencia, NivelRisco } from './types'
 import { NATUREZA_ICONE } from './types'
 import { listarOcorrencias, criarOcorrencia } from './api'
 import { cacheOcorrencias, getCachedOcorrencias, getPending, removePending, countPending } from './offline'
-import { exportarTodasExcel } from './exportExcel'
+
+const MapaOcorrencias = lazy(() => import('./components/MapaOcorrencias'))
+const NovaOcorrencia = lazy(() => import('./components/NovaOcorrencia'))
+const DetalheOcorrencia = lazy(() => import('./components/DetalheOcorrencia'))
+const ChecklistViatura = lazy(() => import('./components/ChecklistViatura'))
 
 type Aba = 'lista' | 'mapa' | 'nova' | 'viatura' | 'escala'
 
@@ -61,6 +60,8 @@ function EscalaEmDesenvolvimento() {
   )
 }
 
+const LazyFallback = () => <div className="carregando">⏳ Carregando...</div>
+
 export default function App() {
   const [logado, setLogado] = useState(estaLogado() && agenteEscolhido())
   const [aba, setAba] = useState<Aba>('lista')
@@ -99,7 +100,6 @@ export default function App() {
     } else {
       serverData = await getCachedOcorrencias()
     }
-    // Merge pending offline items at the top of the list
     const pending = await getPending()
     const offlineItems: Ocorrencia[] = pending.map((p, i) => ({
       id: -(i + 1),
@@ -113,7 +113,9 @@ export default function App() {
       lng: p.lng ?? null,
       endereco: p.endereco ?? null,
       proprietario: p.proprietario ?? null,
-      observacoes: p.observacoes ?? null,
+      situacao: p.situacao ?? null,
+      recomendacao: p.recomendacao ?? null,
+      conclusao: p.conclusao ?? null,
       data_ocorrencia: p.data_ocorrencia ?? null,
       agentes: Array.isArray(p.agentes) ? p.agentes : [],
       created_at: p._savedAt ?? new Date().toISOString(),
@@ -155,10 +157,7 @@ export default function App() {
   }, [carregar])
 
   useEffect(() => {
-    const goOnline = () => {
-      setIsOnline(true)
-      setTimeout(sincronizar, 800)
-    }
+    const goOnline = () => { setIsOnline(true); setTimeout(sincronizar, 800) }
     const goOffline = () => setIsOnline(false)
     window.addEventListener('online', goOnline)
     window.addEventListener('offline', goOffline)
@@ -181,7 +180,6 @@ export default function App() {
         <b>Status:</b> ${o.status_oc}<br/>
         ${o.endereco ? `<b>Endereço:</b> ${o.endereco}<br/>` : ''}
         ${o.proprietario ? `<b>Proprietário:</b> ${o.proprietario}<br/>` : ''}
-        ${o.observacoes ? `<b>Obs:</b> ${o.observacoes}<br/>` : ''}
         <b>Data:</b> ${new Date(o.created_at).toLocaleString('pt-BR')}
       ]]></description>
       <Point><coordinates>${o.lng},${o.lat},0</coordinates></Point>
@@ -193,6 +191,7 @@ export default function App() {
     ${placemarks}
   </Document>
 </kml>`
+    const { default: JSZip } = await import('jszip')
     const zip = new JSZip()
     zip.file('ocorrencias.kml', kml)
     const blob = await zip.generateAsync({ type: 'blob' })
@@ -204,13 +203,18 @@ export default function App() {
     URL.revokeObjectURL(url)
   }
 
+  async function exportarExcel() {
+    const { exportarTodasExcel } = await import('./exportExcel')
+    await exportarTodasExcel(ocorrenciasFiltradas)
+  }
+
   const datasDisponiveis = useMemo(() => {
     const set = new Set(ocorrencias.map((o) => dataLocal(o.created_at)))
     set.add(hojeStr())
     return Array.from(set).sort((a, b) => b.localeCompare(a))
   }, [ocorrencias])
 
-  const ocorrenciasFiltradas = ocorrencias.filter((o) => {
+  const ocorrenciasFiltradas = useMemo(() => ocorrencias.filter((o) => {
     if (dataLocal(o.created_at) !== filtroData) return false
     if (filtroNivel !== 'todos' && o.nivel_risco !== filtroNivel) return false
     if (filtroStatus !== 'todos' && o.status_oc !== filtroStatus) return false
@@ -220,14 +224,14 @@ export default function App() {
         (o.endereco ?? '').toLowerCase().includes(b) || (o.proprietario ?? '').toLowerCase().includes(b)
     }
     return true
-  })
+  }), [ocorrencias, filtroData, filtroNivel, filtroStatus, buscando])
 
-  const contagens = {
+  const contagens = useMemo(() => ({
     alto: ocorrencias.filter((o) => o.nivel_risco === 'alto').length,
     medio: ocorrencias.filter((o) => o.nivel_risco === 'medio').length,
     baixo: ocorrencias.filter((o) => o.nivel_risco === 'baixo').length,
     ativos: ocorrencias.filter((o) => o.status_oc === 'ativo').length,
-  }
+  }), [ocorrencias])
 
   if (!logado) {
     return <Login onLogin={() => setLogado(true)} apenasAgente={estaLogado() && !agenteEscolhido()} />
@@ -235,30 +239,30 @@ export default function App() {
 
   if (aba === 'nova') {
     return (
-      <NovaOcorrencia
-        onSalvo={async (ocOffline) => {
-          if (ocOffline) showToast('📥 Salvo offline. Será enviado quando houver conexão.')
-          else showToast('✅ Ocorrência salva com sucesso!')
-          await carregar()
-          await atualizarPendingCount()
-          setAba('lista')
-        }}
-        onVoltar={() => setAba('lista')}
-        isOnline={isOnline}
-      />
+      <Suspense fallback={<LazyFallback />}>
+        <NovaOcorrencia
+          onSalvo={async (ocOffline) => {
+            if (ocOffline) showToast('📥 Salvo offline. Será enviado quando houver conexão.')
+            else showToast('✅ Ocorrência salva com sucesso!')
+            await carregar()
+            await atualizarPendingCount()
+            setAba('lista')
+          }}
+          onVoltar={() => setAba('lista')}
+          isOnline={isOnline}
+        />
+      </Suspense>
     )
   }
 
   return (
     <div className="app">
-      {/* Offline banner */}
       {!isOnline && (
         <div className="offline-banner">
           📵 Sem conexão — dados salvos localmente
         </div>
       )}
 
-      {/* Sync banner */}
       {isOnline && pendingCount > 0 && (
         <div className="sync-banner" onClick={sincronizar}>
           {sincronizando
@@ -267,10 +271,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Toast */}
       {toastMsg && <div className="toast">{toastMsg}</div>}
 
-      {/* Header */}
       <header className="header">
         <div className="header-logo">
           <img src="/logo-dc.png" alt="Defesa Civil" className="logo-img" />
@@ -287,7 +289,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Resumo */}
       {aba === 'lista' && (
         <div className="resumo-strip">
           <div className="resumo-item resumo-alto" onClick={() => setFiltroNivel(filtroNivel === 'alto' ? 'todos' : 'alto')}>
@@ -312,7 +313,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Conteúdo */}
       <div className="conteudo">
         {aba === 'lista' && (
           <>
@@ -358,7 +358,7 @@ export default function App() {
                 ))}
               </div>
               <div className="filtros-row" style={{ justifyContent: 'flex-end', gap: '0.5rem' }}>
-                <button className="btn-excel-global" onClick={() => exportarTodasExcel(ocorrenciasFiltradas)}>
+                <button className="btn-excel-global" onClick={exportarExcel}>
                   📊 Excel
                 </button>
                 <button className="btn-kmz-global" onClick={exportarTudoKMZ}>
@@ -414,18 +414,23 @@ export default function App() {
         )}
 
         {aba === 'mapa' && (
-          <MapaOcorrencias
-            ocorrencias={ocorrencias}
-            onSelecionar={(o) => setSelecionada(o)}
-          />
+          <Suspense fallback={<LazyFallback />}>
+            <MapaOcorrencias
+              ocorrencias={ocorrencias}
+              onSelecionar={(o) => setSelecionada(o)}
+            />
+          </Suspense>
         )}
 
-        {aba === 'viatura' && <ChecklistViatura />}
+        {aba === 'viatura' && (
+          <Suspense fallback={<LazyFallback />}>
+            <ChecklistViatura />
+          </Suspense>
+        )}
 
         {aba === 'escala' && <EscalaEmDesenvolvimento />}
       </div>
 
-      {/* Bottom nav */}
       <nav className="bottom-nav">
         <button className={`nav-btn ${aba === 'escala' ? 'ativo' : ''}`} onClick={() => setAba('escala')}>
           <span className="nav-emoji">👥</span>
@@ -448,17 +453,18 @@ export default function App() {
         </button>
       </nav>
 
-      {/* Modal detalhe */}
       {selecionada && (
-        <DetalheOcorrencia
-          ocorrencia={selecionada}
-          onFechar={() => setSelecionada(null)}
-          onDeletado={() => { setSelecionada(null); carregar() }}
-          onAtualizado={(atualizado) => {
-            setSelecionada(atualizado)
-            setOcorrencias((prev) => prev.map((o) => o.id === atualizado.id ? atualizado : o))
-          }}
-        />
+        <Suspense fallback={null}>
+          <DetalheOcorrencia
+            ocorrencia={selecionada}
+            onFechar={() => setSelecionada(null)}
+            onDeletado={() => { setSelecionada(null); carregar() }}
+            onAtualizado={(atualizado) => {
+              setSelecionada(atualizado)
+              setOcorrencias((prev) => prev.map((o) => o.id === atualizado.id ? atualizado : o))
+            }}
+          />
+        </Suspense>
       )}
     </div>
   )
