@@ -4,6 +4,7 @@ import MapaOcorrencias from './components/MapaOcorrencias'
 import NovaOcorrencia from './components/NovaOcorrencia'
 import DetalheOcorrencia from './components/DetalheOcorrencia'
 import ChecklistViatura from './components/ChecklistViatura'
+import Login, { estaLogado } from './components/Login'
 import JSZip from 'jszip'
 import type { Ocorrencia, NivelRisco } from './types'
 import { NATUREZA_ICONE } from './types'
@@ -61,6 +62,7 @@ function EscalaEmDesenvolvimento() {
 }
 
 export default function App() {
+  const [logado, setLogado] = useState(estaLogado())
   const [aba, setAba] = useState<Aba>('lista')
   const [ocorrencias, setOcorrencias] = useState<Ocorrencia[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -225,6 +227,10 @@ export default function App() {
     medio: ocorrencias.filter((o) => o.nivel_risco === 'medio').length,
     baixo: ocorrencias.filter((o) => o.nivel_risco === 'baixo').length,
     ativos: ocorrencias.filter((o) => o.status_oc === 'ativo').length,
+  }
+
+  if (!logado) {
+    return <Login onLogin={() => setLogado(true)} />
   }
 
   if (aba === 'nova') {
