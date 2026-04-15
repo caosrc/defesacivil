@@ -58,7 +58,6 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
 
   async function localizarEndereco() {
     if (!endereco.trim()) { setErro('Digite um endereço para localizar.'); return }
-    if (!navigator.onLine) { setErro('Sem conexão. A geocodificação será feita ao salvar.'); return }
     setGeocodificando(true)
     setGeoMsg('')
     const resultado = await geocodificarEndereco(endereco)
@@ -66,9 +65,12 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     if (resultado) {
       setLat(resultado.lat)
       setLng(resultado.lng)
-      setGeoMsg(`✅ Localizado: ${formatarCoordenadas(resultado.lat, resultado.lng)}`)
+      const origem = navigator.onLine ? '' : ' (referência offline)'
+      setGeoMsg(`✅ Localizado${origem}: ${formatarCoordenadas(resultado.lat, resultado.lng)}`)
     } else {
-      setGeoMsg('⚠️ Endereço não encontrado. Tente ser mais específico.')
+      setGeoMsg(navigator.onLine
+        ? '⚠️ Endereço não encontrado. Tente ser mais específico.'
+        : '⚠️ Sem conexão. Use o GPS ou tente novamente com sinal.')
     }
   }
 

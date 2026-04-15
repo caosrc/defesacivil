@@ -93,4 +93,13 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 - Resumo numérico no topo (Alto, Médio, Baixo, Total)
 - Checklists de viatura com fotos por ângulo, avarias, assinatura digital, histórico, exportação Excel geral e PDF individual via impressão do navegador
 - Aba Escala no menu inferior, atualmente com tela “Em desenvolvimento” para futura gestão de escala de trabalho
-- Suporte offline via Service Worker
+- Suporte offline completo via PWA (Service Worker + IndexedDB + manifest)
+
+## Suporte Offline Completo (PWA)
+- **PWA instalável**: `manifest.json` + meta tags para instalação no celular (Android e iOS)
+- **Service Worker (sw.js)**: cache separado para tiles do mapa e app shell; tiles OSM cacheados automaticamente; placeholder cinza quando offline; recebe mensagens do app para pré-cachear região de Ouro Branco (zoom 12–16)
+- **Botão "📥 Offline" no mapa**: baixa tiles da região (zoom 12–16, ~700–1000 tiles), mostra progresso, e permite apagar cache
+- **GPS offline**: `navigator.geolocation.watchPosition` funciona por hardware do dispositivo, independente de conexão
+- **Geocodificação offline**: fallback com pontos de referência de Ouro Branco (bairros, hospital, escola etc.)
+- **Fila de pendentes**: ocorrências salvas offline sincronizadas automaticamente ao reconectar
+- **IndexedDB**: armazena ocorrências pendentes e cache do servidor

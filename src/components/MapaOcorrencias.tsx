@@ -4,6 +4,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Ocorrencia } from '../types'
 import { NATUREZA_ICONE, NATUREZA_COR } from '../types'
+import { baixarMapaOffline, obterInfoCacheMapa, limparCacheMapa, type ProgressoMapa } from '../offline'
 
 // Fix leaflet default marker icons
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -88,6 +89,8 @@ const MAX_TRILHA = 300
 
 type StatusGps = 'inativo' | 'aguardando' | 'ativo' | 'erro'
 
+type StatusOffline = 'idle' | 'baixando' | 'concluido' | 'erro'
+
 export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const [selecionada, setSelecionada] = useState<Ocorrencia | null>(null)
   const [legendaAberta, setLegendaAberta] = useState(false)
@@ -102,8 +105,19 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const [seguir, setSeguir] = useState(true)
   const watchIdRef = useRef<number | null>(null)
 
+  // Estado do download offline de mapa
+  const [statusOffline, setStatusOffline] = useState<StatusOffline>('idle')
+  const [progressoMapa, setProgressoMapa] = useState<ProgressoMapa | null>(null)
+  const [tilesCacheados, setTilesCacheados] = useState<number>(0)
+  const [painelOfflineAberto, setPainelOfflineAberto] = useState(false)
+
   const comGeo = ocorrencias.filter((o) => o.lat && o.lng)
   const semGeo = ocorrencias.length - comGeo.length
+
+  // Carrega info do cache ao montar
+  useEffect(() => {
+    obterInfoCacheMapa().then(setTilesCacheados).catch(() => {})
+  }, [statusOffline])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelecionada(null) }
@@ -111,7 +125,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  // Cleanup watchPosition on unmount
   useEffect(() => {
     return () => {
       if (watchIdRef.current !== null) {
@@ -150,7 +163,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         setErroGps(msg)
         setStatusGps('erro')
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
     )
   }
 
@@ -179,9 +192,34 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     setSelecionada((prev) => (prev?.id === o.id ? null : o))
   }
 
-  const naturezasUnicas = [...new Set(comGeo.map((o) => o.natureza))]
+  async function iniciarDownloadMapa() {
+    if (statusOffline === 'baixando') return
+    setStatusOffline('baixando')
+    setProgressoMapa(null)
+    try {
+      await baixarMapaOffline((p) => {
+        setProgressoMapa(p)
+        if (p.status === 'concluido') setStatusOffline('concluido')
+      })
+    } catch {
+      setStatusOffline('erro')
+    }
+  }
 
+  async function limparMapa() {
+    await limparCacheMapa()
+    setTilesCacheados(0)
+    setStatusOffline('idle')
+    setProgressoMapa(null)
+  }
+
+  const naturezasUnicas = [...new Set(comGeo.map((o) => o.natureza))]
   const velocidadeKmh = velocidade != null ? Math.round(velocidade * 3.6) : null
+
+  const porcentagem =
+    progressoMapa && progressoMapa.total > 0
+      ? Math.round((progressoMapa.concluido / progressoMapa.total) * 100)
+      : 0
 
   return (
     <div className="mapa-wrapper">
@@ -197,11 +235,11 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           maxZoom={19}
+          keepBuffer={4}
         />
 
         <MapClickHandler onMapClick={() => setSelecionada(null)} />
 
-        {/* Trilha do percurso */}
         {trilha.length >= 2 && (
           <Polyline
             positions={trilha}
@@ -209,7 +247,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
           />
         )}
 
-        {/* Círculo de precisão */}
         {posicaoAtual && precisao > 0 && (
           <Circle
             center={posicaoAtual}
@@ -218,7 +255,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
           />
         )}
 
-        {/* Marcador da viatura */}
         {posicaoAtual && (
           <>
             <CircleMarker
@@ -333,6 +369,84 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         </span>
       </button>
 
+      {/* Botão Download Offline */}
+      <button
+        className={`mapa-offline-btn ${statusOffline === 'baixando' ? 'mapa-offline-btn--baixando' : statusOffline === 'concluido' ? 'mapa-offline-btn--ok' : ''}`}
+        onClick={() => setPainelOfflineAberto((v) => !v)}
+        title="Baixar mapa para uso offline"
+      >
+        <span>
+          {statusOffline === 'baixando' ? '⏳' : statusOffline === 'concluido' ? '✅' : '📥'}
+        </span>
+        <span>
+          {statusOffline === 'baixando'
+            ? `${porcentagem}%`
+            : statusOffline === 'concluido'
+            ? 'Offline OK'
+            : 'Offline'}
+        </span>
+      </button>
+
+      {/* Painel Download Mapa Offline */}
+      {painelOfflineAberto && (
+        <div className="mapa-offline-painel">
+          <div className="mapa-offline-painel-header">
+            <span>📥 Mapa Offline — Ouro Branco</span>
+            <button onClick={() => setPainelOfflineAberto(false)}>✕</button>
+          </div>
+          <div className="mapa-offline-painel-corpo">
+            {tilesCacheados > 0 && (
+              <div className="mapa-offline-info">
+                ✅ {tilesCacheados.toLocaleString('pt-BR')} tiles salvos no dispositivo
+              </div>
+            )}
+            {tilesCacheados === 0 && statusOffline !== 'baixando' && (
+              <div className="mapa-offline-info mapa-offline-info--aviso">
+                📵 Mapa ainda não baixado. Sem conexão, o mapa ficará cinza.
+              </div>
+            )}
+
+            {statusOffline === 'baixando' && progressoMapa && (
+              <div className="mapa-offline-progresso">
+                <div className="mapa-offline-barra-wrap">
+                  <div
+                    className="mapa-offline-barra"
+                    style={{ width: `${porcentagem}%` }}
+                  />
+                </div>
+                <div className="mapa-offline-pct">
+                  {porcentagem}% — {progressoMapa.concluido.toLocaleString('pt-BR')} / {progressoMapa.total.toLocaleString('pt-BR')} tiles
+                </div>
+              </div>
+            )}
+
+            {statusOffline !== 'baixando' && (
+              <button
+                className="mapa-offline-btn-acao"
+                onClick={iniciarDownloadMapa}
+                disabled={!navigator.onLine}
+              >
+                {navigator.onLine
+                  ? tilesCacheados > 0
+                    ? '🔄 Atualizar mapa offline'
+                    : '📥 Baixar mapa offline (zoom 12–16)'
+                  : '📵 Sem conexão para baixar'}
+              </button>
+            )}
+
+            {tilesCacheados > 0 && statusOffline !== 'baixando' && (
+              <button className="mapa-offline-btn-limpar" onClick={limparMapa}>
+                🗑 Apagar mapa offline
+              </button>
+            )}
+
+            <div className="mapa-offline-aviso">
+              O GPS do dispositivo funciona offline por hardware. Apenas os tiles visuais do mapa precisam ser baixados com conexão.
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Painel de info GPS ativo */}
       {statusGps === 'ativo' && posicaoAtual && (
         <div className="mapa-gps-info">
@@ -364,7 +478,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         </div>
       )}
 
-      {/* Legend panel */}
+      {/* Legenda */}
       {legendaAberta && (
         <div className="mapa-legenda">
           <div className="mapa-legenda-header">
@@ -441,7 +555,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         </div>
       )}
 
-      {/* Empty state */}
       {comGeo.length === 0 && (
         <div className="mapa-sem-geo">
           📍 Nenhuma ocorrência com GPS ainda. Registre uma com localização para aparecer aqui.
