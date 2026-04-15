@@ -22,22 +22,27 @@ app.use(express.json({ limit: '100mb' }))
 // ── WebSocket — Rastreamento em tempo real ──────────────────────
 const wss = new WebSocketServer({ server: httpServer, path: '/ws' })
 
+// Todos os WebSockets conectados (para broadcast)
+const todosConectados = new Set()
+
 // id → { ws, nome, lat, lng, precisao, velocidade, ts }
 const dispositivosOnline = new Map()
 
-function broadcastParaTodos(payload, excluirId = null) {
+// Broadcast para TODOS os clientes conectados, exceto o remetente
+function broadcastParaTodos(payload, excluirWs = null) {
   const json = JSON.stringify(payload)
-  for (const [id, d] of dispositivosOnline) {
-    if (id !== excluirId && d.ws.readyState === 1) {
-      d.ws.send(json)
+  for (const ws of todosConectados) {
+    if (ws !== excluirWs && ws.readyState === 1) {
+      ws.send(json)
     }
   }
 }
 
 wss.on('connection', (ws) => {
+  todosConectados.add(ws)
   let dispositivoId = null
 
-  // Envia posições atuais de todos os outros para o novo cliente
+  // Envia posições atuais de todos para o novo cliente imediatamente
   const posicoeAtuais = []
   for (const [id, d] of dispositivosOnline) {
     if (d.lat !== null && d.lat !== undefined) {
@@ -63,6 +68,7 @@ wss.on('connection', (ws) => {
           velocidade: msg.velocidade ?? null,
           ts: Date.now(),
         })
+        // Transmite para TODOS os outros conectados (mesmo que ainda sem posição)
         broadcastParaTodos({
           tipo: 'posicao',
           id: msg.id,
@@ -71,7 +77,7 @@ wss.on('connection', (ws) => {
           lng: msg.lng,
           precisao: msg.precisao || 0,
           velocidade: msg.velocidade ?? null,
-        }, dispositivoId)
+        }, ws)
       }
 
       if (msg.tipo === 'ping') {
@@ -81,6 +87,7 @@ wss.on('connection', (ws) => {
   })
 
   ws.on('close', () => {
+    todosConectados.delete(ws)
     if (dispositivoId) {
       dispositivosOnline.delete(dispositivoId)
       broadcastParaTodos({ tipo: 'remover', id: dispositivoId })
@@ -88,6 +95,7 @@ wss.on('connection', (ws) => {
   })
 
   ws.on('error', () => {
+    todosConectados.delete(ws)
     if (dispositivoId) dispositivosOnline.delete(dispositivoId)
   })
 })
