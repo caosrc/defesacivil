@@ -1271,6 +1271,9 @@ input, select, textarea { font-family: inherit; }
   border-radius: 14px;
   padding: 1.25rem;
   box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .form-titulo {
@@ -1909,9 +1912,12 @@ input, select, textarea { font-family: inherit; }
 .ck-header-fields {
   border: 1.5px solid #1a4b8c; border-radius: 6px;
   overflow: hidden; margin-bottom: 0.6rem;
+  width: 100%;
+  max-width: 100%;
 }
 .ck-hf-row {
   display: flex; border-bottom: 1px solid #c7d9f0;
+  min-width: 0;
 }
 .ck-hf-row:last-child { border-bottom: none; }
 .ck-hf-field {
@@ -1950,11 +1956,13 @@ input, select, textarea { font-family: inherit; }
 
 /* 4-column photo grid */
 .ck-fotos-4col {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px;
   margin-bottom: 0.6rem;
+  width: 100%;
+  max-width: 100%;
 }
 @media (min-width: 641px) {
-  .ck-fotos-4col { grid-template-columns: repeat(4, 1fr); }
+  .ck-fotos-4col { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 /* Individual photo slot */
@@ -1965,6 +1973,7 @@ input, select, textarea { font-family: inherit; }
   display: flex; align-items: center; justify-content: center;
   background: #f0f4fa;
   transition: background 0.15s;
+  min-width: 0;
 }
 .ck-foto-slot:hover { background: #dbeafe; }
 .ck-foto-img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -1988,10 +1997,15 @@ input, select, textarea { font-family: inherit; }
   background: #f0f4fa; display: flex; align-items: center;
   justify-content: center; margin-bottom: 0.4rem;
   transition: background 0.15s;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 .ck-avaria-slot:hover { background: #dbeafe; }
 .ck-avaria-grid {
   display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  width: 100%;
+  min-width: 0;
 }
 .btn-add-foto-mini {
   background: #1a4b8c; color: white; border: none; border-radius: 6px;
@@ -2003,8 +2017,13 @@ input, select, textarea { font-family: inherit; }
   border: 1.5px solid #1a4b8c; border-radius: 4px;
   overflow: hidden; font-size: 0.68rem;
   width: 100%; max-width: 100%;
+  min-width: 0;
 }
-.ck-with-side { display: flex; }
+.ck-with-side { display: flex; min-width: 0; }
+.ck-with-side > :not(.ck-side-label) {
+  flex: 1 1 0;
+  min-width: 0;
+}
 .ck-side-label {
   writing-mode: vertical-rl; text-orientation: mixed;
   transform: rotate(180deg);
@@ -2014,17 +2033,19 @@ input, select, textarea { font-family: inherit; }
   padding: 0.2rem 0.15rem; min-width: 14px;
 }
 .ck-header-row {
-  display: grid; grid-template-columns: 1fr repeat(3, 20px);
+  display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 20px);
   background: #1a4b8c; color: white;
+  min-width: 0;
 }
 .ck-header-cell {
   font-size: 0.58rem; font-weight: 700;
   text-align: center; padding: 0.2rem 0.05rem;
 }
 .ck-row {
-  display: grid; grid-template-columns: 1fr repeat(3, 20px);
+  display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 20px);
   align-items: center; border-bottom: 1px solid #e5e7eb;
   min-height: 22px;
+  min-width: 0;
 }
 .ck-row:last-child { border-bottom: none; }
 .ck-row:nth-child(even) { background: #f0f4fa; }
@@ -2056,10 +2077,13 @@ input, select, textarea { font-family: inherit; }
 
 /* 2-column layout for tables — padrão mobile: 1 coluna */
 .ck-2col {
-  display: grid; grid-template-columns: 1fr; gap: 6px;
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 @media (min-width: 641px) {
-  .ck-2col { grid-template-columns: 1fr 1fr; }
+  .ck-2col { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
 @media (max-width: 480px) {
   body {
@@ -2077,6 +2101,92 @@ input, select, textarea { font-family: inherit; }
 
   .conteudo {
     padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  .tela {
+    max-width: none;
+    width: 100%;
+  }
+
+  .form-scroll {
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+  }
+
+  .ck-header-fields {
+    font-size: 0.8rem;
+  }
+
+  .ck-hf-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .ck-hf-field {
+    padding: 0.36rem 0.42rem;
+    gap: 0.3rem;
+  }
+
+  .ck-hf-label {
+    font-size: 0.66rem;
+  }
+
+  .ck-hf-input {
+    font-size: 0.78rem;
+  }
+
+  .ck-section-title {
+    font-size: 0.72rem;
+    padding: 0.28rem 0.35rem;
+  }
+
+  .ck-foto-slot {
+    height: 82px;
+  }
+
+  .ck-foto-label,
+  .ck-foto-nome {
+    font-size: 0.6rem;
+  }
+
+  .ck-side-label {
+    min-width: 12px;
+    font-size: 0.5rem;
+    padding: 0.15rem 0.1rem;
+  }
+
+  .ck-header-row,
+  .ck-row {
+    grid-template-columns: minmax(0, 1fr) repeat(3, 17px);
+  }
+
+  .ck-header-cell {
+    font-size: 0.5rem;
+    padding: 0.18rem 0;
+  }
+
+  .ck-row-label {
+    font-size: 0.58rem;
+    padding: 0.12rem 0.18rem;
+  }
+
+  .ck-row-cell {
+    min-width: 0;
+  }
+
+  .ck-dot {
+    width: 11px;
+    height: 11px;
+  }
+
+  .foto-thumb {
+    width: 64px;
+    height: 64px;
+  }
+
+  .btn-add-foto-mini {
+    padding: 0.35rem 0.48rem;
+    font-size: 0.68rem;
   }
 
   .bottom-nav {
