@@ -1,22 +1,50 @@
 import { useState, useRef, useEffect } from 'react'
 
 const LOGIN_KEY = 'defesacivil-logado'
+const AGENTE_SESSION_KEY = 'defesacivil-agente-sessao'
+const AGENTE_NOME_KEY = 'defesacivil-device-nome'
 const USUARIO_CORRETO = 'defesacivilob@gmail.com'
 const SENHA_CORRETA = 'dc-2026'
+
+const AGENTES = [
+  'Moisés',
+  'Valteir',
+  'Arthur',
+  'Gustavo',
+  'Vânia',
+  'Graça',
+  'Talita',
+  'Cristiane',
+  'Dyonathan',
+  'Sócrates',
+]
 
 export function estaLogado(): boolean {
   return localStorage.getItem(LOGIN_KEY) === '1'
 }
 
+export function agenteEscolhido(): boolean {
+  return !!sessionStorage.getItem(AGENTE_SESSION_KEY)
+}
+
 export function fazerLogout() {
   localStorage.removeItem(LOGIN_KEY)
+  sessionStorage.removeItem(AGENTE_SESSION_KEY)
+}
+
+export function getAgenteLogado(): string {
+  return sessionStorage.getItem(AGENTE_SESSION_KEY) || localStorage.getItem(AGENTE_NOME_KEY) || ''
 }
 
 interface Props {
   onLogin: () => void
+  apenasAgente?: boolean
 }
 
-export default function Login({ onLogin }: Props) {
+type Etapa = 'credenciais' | 'agente'
+
+export default function Login({ onLogin, apenasAgente = false }: Props) {
+  const [etapa, setEtapa] = useState<Etapa>(apenasAgente ? 'agente' : 'credenciais')
   const [usuario, setUsuario] = useState('')
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState('')
@@ -24,8 +52,10 @@ export default function Login({ onLogin }: Props) {
   const usuarioRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    setTimeout(() => usuarioRef.current?.focus(), 100)
-  }, [])
+    if (etapa === 'credenciais') {
+      setTimeout(() => usuarioRef.current?.focus(), 100)
+    }
+  }, [etapa])
 
   function entrar(e: React.FormEvent) {
     e.preventDefault()
@@ -37,13 +67,47 @@ export default function Login({ onLogin }: Props) {
         senha === SENHA_CORRETA
       ) {
         localStorage.setItem(LOGIN_KEY, '1')
-        onLogin()
+        setEtapa('agente')
+        setCarregando(false)
       } else {
         setErro('Usuário ou senha incorretos.')
         setSenha('')
         setCarregando(false)
       }
     }, 600)
+  }
+
+  function selecionarAgente(nome: string) {
+    sessionStorage.setItem(AGENTE_SESSION_KEY, nome)
+    localStorage.setItem(AGENTE_NOME_KEY, nome)
+    onLogin()
+  }
+
+  if (etapa === 'agente') {
+    return (
+      <div className="login-tela">
+        <div className="login-box login-box--agente">
+          <div className="login-logo-wrap">
+            <img src="/icon-512.png" alt="Defesa Civil Ouro Branco" className="login-logo" />
+          </div>
+          <div className="login-titulo">Defesa Civil</div>
+          <div className="login-subtitulo">Ouro Branco — MG</div>
+
+          <div className="login-agente-titulo">Quem está acessando?</div>
+          <div className="login-agente-grid">
+            {AGENTES.map((nome) => (
+              <button
+                key={nome}
+                className="login-agente-btn"
+                onClick={() => selecionarAgente(nome)}
+              >
+                {nome}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

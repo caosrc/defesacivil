@@ -630,7 +630,7 @@ input, select, textarea { font-family: inherit; }
 /* Empty state */
 .mapa-sem-geo {
   position: absolute;
-  bottom: 20px;
+  bottom: 75px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0,0,0,0.7);
@@ -2178,3 +2178,47 @@ input, select, textarea { font-family: inherit; }
 
 .login-btn:hover:not(:disabled) { background: #1557a0; }
 .login-btn:disabled { opacity: 0.55; cursor: default; }
+
+/* ── Seleção de agente ────────────────────────────────────────── */
+.login-box--agente {
+  max-width: 380px;
+}
+
+.login-agente-titulo {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1a4b8c;
+  margin: 1rem 0 0.75rem;
+  text-align: center;
+}
+
+.login-agente-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  width: 100%;
+}
+
+.login-agente-btn {
+  background: #f0f4ff;
+  border: 2px solid #c7d8f8;
+  border-radius: 12px;
+  padding: 0.7rem 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1a4b8c;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  text-align: center;
+}
+
+.login-agente-btn:hover {
+  background: #1a4b8c;
+  border-color: #1a4b8c;
+  color: white;
+  transform: scale(1.03);
+}
+
+.login-agente-btn:active {
+  transform: scale(0.97);
+}
