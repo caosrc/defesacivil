@@ -6,6 +6,7 @@ import { deletarOcorrencia, atualizarOcorrencia } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
 import { formatarCoordenadas, parseDateLocal, decimalParaGms } from '../utils'
+import ModalSenha from './ModalSenha'
 
 interface Props {
   ocorrencia: Ocorrencia
@@ -17,6 +18,7 @@ interface Props {
 export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado, onAtualizado }: Props) {
   const [o, setO] = useState<Ocorrencia>(oc)
   const [editando, setEditando] = useState(false)
+  const [pedindoSenha, setPedindoSenha] = useState<'editar' | 'deletar' | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [geocodificando, setGeocodificando] = useState(false)
   const [geoMsg, setGeoMsg] = useState('')
@@ -233,7 +235,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
             </div>
             <div className="modal-header-acoes">
               {!editando && (
-                <button className="btn-editar-header" onClick={iniciarEdicao} title="Editar ocorrência">
+                <button className="btn-editar-header" onClick={() => setPedindoSenha('editar')} title="Editar ocorrência">
                   ✏️
                 </button>
               )}
@@ -530,13 +532,13 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
           <div className="modal-footer">
             {!editando ? (
               <>
-                <button className="btn-editar" onClick={iniciarEdicao}>✏️ Editar</button>
+                <button className="btn-editar" onClick={() => setPedindoSenha('editar')}>✏️ Editar</button>
                 <button className="btn-relatorio" onClick={salvarRelatorio} disabled={gerandoRelatorio}>
                   {gerandoRelatorio ? '⏳ Salvando...' : '📄 Salvar relatório'}
                 </button>
                 <button className="btn-excel" onClick={() => exportarOcorrenciaExcel(o)}>📊 Excel</button>
                 <button className="btn-kmz" onClick={exportarKMZ}>🌍 KMZ</button>
-                <button className="btn-deletar" onClick={confirmarDelete}>🗑️</button>
+                <button className="btn-deletar" onClick={() => setPedindoSenha('deletar')}>🗑️</button>
               </>
             ) : (
               <>
@@ -578,6 +580,18 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
             <div className="lightbox-contador">{fotoAmpliada + 1} / {totalFotos}</div>
           </div>
         </div>
+      )}
+
+      {pedindoSenha && (
+        <ModalSenha
+          titulo={pedindoSenha === 'editar' ? 'Editar Ocorrência' : 'Excluir Ocorrência'}
+          onCancelar={() => setPedindoSenha(null)}
+          onConfirmar={() => {
+            setPedindoSenha(null)
+            if (pedindoSenha === 'editar') iniciarEdicao()
+            else confirmarDelete()
+          }}
+        />
       )}
     </>
   )

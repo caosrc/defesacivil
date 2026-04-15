@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { adicionarMarcaDagua } from '../utils'
 import { exportarChecklistExcel, type ChecklistExportData } from '../exportExcel'
+import ModalSenha from './ModalSenha'
 
 const MOTORISTAS = ['Moisés', 'Arthur', 'Gustavo', 'Valteir', 'Dyonathan']
 
@@ -282,6 +283,7 @@ export default function ChecklistViatura() {
   const [assinaturaData, setAssinaturaData] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+  const [pedindoSenhaDeletar, setPedindoSenhaDeletar] = useState<number | null>(null)
   const avariaRef = useRef<HTMLInputElement>(null)
   const assinaturaRef = useRef<HTMLCanvasElement>(null)
   const assinandoRef = useRef(false)
@@ -736,7 +738,7 @@ export default function ChecklistViatura() {
             <span style={{ fontSize: '1.3rem' }}>🚗</span>
             <span className="header-titulo-texto">Checklist #{c.id}</span>
           </div>
-          <button className="btn-deletar-header" onClick={() => deletar(c.id)}>🗑️</button>
+          <button className="btn-deletar-header" onClick={() => setPedindoSenhaDeletar(c.id)}>🗑️</button>
         </header>
 
         <div className="form-scroll">
