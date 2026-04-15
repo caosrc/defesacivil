@@ -645,6 +645,129 @@ input, select, textarea { font-family: inherit; }
   text-align: center;
 }
 
+/* ── GPS tracking controls ────────────────────────────────────── */
+.mapa-gps-btn {
+  position: absolute;
+  bottom: 18px;
+  right: 14px;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  border: none;
+  border-radius: 24px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 3px 14px rgba(0,0,0,0.28);
+  transition: background 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+.mapa-gps-btn:active { transform: scale(0.96); }
+.mapa-gps-btn--inativo  { background: #1a4b8c; color: white; }
+.mapa-gps-btn--aguardando { background: #4b6cb7; color: white; }
+.mapa-gps-btn--ativo    { background: #15803d; color: white; }
+.mapa-gps-btn--erro     { background: #b91c1c; color: white; }
+
+.mapa-gps-icon { font-size: 1rem; line-height: 1; }
+.mapa-gps-label { font-size: 0.76rem; }
+
+.mapa-gps-spinner {
+  display: inline-block;
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: gps-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes gps-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Info bar shown when GPS is active */
+.mapa-gps-info {
+  position: absolute;
+  bottom: 62px;
+  right: 14px;
+  z-index: 500;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 3px 14px rgba(0,0,0,0.2);
+  padding: 0.35rem 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+.mapa-gps-info-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #374151;
+}
+.mapa-gps-info-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #15803d;
+  animation: gps-pulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes gps-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(0.7); }
+}
+.mapa-gps-info-sep { color: #d1d5db; }
+.mapa-gps-info-text { font-weight: 600; color: #1f2937; }
+
+.mapa-gps-seguir {
+  background: #f3f4f6;
+  border: none;
+  border-radius: 12px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: #6b7280;
+  transition: background 0.12s;
+}
+.mapa-gps-seguir--ativo {
+  background: #dbeafe;
+  color: #1a4b8c;
+}
+.mapa-gps-seguir:hover { background: #e5e7eb; }
+
+/* Error toast */
+.mapa-gps-erro {
+  position: absolute;
+  bottom: 62px;
+  right: 14px;
+  z-index: 500;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+  border-radius: 14px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.12);
+  max-width: 240px;
+}
+.mapa-gps-erro button {
+  background: none;
+  border: none;
+  color: #991b1b;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0;
+  flex-shrink: 0;
+}
+
 /* ── Bottom nav ───────────────────────────────────────────────── */
 .bottom-nav {
   position: fixed;
