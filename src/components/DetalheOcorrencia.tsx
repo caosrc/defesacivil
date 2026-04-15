@@ -5,7 +5,7 @@ import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES } fr
 import { deletarOcorrencia, atualizarOcorrencia } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
-import { formatarCoordenadas, parseDateLocal } from '../utils'
+import { formatarCoordenadas, parseDateLocal, decimalParaGms } from '../utils'
 
 interface Props {
   ocorrencia: Ocorrencia
@@ -398,30 +398,17 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                 <div className="campo campo-edit">
                   <label className="campo-label">🛰️ Coordenadas GPS</label>
                   <div className="gps-edit-row">
-                    <input
-                      className="campo-input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Latitude"
-                      value={eLat ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        setELat(v === '' || v === '-' ? null : isNaN(parseFloat(v)) ? eLat : parseFloat(v))
-                      }}
-                      style={{ flex: 1 }}
-                    />
-                    <input
-                      className="campo-input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Longitude"
-                      value={eLng ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        setELng(v === '' || v === '-' ? null : isNaN(parseFloat(v)) ? eLng : parseFloat(v))
-                      }}
-                      style={{ flex: 1 }}
-                    />
+                    <div className="gps-dms-display">
+                      {eLat != null && eLng != null ? (
+                        <>
+                          <span className="gps-dms-val">{decimalParaGms(eLat, 'N', 'S')}</span>
+                          <span className="gps-dms-sep"> · </span>
+                          <span className="gps-dms-val">{decimalParaGms(eLng, 'L', 'O')}</span>
+                        </>
+                      ) : (
+                        <span className="gps-dms-vazio">Sem GPS</span>
+                      )}
+                    </div>
                     <button
                       className="btn-gps"
                       title="Obter GPS atual"
@@ -435,6 +422,15 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                     >
                       📍
                     </button>
+                    {eLat != null && eLng != null && (
+                      <button
+                        className="btn-gps btn-gps-limpar"
+                        title="Limpar coordenadas"
+                        onClick={() => { setELat(null); setELng(null) }}
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 </div>
 
