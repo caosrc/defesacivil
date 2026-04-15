@@ -1262,7 +1262,7 @@ input, select, textarea { font-family: inherit; }
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 1rem;
+  padding: 0.6rem;
   padding-bottom: 5.5rem;
 }
 
@@ -1998,41 +1998,42 @@ input, select, textarea { font-family: inherit; }
 /* Checklist tables */
 .ck-table-wrap {
   border: 1.5px solid #1a4b8c; border-radius: 4px;
-  overflow: hidden; font-size: 0.72rem;
+  overflow: hidden; font-size: 0.68rem;
+  width: 100%; max-width: 100%;
 }
 .ck-with-side { display: flex; }
 .ck-side-label {
   writing-mode: vertical-rl; text-orientation: mixed;
   transform: rotate(180deg);
   background: #1a4b8c; color: white;
-  font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em;
+  font-size: 0.58rem; font-weight: 700; letter-spacing: 0.04em;
   display: flex; align-items: center; justify-content: center;
-  padding: 0.3rem 0.25rem; min-width: 20px;
+  padding: 0.2rem 0.15rem; min-width: 14px;
 }
 .ck-header-row {
-  display: grid; grid-template-columns: 1fr repeat(3, 26px);
+  display: grid; grid-template-columns: 1fr repeat(3, 20px);
   background: #1a4b8c; color: white;
 }
 .ck-header-cell {
-  font-size: 0.65rem; font-weight: 700;
-  text-align: center; padding: 0.25rem 0.1rem;
+  font-size: 0.58rem; font-weight: 700;
+  text-align: center; padding: 0.2rem 0.05rem;
 }
 .ck-row {
-  display: grid; grid-template-columns: 1fr repeat(3, 26px);
+  display: grid; grid-template-columns: 1fr repeat(3, 20px);
   align-items: center; border-bottom: 1px solid #e5e7eb;
-  min-height: 24px;
+  min-height: 22px;
 }
 .ck-row:last-child { border-bottom: none; }
 .ck-row:nth-child(even) { background: #f0f4fa; }
 .ck-row-label {
-  padding: 0.15rem 0.35rem; font-size: 0.7rem; color: #1f2937;
+  padding: 0.12rem 0.25rem; font-size: 0.64rem; color: #1f2937;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ck-row-cell {
   display: flex; align-items: center; justify-content: center;
 }
 .ck-dot {
-  width: 14px; height: 14px; border: 1.5px solid #9ca3af;
+  width: 12px; height: 12px; border: 1.5px solid #9ca3af;
   border-radius: 2px; cursor: pointer; background: white;
   transition: all 0.1s; flex-shrink: 0;
 }
@@ -2045,8 +2046,8 @@ input, select, textarea { font-family: inherit; }
 .ck-dot-na    { background: #9ca3af; border-color: #6b7280; }
 .ck-sec-row {
   background: #dbeafe; color: #1a4b8c;
-  font-size: 0.68rem; font-weight: 700;
-  padding: 0.18rem 0.35rem; border-bottom: 1px solid #bfdbfe;
+  font-size: 0.62rem; font-weight: 700;
+  padding: 0.14rem 0.25rem; border-bottom: 1px solid #bfdbfe;
   grid-column: 1 / -1;
 }
 

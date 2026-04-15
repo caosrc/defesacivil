@@ -495,7 +495,7 @@ export default function ChecklistViatura() {
         </header>
 
         <div className="form-scroll">
-          <div className="form-card" style={{ padding: '0.75rem', gap: 0 }}>
+          <div className="form-card" style={{ padding: '0.4rem', gap: 0 }}>
 
             {/* ── Cabeçalho: Motorista / Data / Placa ── */}
             <div className="ck-header-fields">
@@ -760,7 +760,7 @@ export default function ChecklistViatura() {
         </header>
 
         <div className="form-scroll">
-          <div className="form-card" style={{ padding: '0.75rem', gap: 0 }}>
+          <div className="form-card" style={{ padding: '0.4rem', gap: 0 }}>
             <div className="ck-detalhe-info">
               <span className="ck-det-data">{formatarData(c.data_checklist)}</span>
               {c.motorista && <span className="ck-det-badge">👤 {c.motorista}</span>}
