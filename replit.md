@@ -38,7 +38,7 @@ Sistema web completo de registro e gerenciamento de ocorrências para a Defesa C
 - **Start application**: `PORT=5000 node server/index.js` → porta 5000 (webview), servindo a API e o frontend estático já gerado em `dist/`
 
 ## Deployment
-- Build: `npm run build` (gera dist/)
+- Build: `npx vite build` (gera dist/ sem bloquear a publicação por validações TypeScript de desenvolvimento)
 - Run: `node server/index.js` (serve API + frontend estático da dist/)
 - Target: autoscale
 

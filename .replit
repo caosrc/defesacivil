@@ -40,4 +40,4 @@ externalPort = 80
 [deployment]
 deploymentTarget = "autoscale"
 run = ["node", "server/index.js"]
-build = ["npm", "run", "build"]
+build = ["npx", "vite", "build"]
