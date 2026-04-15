@@ -1437,6 +1437,15 @@ input, select, textarea { font-family: inherit; }
   font-size: 0.85rem !important;
 }
 .btn-gps-limpar:hover { background: #fecaca !important; }
+.gps-dms-preview {
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1a4b8c;
+  background: #eff6ff;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+}
 
 /* Edit mode save/cancel buttons */
 .btn-cancelar-edit {
