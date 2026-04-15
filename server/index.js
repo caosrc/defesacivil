@@ -143,10 +143,13 @@ async function gerarRelatorioVistoria(ocorrencia) {
     // Para Vistoria Ambiental: garante Talita e Analista Ambiental
     documentXml = documentXml
       .split('Cristiane Caroline Campos Lopes').join('Talita Oliveira de Ara\u00FAjo')
-      .split('Engenheira Civil - Coordenadoria Municipal de Prote\u00E7\u00E3o e Defesa Civil').join('Analista Ambiental')
-      .split('Engenheira Civil \u2013 Coordenadoria Municipal de Prote\u00E7\u00E3o e Defesa Civil').join('Analista Ambiental')
-      .split('Engenheira Civil - Coordenadoria Municipal de Proteção e Defesa Civil').join('Analista Ambiental')
-      .split('Engenheira Civil – Coordenadoria Municipal de Proteção e Defesa Civil').join('Analista Ambiental')
+
+    // O cargo no template está fragmentado em vários nós XML, então substituímos o parágrafo inteiro
+    const paragrafoCargo = '<w:p><w:pPr><w:keepNext w:val="false" /><w:keepLines w:val="false" /><w:pageBreakBefore w:val="false" /><w:widowControl w:val="true" /><w:pBdr></w:pBdr><w:spacing w:after="0" /><w:ind /><w:jc w:val="center" /><w:rPr><w:rFonts w:hint="default" w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial" /><w:sz w:val="20" /><w:szCs w:val="20" /></w:rPr></w:pPr><w:r><w:rPr><w:rFonts w:hint="default" w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial" /><w:sz w:val="20" /><w:szCs w:val="20" /></w:rPr><w:t>Analista Ambiental</w:t></w:r></w:p>'
+    documentXml = documentXml.replace(
+      /<w:p\b[^>]*>(?:(?!<\/w:p>)[\s\S])*?Engenheira Civil - (?:(?!<\/w:p>)[\s\S])*?<\/w:p>/,
+      paragrafoCargo
+    )
   } else {
     // Para outros tipos: garante Cristiane e Engenheira Civil
     documentXml = documentXml
