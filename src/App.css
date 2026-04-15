@@ -1921,8 +1921,8 @@ input, select, textarea { font-family: inherit; }
 }
 .ck-hf-field:last-child { border-right: none; }
 .ck-hf-label {
-  font-size: 0.78rem; font-weight: 700; color: #1a4b8c;
-  white-space: nowrap; min-width: 54px;
+  font-size: 0.75rem; font-weight: 700; color: #1a4b8c;
+  white-space: nowrap; min-width: 0;
 }
 .ck-hf-input {
   flex: 1; border: none; outline: none; background: transparent;
@@ -1950,8 +1950,11 @@ input, select, textarea { font-family: inherit; }
 
 /* 4-column photo grid */
 .ck-fotos-4col {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;
   margin-bottom: 0.6rem;
+}
+@media (min-width: 641px) {
+  .ck-fotos-4col { grid-template-columns: repeat(4, 1fr); }
 }
 
 /* Individual photo slot */
@@ -2051,13 +2054,12 @@ input, select, textarea { font-family: inherit; }
   grid-column: 1 / -1;
 }
 
-/* 2-column layout for tables */
+/* 2-column layout for tables — padrão mobile: 1 coluna */
 .ck-2col {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  display: grid; grid-template-columns: 1fr; gap: 6px;
 }
-@media (max-width: 640px) {
-  .ck-2col { grid-template-columns: 1fr; }
-  .ck-fotos-4col { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 641px) {
+  .ck-2col { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 480px) {
   body {
