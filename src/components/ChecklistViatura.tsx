@@ -284,6 +284,7 @@ export default function ChecklistViatura() {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [pedindoSenhaDeletar, setPedindoSenhaDeletar] = useState<number | null>(null)
+  const [pedindoSenhaNovo, setPedindoSenhaNovo] = useState(false)
   const avariaRef = useRef<HTMLInputElement>(null)
   const assinaturaRef = useRef<HTMLCanvasElement>(null)
   const assinandoRef = useRef(false)
@@ -477,7 +478,6 @@ export default function ChecklistViatura() {
   }
 
   async function deletar(id: number) {
-    if (!confirm('Excluir este checklist?')) return
     await fetch(`/api/checklists/${id}`, { method: 'DELETE' })
     setSelecionado(null); setModo('lista'); await carregar()
   }
@@ -731,6 +731,7 @@ export default function ChecklistViatura() {
     }
 
     return (
+      <>
       <div className="tela">
         <header className="header">
           <button className="btn-voltar" onClick={() => { setSelecionado(null); setModo('lista') }}>‹</button>
@@ -872,10 +873,19 @@ export default function ChecklistViatura() {
           </div>
         </div>
       </div>
+      {pedindoSenhaDeletar !== null && (
+        <ModalSenha
+          titulo="Excluir Checklist"
+          onCancelar={() => setPedindoSenhaDeletar(null)}
+          onConfirmar={() => { const id = pedindoSenhaDeletar!; setPedindoSenhaDeletar(null); deletar(id) }}
+        />
+      )}
+      </>
     )
   }
 
   return (
+    <>
     <div className="conteudo-viatura">
       <div className="cl-lista-header">
         <div>
@@ -888,7 +898,7 @@ export default function ChecklistViatura() {
               📊 Excel
             </button>
           )}
-          <button className="btn-novo-checklist" onClick={() => { resetForm(); setModo('form') }}>
+          <button className="btn-novo-checklist" onClick={() => setPedindoSenhaNovo(true)}>
             + Novo
           </button>
         </div>
@@ -900,7 +910,7 @@ export default function ChecklistViatura() {
         <div className="lista-vazia">
           <div style={{ fontSize: '3rem' }}>🚗</div>
           <div>Nenhum checklist registrado.</div>
-          <button className="btn-nova-vazia" onClick={() => { resetForm(); setModo('form') }}>+ Novo Checklist</button>
+          <button className="btn-nova-vazia" onClick={() => setPedindoSenhaNovo(true)}>+ Novo Checklist</button>
         </div>
       ) : (
         <div className="lista">
@@ -926,5 +936,13 @@ export default function ChecklistViatura() {
         </div>
       )}
     </div>
+    {pedindoSenhaNovo && (
+      <ModalSenha
+        titulo="Novo Checklist"
+        onCancelar={() => setPedindoSenhaNovo(false)}
+        onConfirmar={() => { setPedindoSenhaNovo(false); resetForm(); setModo('form') }}
+      />
+    )}
+    </>
   )
 }
