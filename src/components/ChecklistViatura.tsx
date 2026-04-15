@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { adicionarMarcaDagua } from '../utils'
-import { exportarChecklistExcel } from '../exportExcel'
+import { exportarChecklistExcel, type ChecklistExportData } from '../exportExcel'
 
 const MOTORISTAS = ['Moisés', 'Arthur', 'Gustavo', 'Valteir', 'Dyonathan']
 
@@ -38,21 +38,7 @@ function itensIniciais(): Itens {
   }
 }
 
-export interface ChecklistData {
-  id: number
-  data_checklist: string
-  km: string | null
-  placa: string | null
-  motorista: string | null
-  fotos_avarias: string[]
-  foto_frontal: string | null
-  foto_traseira: string | null
-  foto_direita: string | null
-  foto_esquerda: string | null
-  itens: Itens | null
-  observacoes: string | null
-  created_at: string
-}
+type ChecklistData = ChecklistExportData
 
 type Modo = 'lista' | 'form' | 'detalhe'
 
@@ -497,7 +483,7 @@ export default function ChecklistViatura() {
 
   if (modo === 'detalhe' && selecionado) {
     const c = selecionado
-    const it = c.itens || itensIniciais()
+    const it = (c.itens as unknown as Itens | null) || itensIniciais()
     const fotos4 = [
       { label: 'Esquerda', foto: c.foto_esquerda, icone: <CarSide /> },
       { label: 'Frontal', foto: c.foto_frontal, icone: <CarFront /> },

@@ -2,6 +2,22 @@ import ExcelJS from 'exceljs'
 import type { Ocorrencia } from './types'
 import { parseDateLocal } from './utils'
 
+export interface ChecklistExportData {
+  id: number
+  data_checklist: string
+  km: string | null
+  placa: string | null
+  motorista: string | null
+  fotos_avarias: string[]
+  foto_frontal: string | null
+  foto_traseira: string | null
+  foto_direita: string | null
+  foto_esquerda: string | null
+  itens: Record<string, string> | null
+  observacoes: string | null
+  created_at: string
+}
+
 const AZUL = '1a4b8c'
 const LARANJA = 'E05F00'
 const CINZA_CLARO = 'f3f4f6'
@@ -315,6 +331,154 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
   const a = document.createElement('a')
   a.href = url
   a.download = `defesacivil_ourobranco_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ── Export checklists da viatura ──────────────────────────────────────────────
+export async function exportarChecklistExcel(checklists: ChecklistExportData[]): Promise<void> {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Defesa Civil Ouro Branco'
+  wb.created = new Date()
+
+  const ws = wb.addWorksheet('Checklists', {
+    pageSetup: { orientation: 'landscape', fitToPage: true },
+  })
+
+  const LABELS_BMR: Record<string, string> = { bom: 'Bom', medio: 'Médio', ruim: 'Ruim' }
+  const LABELS_SN: Record<string, string> = { sim: 'Sim', nao: 'Não', na: 'N/A' }
+
+  const ITENS_LABELS: [string, string, 'bmr' | 'sn'][] = [
+    ['limpezaExterna', 'Limpeza Externa', 'bmr'],
+    ['limpezaInterna', 'Limpeza Interna', 'bmr'],
+    ['pneus', 'Pneus', 'bmr'],
+    ['estepe', 'Estepe', 'bmr'],
+    ['ltzPlaca', 'Luz Placa (Tras.)', 'sn'],
+    ['ltzDirLuz', 'Luz Tras. Dir.', 'sn'],
+    ['ltzDirLuzRe', 'Luz Ré Dir.', 'sn'],
+    ['ltzDirFreio', 'Freio Dir.', 'sn'],
+    ['ltzDirSeta', 'Seta Tras. Dir.', 'sn'],
+    ['ltzEsqLuz', 'Luz Tras. Esq.', 'sn'],
+    ['ltzEsqLuzRe', 'Luz Ré Esq.', 'sn'],
+    ['ltzEsqFreio', 'Freio Esq.', 'sn'],
+    ['ltzEsqSeta', 'Seta Tras. Esq.', 'sn'],
+    ['ldzPlaca', 'Luz Placa (Diant.)', 'sn'],
+    ['ldzDirFarolAlto', 'Farol Alto Dir.', 'sn'],
+    ['ldzDirFarolBaixo', 'Farol Baixo Dir.', 'sn'],
+    ['ldzDirNeblina', 'Neblina Dir.', 'sn'],
+    ['ldzEsqFarolAlto', 'Farol Alto Esq.', 'sn'],
+    ['ldzEsqFarolBaixo', 'Farol Baixo Esq.', 'sn'],
+    ['ldzEsqSeta', 'Seta Diant. Esq.', 'sn'],
+    ['ldzEsqNeblina', 'Neblina Esq.', 'sn'],
+    ['segAlarme', 'Alarme', 'sn'],
+    ['segBuzina', 'Buzina', 'sn'],
+    ['segChaveRoda', 'Chave de Roda', 'sn'],
+    ['segCintos', 'Cintos', 'sn'],
+    ['segDocumentos', 'Documentos', 'sn'],
+    ['segExtintor', 'Extintor', 'sn'],
+    ['segLimpadores', 'Limpadores', 'sn'],
+    ['segMacaco', 'Macaco', 'sn'],
+    ['segPainel', 'Painel', 'sn'],
+    ['segRetrovisorInterno', 'Retrovisor Int.', 'sn'],
+    ['segRetrovisorDireito', 'Retrovisor Dir.', 'sn'],
+    ['segRetrovisorEsquerdo', 'Retrovisor Esq.', 'sn'],
+    ['segTravas', 'Travas', 'sn'],
+    ['segTriangulo', 'Triângulo', 'sn'],
+    ['motAcelerador', 'Acelerador', 'sn'],
+    ['motAguaLimpador', 'Água Limpador', 'sn'],
+    ['motAguaRadiador', 'Água Radiador', 'sn'],
+    ['motEmbreagem', 'Embreagem', 'sn'],
+    ['motFreio', 'Freio', 'sn'],
+    ['motFreioMao', 'Freio de Mão', 'sn'],
+    ['motOleoFreio', 'Óleo Freio', 'sn'],
+    ['motOleoMoto', 'Óleo Motor', 'sn'],
+    ['motTanquePartida', 'Tanque/Partida', 'sn'],
+  ]
+
+  const totalCols = 7 + ITENS_LABELS.length
+
+  ws.mergeCells(1, 1, 1, totalCols)
+  const titulo = ws.getCell('A1')
+  titulo.value = `DEFESA CIVIL OURO BRANCO — CHECKLISTS DA VIATURA — Gerado em ${new Date().toLocaleString('pt-BR')}`
+  titulo.font = { bold: true, size: 12, color: { argb: BRANCO } }
+  titulo.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL } }
+  titulo.alignment = { horizontal: 'center', vertical: 'middle' }
+  ws.getRow(1).height = 26
+
+  const cabecalhos = [
+    'ID', 'Data', 'Motorista', 'Placa', 'KM', 'Avarias', 'Observações',
+    ...ITENS_LABELS.map(([, label]) => label),
+  ]
+  const larguras = [5, 12, 14, 10, 10, 8, 28, ...Array(ITENS_LABELS.length).fill(14)]
+  ws.columns = larguras.map(w => ({ width: w }))
+
+  const headerRow = ws.getRow(2)
+  cabecalhos.forEach((h, i) => {
+    const cell = headerRow.getCell(i + 1)
+    cell.value = h
+    cell.font = { bold: true, size: 9, color: { argb: BRANCO } }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: i < 7 ? AZUL : LARANJA } }
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+    cell.border = { bottom: { style: 'thin', color: { argb: BRANCO } } }
+  })
+  headerRow.height = 36
+
+  ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: totalCols } }
+  ws.views = [{ state: 'frozen', ySplit: 2 }]
+
+  checklists.forEach((c, idx) => {
+    const linhaNum = 3 + idx
+    const r = ws.getRow(linhaNum)
+    const it = c.itens || {}
+    const [y,m,d] = c.data_checklist.split('-')
+
+    const valores = [
+      c.id,
+      `${d}/${m}/${y}`,
+      c.motorista || '—',
+      c.placa || '—',
+      c.km || '—',
+      c.fotos_avarias?.length ?? 0,
+      c.observacoes || '—',
+      ...ITENS_LABELS.map(([campo, , tipo]) => {
+        const v = it[campo] || ''
+        return tipo === 'bmr' ? (LABELS_BMR[v] || '—') : (LABELS_SN[v] || '—')
+      }),
+    ]
+
+    valores.forEach((v, i) => { r.getCell(i + 1).value = v as ExcelJS.CellValue })
+
+    r.eachCell({ includeEmpty: true }, (cell, colNum) => {
+      cell.font = { size: 9 }
+      cell.alignment = { vertical: 'middle', horizontal: 'center' }
+      if (colNum <= 2) cell.alignment = { ...cell.alignment, horizontal: 'left' }
+      if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'f0f4ff' } }
+
+      if (colNum > 7) {
+        const itenIdx = colNum - 8
+        const [campo, , tipo] = ITENS_LABELS[itenIdx]
+        const raw = it[campo] || ''
+        if (tipo === 'bmr') {
+          if (raw === 'bom') cell.font = { size: 9, bold: true, color: { argb: '15803d' } }
+          else if (raw === 'medio') cell.font = { size: 9, bold: true, color: { argb: 'd97706' } }
+          else if (raw === 'ruim') cell.font = { size: 9, bold: true, color: { argb: 'dc2626' } }
+        } else {
+          if (raw === 'sim') cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'd1fae5' } }
+          else if (raw === 'nao') cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'fee2e2' } }
+          else if (raw === 'na') cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'f3f4f6' } }
+        }
+      }
+    })
+
+    r.height = 16
+  })
+
+  const buffer = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `checklists_viatura_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.xlsx`
   a.click()
   URL.revokeObjectURL(url)
 }
