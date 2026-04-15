@@ -497,6 +497,39 @@ app.delete('/api/checklists/:id', async (req, res) => {
   }
 })
 
+// ── Proxy de tiles OpenStreetMap ─────────────────────────────────
+// Serve tiles pelo backend para evitar problemas de CORS no browser
+const OSM_SUBDOMAINS = ['a', 'b', 'c']
+let _osmIdx = 0
+
+app.get('/api/tiles/:z/:x/:y', async (req, res) => {
+  const { z, x, y } = req.params
+  const sub = OSM_SUBDOMAINS[_osmIdx++ % 3]
+  const tileUrl = `https://${sub}.tile.openstreetmap.org/${z}/${x}/${y}.png`
+
+  try {
+    const response = await fetch(tileUrl, {
+      headers: {
+        'User-Agent': 'DefesaCivilOuroBranco/1.0 (defesacivil@ourobranco.mg.gov.br)',
+        'Accept': 'image/png,image/*,*/*;q=0.8',
+      },
+      signal: AbortSignal.timeout(10000),
+    })
+
+    if (!response.ok) {
+      res.status(response.status).end()
+      return
+    }
+
+    const buffer = await response.arrayBuffer()
+    res.setHeader('Content-Type', 'image/png')
+    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800')
+    res.end(Buffer.from(buffer))
+  } catch {
+    res.status(503).end()
+  }
+})
+
 const distPath = join(__dirname, '..', 'dist')
 if (existsSync(distPath)) {
   app.use(express.static(distPath))

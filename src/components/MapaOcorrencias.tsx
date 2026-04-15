@@ -434,7 +434,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         whenReady={() => {}}
       >
         <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          url="/api/tiles/{z}/{x}/{y}"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           maxZoom={19}
           keepBuffer={4}
