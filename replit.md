@@ -35,7 +35,7 @@ Sistema web completo de registro e gerenciamento de ocorrências para a Defesa C
 ```
 
 ## Workflows
-- **Start application**: `node server/index.js & npm run dev` → porta 5000 (webview)
+- **Start application**: `PORT=5000 node server/index.js` → porta 5000 (webview), servindo a API e o frontend estático já gerado em `dist/`
 
 ## Deployment
 - Build: `npm run build` (gera dist/)
