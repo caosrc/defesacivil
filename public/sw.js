@@ -1,5 +1,5 @@
-const APP_CACHE = 'defesacivil-app-v3'
-const TILE_CACHE = 'defesacivil-tiles-v1'
+const APP_CACHE = 'defesacivil-app-v4'
+const TILE_CACHE = 'defesacivil-tiles-v2'
 
 // Arquivos do app shell que serão cacheados na instalação
 const PRECACHE = [
@@ -43,11 +43,11 @@ function gerarUrlsTiles(latMin, latMax, lonMin, lonMax, zooms) {
   return urls
 }
 
-// Bounding box da área urbana de Ouro Branco – MG
-const OB_LAT_MIN = -20.560
-const OB_LAT_MAX = -20.480
-const OB_LON_MIN = -43.730
-const OB_LON_MAX = -43.660
+// Bounding box de 15 km de raio ao redor de Ouro Branco – MG
+const OB_LAT_MIN = -20.660
+const OB_LAT_MAX = -20.380
+const OB_LON_MIN = -43.850
+const OB_LON_MAX = -43.550
 
 // ------------------------------------------------------------------
 // Instalação: cacheia o app shell
@@ -100,12 +100,8 @@ self.addEventListener('fetch', (e) => {
               return res
             })
             .catch(() => {
-              // Tile cinza placeholder quando offline e não cacheado
-              const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256">
-                <rect width="256" height="256" fill="#d0d8e4"/>
-                <text x="128" y="135" text-anchor="middle" fill="#8898aa"
-                  font-family="sans-serif" font-size="13">offline</text>
-              </svg>`
+              // Tile neutro (bege-cinza, similar ao OSM) quando offline e não cacheado
+              const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#f0ede6"/></svg>`
               return new Response(svg, {
                 headers: { 'Content-Type': 'image/svg+xml' },
               })
@@ -168,7 +164,7 @@ self.addEventListener('message', (e) => {
 
   // Pré-cacheia tiles da região de Ouro Branco
   if (tipo === 'CACHEAR_MAPA_OURO_BRANCO') {
-    const { zooms = [12, 13, 14, 15] } = e.data
+    const { zooms = [10, 11, 12, 13, 14, 15] } = e.data
     const urls = gerarUrlsTiles(OB_LAT_MIN, OB_LAT_MAX, OB_LON_MIN, OB_LON_MAX, zooms)
     const total = urls.length
 
