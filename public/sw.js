@@ -1,4 +1,4 @@
-const APP_CACHE = 'defesacivil-app-v6'
+const APP_CACHE = 'defesacivil-app-v7'
 const TILE_CACHE = 'defesacivil-tiles-v3'
 
 // Arquivos do app shell que serão cacheados na instalação
