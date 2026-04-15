@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import compression from 'compression'
 import pg from 'pg'
 import JSZip from 'jszip'
 import { fileURLToPath } from 'url'
@@ -16,6 +17,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const app = express()
 const httpServer = createServer(app)
 
+app.use(compression())
 app.use(cors())
 app.use(express.json({ limit: '100mb' }))
 
@@ -540,8 +542,21 @@ app.get('/api/tiles/:z/:x/:y', async (req, res) => {
 
 const distPath = join(__dirname, '..', 'dist')
 if (existsSync(distPath)) {
-  app.use(express.static(distPath))
-  app.get(/(.*)/, (req, res) => {
+  // Assets com hash no nome → cache de 1 ano
+  app.use('/assets', express.static(join(distPath, 'assets'), {
+    maxAge: '1y',
+    immutable: true,
+  }))
+  // sw.js e index.html nunca devem ser cacheados para que atualizações cheguem rápido
+  app.use(express.static(distPath, {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('sw.js') || filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+      }
+    },
+  }))
+  app.get(/(.*)/, (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
     res.sendFile(join(distPath, 'index.html'))
   })
 }
