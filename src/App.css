@@ -2342,3 +2342,123 @@ input, select, textarea { font-family: inherit; }
 .login-agente-btn:active {
   transform: scale(0.97);
 }
+
+/* ═══════════════════════════════════════════════
+   MODAL DE SENHA
+═══════════════════════════════════════════════ */
+.senha-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.60);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1rem;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.senha-box {
+  background: #fff;
+  border-radius: 18px;
+  padding: 1.8rem 1.5rem 1.4rem;
+  width: 100%;
+  max-width: 320px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.32);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  animation: senhaEntrada 0.18s ease;
+}
+
+@keyframes senhaEntrada {
+  from { opacity: 0; transform: scale(0.92) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.senha-titulo {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #1a4b8c;
+  text-align: center;
+  margin-bottom: 0.1rem;
+}
+
+.senha-desc {
+  font-size: 0.82rem;
+  color: #6b7280;
+  text-align: center;
+  margin-bottom: 0.4rem;
+}
+
+.senha-input {
+  width: 100%;
+  border: 2px solid #c7d8f8;
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  font-size: 1.3rem;
+  letter-spacing: 0.25em;
+  text-align: center;
+  color: #1a4b8c;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.senha-input:focus {
+  border-color: #1a4b8c;
+}
+
+.senha-input-erro {
+  border-color: #ef4444 !important;
+  background: #fff5f5;
+  animation: senhaShake 0.3s ease;
+}
+
+@keyframes senhaShake {
+  0%,100% { transform: translateX(0); }
+  25%      { transform: translateX(-6px); }
+  75%      { transform: translateX(6px); }
+}
+
+.senha-erro {
+  font-size: 0.78rem;
+  color: #ef4444;
+  text-align: center;
+  font-weight: 600;
+}
+
+.senha-acoes {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+.senha-btn-cancelar {
+  flex: 1;
+  background: #f3f4f6;
+  color: #374151;
+  border: none;
+  border-radius: 10px;
+  padding: 0.65rem 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.senha-btn-cancelar:hover { background: #e5e7eb; }
+
+.senha-btn-confirmar {
+  flex: 1;
+  background: #1a4b8c;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 0.65rem 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.senha-btn-confirmar:hover { background: #163d73; }
