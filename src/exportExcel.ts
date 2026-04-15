@@ -396,7 +396,14 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
     ['motTanquePartida', 'Tanque/Partida', 'sn'],
   ]
 
-  const totalCols = 8 + ITENS_LABELS.length
+  const fotosFixas = ['Foto Esquerda', 'Foto Frontal', 'Foto Traseira', 'Foto Direita']
+  const maxAvarias = checklists.reduce((max, c) => Math.max(max, c.fotos_avarias?.length ?? 0), 0)
+  const fotosAvariasHeaders = Array.from({ length: maxAvarias }, (_, i) => `Foto Avaria ${i + 1}`)
+  const fotoHeaders = [...fotosFixas, ...fotosAvariasHeaders]
+  const totalCols = 8 + ITENS_LABELS.length + fotoHeaders.length
+  const FOTO_CHECKLIST_SIZE = 110
+  const FOTO_CHECKLIST_COL_W = 16
+  const FOTO_CHECKLIST_ROW_H = Math.round(FOTO_CHECKLIST_SIZE / ROW_H_PX_TO_PT)
 
   ws.mergeCells(1, 1, 1, totalCols)
   const titulo = ws.getCell('A1')
@@ -409,8 +416,13 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
   const cabecalhos = [
     'ID', 'Data', 'Motorista', 'Placa', 'KM', 'Avarias', 'Assinado', 'Observações',
     ...ITENS_LABELS.map(([, label]) => label),
+    ...fotoHeaders,
   ]
-  const larguras = [5, 12, 14, 10, 10, 8, 10, 28, ...Array(ITENS_LABELS.length).fill(14)]
+  const larguras = [
+    5, 12, 14, 10, 10, 8, 10, 28,
+    ...Array(ITENS_LABELS.length).fill(14),
+    ...Array(fotoHeaders.length).fill(FOTO_CHECKLIST_COL_W),
+  ]
   ws.columns = larguras.map(w => ({ width: w }))
 
   const headerRow = ws.getRow(2)
@@ -418,7 +430,7 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
     const cell = headerRow.getCell(i + 1)
     cell.value = h
     cell.font = { bold: true, size: 9, color: { argb: BRANCO } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: i < 8 ? AZUL : LARANJA } }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: i < 8 ? AZUL : i < 8 + ITENS_LABELS.length ? LARANJA : '166534' } }
     cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
     cell.border = { bottom: { style: 'thin', color: { argb: BRANCO } } }
   })
@@ -431,7 +443,14 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
     const linhaNum = 3 + idx
     const r = ws.getRow(linhaNum)
     const it = c.itens || {}
-    const [y,m,d] = c.data_checklist.split('-')
+    const [y,m,d] = String(c.data_checklist || '').split('T')[0].split('-')
+    const fotosLinha = [
+      c.foto_esquerda,
+      c.foto_frontal,
+      c.foto_traseira,
+      c.foto_direita,
+      ...(c.fotos_avarias || []),
+    ]
 
     const valores = [
       c.id,
@@ -446,6 +465,7 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
         const v = it[campo] || ''
         return tipo === 'bmr' ? (LABELS_BMR[v] || '—') : (LABELS_SN[v] || '—')
       }),
+      ...fotoHeaders.map((_, fotoIdx) => fotosLinha[fotoIdx] ? 'Foto' : '—'),
     ]
 
     valores.forEach((v, i) => { r.getCell(i + 1).value = v as ExcelJS.CellValue })
@@ -456,7 +476,7 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
       if (colNum <= 2) cell.alignment = { ...cell.alignment, horizontal: 'left' }
       if (idx % 2 === 1) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'f0f4ff' } }
 
-      if (colNum > 8) {
+      if (colNum > 8 && colNum <= 8 + ITENS_LABELS.length) {
         const itenIdx = colNum - 9
         const [campo, , tipo] = ITENS_LABELS[itenIdx]
         const raw = it[campo] || ''
@@ -470,9 +490,36 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[]):
           else if (raw === 'na') cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'f3f4f6' } }
         }
       }
+
+      if (colNum > 8 + ITENS_LABELS.length) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' }
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'd1d5db' } },
+          left: { style: 'thin', color: { argb: 'd1d5db' } },
+          bottom: { style: 'thin', color: { argb: 'd1d5db' } },
+          right: { style: 'thin', color: { argb: 'd1d5db' } },
+        }
+      }
     })
 
-    r.height = 16
+    const temFoto = fotosLinha.some(Boolean)
+    r.height = temFoto ? FOTO_CHECKLIST_ROW_H : 16
+
+    fotosLinha.forEach((fotoBase64, fotoIdx) => {
+      if (!fotoBase64) return
+      const base64Data = fotoBase64.includes(',') ? fotoBase64.split(',')[1] : fotoBase64
+      const ext = fotoBase64.startsWith('data:image/png') ? 'png' : 'jpeg'
+      const colIdx = 8 + ITENS_LABELS.length + fotoIdx
+      try {
+        const imageId = wb.addImage({ base64: base64Data, extension: ext })
+        ws.addImage(imageId, {
+          tl: { col: colIdx, row: linhaNum - 1 },
+          ext: { width: FOTO_CHECKLIST_SIZE, height: FOTO_CHECKLIST_SIZE },
+        })
+      } catch {
+        // ignora imagem inválida
+      }
+    })
   })
 
   const buffer = await wb.xlsx.writeBuffer()
