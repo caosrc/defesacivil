@@ -11,7 +11,7 @@ import { listarOcorrencias, criarOcorrencia } from './api'
 import { cacheOcorrencias, getCachedOcorrencias, getPending, removePending, countPending } from './offline'
 import { exportarTodasExcel } from './exportExcel'
 
-type Aba = 'lista' | 'mapa' | 'nova' | 'viatura'
+type Aba = 'lista' | 'mapa' | 'nova' | 'viatura' | 'escala'
 
 function dataLocal(iso: string): string {
   const d = new Date(iso)
@@ -32,6 +32,31 @@ function NivelBadge({ nivel }: { nivel: NivelRisco }) {
     <span className={`nivel-badge nivel-${nivel}`}>
       {nivel === 'baixo' ? '🟢 Baixo' : nivel === 'medio' ? '🟡 Médio' : '🔴 Alto'}
     </span>
+  )
+}
+
+function EscalaEmDesenvolvimento() {
+  return (
+    <div className="escala-dev">
+      <div className="escala-card">
+        <div className="escala-ilustracao" aria-hidden="true">
+          <div className="escala-calendario">
+            <div className="escala-cal-top" />
+            <div className="escala-cal-grid">
+              {Array.from({ length: 12 }, (_, i) => <span key={i} className={i % 4 === 0 ? 'ativo' : ''} />)}
+            </div>
+          </div>
+          <div className="escala-pessoas">
+            <span />
+            <span />
+            <span />
+          </div>
+        </div>
+        <h2>Escala</h2>
+        <strong>Em desenvolvimento</strong>
+        <p>Esta área será usada futuramente para organizar a escala das pessoas que estão trabalhando.</p>
+      </div>
+    </div>
   )
 }
 
@@ -390,6 +415,8 @@ export default function App() {
         )}
 
         {aba === 'viatura' && <ChecklistViatura />}
+
+        {aba === 'escala' && <EscalaEmDesenvolvimento />}
       </div>
 
       {/* Bottom nav */}
@@ -408,6 +435,10 @@ export default function App() {
         <button className={`nav-btn ${aba === 'viatura' ? 'ativo' : ''}`} onClick={() => setAba('viatura')}>
           <span className="nav-emoji">🚗</span>
           <span>Viatura</span>
+        </button>
+        <button className={`nav-btn ${aba === 'escala' ? 'ativo' : ''}`} onClick={() => setAba('escala')}>
+          <span className="nav-emoji">👥</span>
+          <span>Escala</span>
         </button>
       </nav>
 

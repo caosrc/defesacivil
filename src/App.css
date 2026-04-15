@@ -699,6 +699,110 @@ input, select, textarea { font-family: inherit; }
 .nav-nova:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(224,95,0,0.5); }
 .nav-nova-icone { font-size: 1.6rem; margin-top: -2px; }
 
+/* ── Escala em desenvolvimento ───────────────────────────────── */
+.escala-dev {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  overflow-y: auto;
+}
+
+.escala-card {
+  width: 100%;
+  background: white;
+  border-radius: 20px;
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(26,75,140,0.14);
+  border: 1px solid #dbeafe;
+}
+
+.escala-ilustracao {
+  width: 190px;
+  height: 160px;
+  margin: 0 auto 1rem;
+  position: relative;
+}
+
+.escala-calendario {
+  position: absolute;
+  left: 24px;
+  top: 8px;
+  width: 132px;
+  height: 118px;
+  background: #eff6ff;
+  border: 3px solid #1a4b8c;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 12px 24px rgba(26,75,140,0.18);
+}
+
+.escala-cal-top {
+  height: 28px;
+  background: linear-gradient(90deg, #1a4b8c, #1a6bbf);
+}
+
+.escala-cal-grid {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+}
+
+.escala-cal-grid span {
+  height: 12px;
+  border-radius: 4px;
+  background: #bfdbfe;
+}
+
+.escala-cal-grid span.ativo {
+  background: #E05F00;
+}
+
+.escala-pessoas {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.escala-pessoas span {
+  width: 38px;
+  height: 46px;
+  border-radius: 22px 22px 12px 12px;
+  background: linear-gradient(180deg, #f59e0b 0 34%, #1a4b8c 34%);
+  border: 3px solid white;
+  box-shadow: 0 6px 12px rgba(0,0,0,0.16);
+}
+
+.escala-pessoas span:nth-child(2) {
+  height: 58px;
+  background: linear-gradient(180deg, #fbbf24 0 34%, #E05F00 34%);
+}
+
+.escala-card h2 {
+  color: #1a4b8c;
+  font-size: 1.45rem;
+  margin-bottom: 0.35rem;
+}
+
+.escala-card strong {
+  display: inline-block;
+  color: #E05F00;
+  font-size: 1.05rem;
+  margin-bottom: 0.55rem;
+}
+
+.escala-card p {
+  color: #6b7280;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
 /* ── Formulário / Tela Nova ───────────────────────────────────── */
 .tela {
   min-height: 100vh;
