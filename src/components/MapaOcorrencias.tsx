@@ -14,12 +14,13 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 })
 
-// ── Dispositivo local (persistido no localStorage) ──────────────
+// ── Dispositivo local ────────────────────────────────────────────
+// ID usa sessionStorage → único por aba/celular (não compartilhado entre abas)
 function getDispositivoId(): string {
-  let id = localStorage.getItem('defesacivil-device-id')
+  let id = sessionStorage.getItem('defesacivil-device-id')
   if (!id) {
-    id = Math.random().toString(36).substring(2, 7).toUpperCase()
-    localStorage.setItem('defesacivil-device-id', id)
+    id = Math.random().toString(36).substring(2, 9).toUpperCase()
+    sessionStorage.setItem('defesacivil-device-id', id)
   }
   return id
 }
