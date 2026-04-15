@@ -270,7 +270,8 @@ export default function ChecklistViatura() {
   const hoje = dataLocalInput()
   const [data, setData] = useState(hoje)
   const [km, setKm] = useState('')
-  const [placa, setPlaca] = useState('')
+  const [placa, setPlaca] = useState('QXW1E43')
+  const [editandoPlaca, setEditandoPlaca] = useState(false)
   const [motorista, setMotorista] = useState('')
   const [fotosAvarias, setFotosAvarias] = useState<string[]>([])
   const [fotoFrontal, setFotoFrontal] = useState<string | null>(null)
@@ -309,7 +310,7 @@ export default function ChecklistViatura() {
   }, [modo])
 
   function resetForm() {
-    setData(hoje); setKm(''); setPlaca(''); setMotorista('')
+    setData(hoje); setKm(''); setPlaca('QXW1E43'); setEditandoPlaca(false); setMotorista('')
     setFotosAvarias([]); setFotoFrontal(null); setFotoTraseira(null)
     setFotoDireita(null); setFotoEsquerda(null)
     setItens(itensIniciais()); setObservacoes(''); setAssinaturaData(''); setErro('')
@@ -519,8 +520,25 @@ export default function ChecklistViatura() {
               <div className="ck-hf-row">
                 <div className="ck-hf-field" style={{ flex: 1 }}>
                   <label className="ck-hf-label">Placa</label>
-                  <input className="ck-hf-input" type="text" placeholder="Ex: ABC-1234"
-                    value={placa} onChange={e => setPlaca(e.target.value.toUpperCase())} />
+                  {editandoPlaca ? (
+                    <input
+                      className="ck-hf-input"
+                      type="text"
+                      placeholder="Ex: ABC-1234"
+                      value={placa}
+                      autoFocus
+                      onChange={e => setPlaca(e.target.value.toUpperCase())}
+                      onBlur={() => setEditandoPlaca(false)}
+                      onKeyDown={e => { if (e.key === 'Enter') setEditandoPlaca(false) }}
+                    />
+                  ) : (
+                    <span
+                      className="ck-placa-badge"
+                      onClick={() => setEditandoPlaca(true)}
+                    >
+                      {placa || '—'}
+                    </span>
+                  )}
                 </div>
                 <div className="ck-hf-field" style={{ flex: 1 }}>
                   <label className="ck-hf-label">KM</label>

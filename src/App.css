@@ -1929,6 +1929,16 @@ input, select, textarea { font-family: inherit; }
   font-size: 0.88rem; color: #1f2937; min-width: 0;
   font-family: inherit;
 }
+.ck-placa-badge {
+  display: inline-block;
+  background: #1a4b8c; color: white;
+  font-size: 0.82rem; font-weight: 700; letter-spacing: 0.06em;
+  padding: 0.18rem 0.55rem; border-radius: 5px;
+  cursor: pointer; user-select: none;
+  border: 1.5px solid #1a4b8c;
+  transition: background 0.15s, border-color 0.15s;
+}
+.ck-placa-badge:hover { background: #15397a; border-color: #15397a; }
 
 /* Section title bars */
 .ck-section-title {
