@@ -65,6 +65,36 @@ function criarIconeViatura(cor = '#1a4b8c', emoji = '🚒') {
   })
 }
 
+function criarIconeAgente(nome: string, cor = '#1a4b8c') {
+  const nomeCurto = nome.length > 12 ? nome.slice(0, 12) + '…' : nome
+  return L.divIcon({
+    className: '',
+    html: `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+      <div style="
+        background:${cor};
+        color:white;
+        font-size:0.65rem;
+        font-weight:700;
+        padding:2px 7px;
+        border-radius:10px;
+        white-space:nowrap;
+        box-shadow:0 2px 6px rgba(0,0,0,0.35);
+        font-family:sans-serif;
+        letter-spacing:0.02em;
+      ">${nomeCurto}</div>
+      <div style="
+        width:38px;height:38px;border-radius:50%;
+        background:${cor};border:3px solid white;
+        box-shadow:0 0 0 3px ${cor}55, 0 4px 14px rgba(0,0,0,0.4);
+        display:flex;align-items:center;justify-content:center;font-size:20px;
+      ">🧑</div>
+    </div>`,
+    iconSize: [60, 62],
+    iconAnchor: [30, 62],
+    popupAnchor: [0, -66],
+  })
+}
+
 // Cores para outros dispositivos (índice circular)
 const CORES_EQUIPES = ['#dc2626', '#d97706', '#7c3aed', '#0891b2', '#059669', '#db2777']
 const EMOJIS_EQUIPES = ['🚑', '🚓', '🚛', '🛻', '🏍️', '🚐']
@@ -426,10 +456,10 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
               radius={22}
               pathOptions={{ color: '#1a4b8c', fillColor: 'rgba(26,75,140,0.18)', weight: 2, fillOpacity: 1 }}
             />
-            <Marker position={posicaoAtual} icon={criarIconeViatura('#1a4b8c', '🚒')} zIndexOffset={1000}>
+            <Marker position={posicaoAtual} icon={criarIconeAgente(nomeLocal, '#1a4b8c')} zIndexOffset={1000}>
               <Popup>
                 <div style={{ minWidth: 155, fontFamily: 'inherit' }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 2 }}>🚒 {nomeLocal} (você)</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 2 }}>🧑 {nomeLocal} (você)</div>
                   <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Precisão: ±{Math.round(precisao)} m</div>
                   {velocidadeKmh !== null && (
                     <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Velocidade: {velocidadeKmh} km/h</div>
@@ -585,7 +615,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
 
             {/* Dispositivo local */}
             <div className="mapa-equipe-item mapa-equipe-item--local">
-              <span className="mapa-equipe-icone" style={{ background: '#1a4b8c' }}>🚒</span>
+              <span className="mapa-equipe-icone" style={{ background: '#1a4b8c' }}>🧑</span>
               <div className="mapa-equipe-info">
                 {editandoNome ? (
                   <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
