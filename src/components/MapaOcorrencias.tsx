@@ -827,11 +827,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         </div>
       )}
 
-      {comGeo.length === 0 && (
-        <div className="mapa-sem-geo">
-          📍 Nenhuma ocorrência com GPS ainda. Registre uma com localização para aparecer aqui.
-        </div>
-      )}
     </div>
   )
 }
