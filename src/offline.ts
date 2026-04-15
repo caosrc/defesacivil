@@ -195,7 +195,7 @@ export type ProgressoMapa = {
 // Chama onProgresso com atualizações até status === 'concluido'
 export function baixarMapaOffline(
   onProgresso: (p: ProgressoMapa) => void,
-  zooms = [12, 13, 14, 15, 16]
+  zooms = [12, 13, 14, 15]
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {

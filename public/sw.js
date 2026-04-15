@@ -43,11 +43,11 @@ function gerarUrlsTiles(latMin, latMax, lonMin, lonMax, zooms) {
   return urls
 }
 
-// Bounding box de Ouro Branco – MG (com margem extra)
-const OB_LAT_MIN = -20.65
-const OB_LAT_MAX = -20.40
-const OB_LON_MIN = -43.82
-const OB_LON_MAX = -43.60
+// Bounding box da área urbana de Ouro Branco – MG
+const OB_LAT_MIN = -20.560
+const OB_LAT_MAX = -20.480
+const OB_LON_MIN = -43.730
+const OB_LON_MAX = -43.660
 
 // ------------------------------------------------------------------
 // Instalação: cacheia o app shell
@@ -168,7 +168,7 @@ self.addEventListener('message', (e) => {
 
   // Pré-cacheia tiles da região de Ouro Branco
   if (tipo === 'CACHEAR_MAPA_OURO_BRANCO') {
-    const { zooms = [12, 13, 14, 15, 16] } = e.data
+    const { zooms = [12, 13, 14, 15] } = e.data
     const urls = gerarUrlsTiles(OB_LAT_MIN, OB_LAT_MAX, OB_LON_MIN, OB_LON_MAX, zooms)
     const total = urls.length
 

@@ -686,14 +686,18 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
             <button onClick={() => setPainelOfflineAberto(false)}>✕</button>
           </div>
           <div className="mapa-offline-painel-corpo">
+            <div className="mapa-offline-info" style={{ background: '#eff6ff', borderColor: '#bfdbfe', color: '#1e40af' }}>
+              🌐 Com internet, o mapa carrega normalmente. Salve offline para usar sem conexão.
+            </div>
+
             {tilesCacheados > 0 && (
               <div className="mapa-offline-info">
-                ✅ {tilesCacheados.toLocaleString('pt-BR')} tiles salvos no dispositivo
+                ✅ {tilesCacheados.toLocaleString('pt-BR')} tiles salvos — mapa disponível offline
               </div>
             )}
             {tilesCacheados === 0 && statusOffline !== 'baixando' && (
               <div className="mapa-offline-info mapa-offline-info--aviso">
-                📵 Mapa ainda não baixado. Sem conexão, o mapa ficará cinza.
+                📵 Mapa não salvo ainda. Sem internet o mapa ficará cinza.
               </div>
             )}
             {statusOffline === 'baixando' && progressoMapa && (
@@ -713,17 +717,17 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
                 disabled={!navigator.onLine}
               >
                 {navigator.onLine
-                  ? tilesCacheados > 0 ? '🔄 Atualizar mapa offline' : '📥 Baixar mapa offline (zoom 12–16)'
+                  ? tilesCacheados > 0 ? '🔄 Atualizar mapa offline' : '📥 Salvar mapa de Ouro Branco'
                   : '📵 Sem conexão para baixar'}
               </button>
             )}
             {tilesCacheados > 0 && statusOffline !== 'baixando' && (
               <button className="mapa-offline-btn-limpar" onClick={limparMapa}>
-                🗑 Apagar mapa offline
+                🗑 Apagar mapa salvo
               </button>
             )}
             <div className="mapa-offline-aviso">
-              O GPS do dispositivo funciona offline por hardware. Apenas os tiles visuais precisam ser baixados com conexão.
+              Cobre apenas a área urbana de Ouro Branco — MG. O GPS funciona offline por hardware do aparelho.
             </div>
           </div>
         </div>
