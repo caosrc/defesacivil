@@ -241,10 +241,24 @@ function CkHeader({ cols }: { cols: string[] }) {
 }
 
 function formatarData(iso: string) {
-  const [y, m, d] = iso.split('-')
+  const dataIso = String(iso || '').split('T')[0]
+  const [y, m, d] = dataIso.split('-')
   const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-  const dt = new Date(`${iso}T12:00:00`)
+  const dt = new Date(Number(y), Number(m) - 1, Number(d), 12)
   return `${dias[dt.getDay()]}, ${d}/${m}/${y}`
+}
+
+function dataLocalInput(data = new Date()) {
+  const y = data.getFullYear()
+  const m = String(data.getMonth() + 1).padStart(2, '0')
+  const d = String(data.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+function dataCurta(iso: string) {
+  const dataIso = String(iso || '').split('T')[0]
+  const [y, m, d] = dataIso.split('-')
+  return y && m && d ? `${d}/${m}/${y}` : '—'
 }
 
 export default function ChecklistViatura() {
@@ -253,7 +267,7 @@ export default function ChecklistViatura() {
   const [carregando, setCarregando] = useState(true)
   const [selecionado, setSelecionado] = useState<ChecklistData | null>(null)
 
-  const hoje = new Date().toISOString().split('T')[0]
+  const hoje = dataLocalInput()
   const [data, setData] = useState(hoje)
   const [km, setKm] = useState('')
   const [placa, setPlaca] = useState('')
@@ -372,11 +386,24 @@ export default function ChecklistViatura() {
 
   function exportarChecklistPdf(c: ChecklistData) {
     const it = (c.itens || {}) as Record<string, string>
-    const [y, m, d] = c.data_checklist.split('-')
-    const linhas = ITENS_PDF.map(([campo, label]) => {
-      const valor = LABELS_VALOR[it[campo]] || '—'
-      return `<tr><td>${htmlEscape(label)}</td><td>${htmlEscape(valor)}</td></tr>`
-    }).join('')
+    const gruposPdf = [
+      { titulo: 'Conservação', opcoes: ['bom', 'medio', 'ruim'], labels: ['Bom', 'Médio', 'Ruim'], campos: ITENS_PDF.filter(([, , tipo]) => tipo === 'bmr') },
+      { titulo: 'Luzes Traseiras e Dianteiras', opcoes: ['sim', 'nao', 'na'], labels: ['Sim', 'Não', 'N/A'], campos: ITENS_PDF.filter(([campo]) => String(campo).startsWith('ltz') || String(campo).startsWith('ldz')) },
+      { titulo: 'Segurança', opcoes: ['sim', 'nao', 'na'], labels: ['Sim', 'Não', 'N/A'], campos: ITENS_PDF.filter(([campo]) => String(campo).startsWith('seg')) },
+      { titulo: 'Motor', opcoes: ['sim', 'nao', 'na'], labels: ['Sim', 'Não', 'N/A'], campos: ITENS_PDF.filter(([campo]) => String(campo).startsWith('mot')) },
+    ]
+    const tabelasItens = gruposPdf.map((grupo) => `
+      <h2>${htmlEscape(grupo.titulo)}</h2>
+      <table class="check-table">
+        <thead><tr><th>Item</th>${grupo.labels.map((label) => `<th>${label}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${grupo.campos.map(([campo, label]) => {
+            const valor = it[campo] || ''
+            return `<tr><td>${htmlEscape(label)}</td>${grupo.opcoes.map((opcao) => `<td class="box-cell"><span class="check-box ${valor === opcao ? `marked marked-${opcao}` : ''}">${valor === opcao ? '✓' : ''}</span></td>`).join('')}</tr>`
+          }).join('')}
+        </tbody>
+      </table>
+    `).join('')
     const fotos = [
       ['Esquerda', c.foto_esquerda],
       ['Frontal', c.foto_frontal],
@@ -390,17 +417,17 @@ export default function ChecklistViatura() {
       return
     }
     win.document.write(`<!doctype html><html><head><title>Checklist ${c.id}</title><style>
-      body{font-family:Arial,sans-serif;color:#111827;margin:24px}h1{background:#1a4b8c;color:white;padding:12px;font-size:18px;text-align:center}h2{color:#1a4b8c;border-bottom:2px solid #1a4b8c;font-size:14px;margin-top:18px}.info{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.box{border:1px solid #d1d5db;padding:8px;border-radius:6px}.label{font-size:11px;color:#6b7280;text-transform:uppercase}.valor{font-weight:bold;margin-top:3px}table{width:100%;border-collapse:collapse;margin-top:8px}td,th{border:1px solid #d1d5db;padding:6px;font-size:12px}th{background:#eff6ff}.fotos{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.fotos div{border:1px solid #d1d5db;padding:6px;text-align:center}.fotos img{max-width:100%;max-height:180px;object-fit:contain}.assinatura{border:1px solid #111827;height:120px;display:flex;align-items:center;justify-content:center}.assinatura img{max-height:110px;max-width:100%}.obs{white-space:pre-wrap;border:1px solid #d1d5db;padding:8px;min-height:50px}@media print{button{display:none}body{margin:10mm}}
+      body{font-family:Arial,sans-serif;color:#111827;margin:24px}h1{background:#1a4b8c;color:white;padding:12px;font-size:18px;text-align:center}h2{color:#1a4b8c;border-bottom:2px solid #1a4b8c;font-size:14px;margin-top:16px}.info{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.box{border:1px solid #d1d5db;padding:8px;border-radius:6px}.label{font-size:11px;color:#6b7280;text-transform:uppercase}.valor{font-weight:bold;margin-top:3px}table{width:100%;border-collapse:collapse;margin-top:8px;page-break-inside:avoid}td,th{border:1px solid #d1d5db;padding:5px;font-size:12px}th{background:#eff6ff;color:#1a4b8c}.check-table td:first-child{width:55%;font-weight:600}.box-cell{text-align:center;width:15%}.check-box{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:2px solid #9ca3af;border-radius:3px;font-size:13px;font-weight:bold;color:white}.marked-bom,.marked-sim{background:#16a34a;border-color:#15803d}.marked-medio{background:#f59e0b;border-color:#d97706}.marked-ruim,.marked-nao{background:#dc2626;border-color:#b91c1c}.marked-na{background:#6b7280;border-color:#4b5563}.fotos{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.fotos div{border:1px solid #d1d5db;padding:6px;text-align:center}.fotos img{max-width:100%;max-height:180px;object-fit:contain}.assinatura{border:1px solid #111827;height:120px;display:flex;align-items:center;justify-content:center}.assinatura img{max-height:110px;max-width:100%}.obs{white-space:pre-wrap;border:1px solid #d1d5db;padding:8px;min-height:50px}@media print{button{display:none}body{margin:10mm}h2{break-after:avoid}.check-table{font-size:11px}}
     </style></head><body>
       <button onclick="window.print()" style="position:fixed;right:16px;top:16px;padding:10px 14px;background:#166534;color:white;border:0;border-radius:8px;font-weight:bold">Salvar em PDF</button>
       <h1>DEFESA CIVIL OURO BRANCO — CHECKLIST DA VIATURA #${htmlEscape(c.id)}</h1>
       <div class="info">
-        <div class="box"><div class="label">Data</div><div class="valor">${htmlEscape(`${d}/${m}/${y}`)}</div></div>
+        <div class="box"><div class="label">Data</div><div class="valor">${htmlEscape(dataCurta(c.data_checklist))}</div></div>
         <div class="box"><div class="label">Motorista</div><div class="valor">${htmlEscape(c.motorista || '—')}</div></div>
         <div class="box"><div class="label">Placa</div><div class="valor">${htmlEscape(c.placa || '—')}</div></div>
         <div class="box"><div class="label">KM</div><div class="valor">${htmlEscape(c.km || '—')}</div></div>
       </div>
-      <h2>Itens verificados</h2><table><thead><tr><th>Item</th><th>Resposta</th></tr></thead><tbody>${linhas}</tbody></table>
+      ${tabelasItens}
       <h2>Fotos do veículo</h2><div class="fotos">${fotos || '<p>Sem fotos do veículo.</p>'}</div>
       <h2>Fotos de avaria</h2><div class="fotos">${avarias || '<p>Sem fotos de avaria.</p>'}</div>
       <h2>Observações</h2><div class="obs">${htmlEscape(c.observacoes || '—')}</div>
