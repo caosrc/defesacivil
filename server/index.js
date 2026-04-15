@@ -138,6 +138,16 @@ async function gerarRelatorioVistoria(ocorrencia) {
   for (const [alvo, valor] of Object.entries(substituicoes)) {
     documentXml = documentXml.split(alvo).join(valor)
   }
+
+  if (ocorrencia.tipo === 'Vistoria Ambiental') {
+    documentXml = documentXml
+      .split('Cristiane Caroline Campos Lopes').join('Talita Oliveira de Ara\u00FAjo')
+      .split('Engenheira Civil - Coordenadoria Municipal de Prote\u00E7\u00E3o e Defesa Civil').join('Analista Ambiental')
+      .split('Engenheira Civil \u2013 Coordenadoria Municipal de Prote\u00E7\u00E3o e Defesa Civil').join('Analista Ambiental')
+      .split('Engenheira Civil - Coordenadoria Municipal de Proteção e Defesa Civil').join('Analista Ambiental')
+      .split('Engenheira Civil – Coordenadoria Municipal de Proteção e Defesa Civil').join('Analista Ambiental')
+  }
+
   documentXml = documentXml
     .replace(/[“”]/g, '')
     .replace(/,\s*Zona Rural de Olaria/g, '')
