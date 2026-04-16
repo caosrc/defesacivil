@@ -19,6 +19,7 @@ export interface Ocorrencia {
   data_ocorrencia: string | null
   created_at: string
   agentes: string[]
+  responsavel_registro: string | null
   _offline?: boolean
   _localId?: number
 }

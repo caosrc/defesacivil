@@ -1640,6 +1640,8 @@ input, select, textarea { font-family: inherit; }
 .info-icone { font-size: 1rem; margin-top: 2px; flex-shrink: 0; }
 .info-label { font-size: 0.72rem; font-weight: 700; color: #1a4b8c; text-transform: uppercase; letter-spacing: 0.3px; }
 .info-valor { font-size: 0.88rem; color: #374151; margin-top: 2px; line-height: 1.5; }
+.info-row-destaque { background: #eff6ff; border-radius: 8px; padding: 0.5rem 0.7rem; border-bottom: none; margin-bottom: 0.25rem; }
+.info-valor-destaque { font-size: 0.95rem; font-weight: 700; color: #1a4b8c; }
 
 .fotos-detalhe { display: flex; flex-direction: column; gap: 0.4rem; }
 .detalhe-label-row { font-size: 0.72rem; font-weight: 700; color: #1a4b8c; text-transform: uppercase; letter-spacing: 0.3px; }

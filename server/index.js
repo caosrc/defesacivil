@@ -362,6 +362,7 @@ async function initDb() {
   await pool.query(`ALTER TABLE checklists_viatura ADD COLUMN IF NOT EXISTS placa VARCHAR(20)`)
   await pool.query(`ALTER TABLE checklists_viatura ADD COLUMN IF NOT EXISTS itens JSONB NOT NULL DEFAULT '{}'::jsonb`)
   await pool.query(`ALTER TABLE checklists_viatura ADD COLUMN IF NOT EXISTS assinatura_data TEXT`)
+  await pool.query(`ALTER TABLE ocorrencias ADD COLUMN IF NOT EXISTS responsavel_registro VARCHAR(255)`)
 }
 
 app.get('/api/ocorrencias', async (req, res) => {
@@ -375,12 +376,12 @@ app.get('/api/ocorrencias', async (req, res) => {
 })
 
 app.post('/api/ocorrencias', async (req, res) => {
-  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes } = req.body
+  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes, responsavel_registro } = req.body
   try {
     const result = await pool.query(
-      `INSERT INTO ocorrencias (tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
-      [tipo, natureza, subnatureza || null, nivel_risco, status_oc || 'ativo', JSON.stringify(Array.isArray(fotos) ? fotos : []), lat || null, lng || null, endereco || null, proprietario || null, situacao || null, recomendacao || null, conclusao || null, data_ocorrencia || null, JSON.stringify(Array.isArray(agentes) ? agentes : [])]
+      `INSERT INTO ocorrencias (tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes, responsavel_registro)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+      [tipo, natureza, subnatureza || null, nivel_risco, status_oc || 'ativo', JSON.stringify(Array.isArray(fotos) ? fotos : []), lat || null, lng || null, endereco || null, proprietario || null, situacao || null, recomendacao || null, conclusao || null, data_ocorrencia || null, JSON.stringify(Array.isArray(agentes) ? agentes : []), responsavel_registro || null]
     )
     res.status(201).json(result.rows[0])
   } catch (err) {

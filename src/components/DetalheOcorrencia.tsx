@@ -340,6 +340,9 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                 {o.situacao && <InfoRow icone="📝" label="Situação" valor={o.situacao} />}
                 {o.recomendacao && <InfoRow icone="💡" label="Recomendação" valor={o.recomendacao} />}
                 {o.conclusao && <InfoRow icone="✅" label="Conclusão" valor={o.conclusao} />}
+                {o.responsavel_registro && (
+                  <InfoRow icone="🪪" label="Responsável pelo Registro" valor={o.responsavel_registro!} destaque />
+                )}
                 {Array.isArray(o.agentes) && o.agentes.length > 0 && (
                   <InfoRow icone="👷" label="Agentes Empenhados" valor={o.agentes.join(', ')} />
                 )}
@@ -666,13 +669,13 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   )
 }
 
-function InfoRow({ icone, label, valor }: { icone: string; label: string; valor: string }) {
+function InfoRow({ icone, label, valor, destaque }: { icone: string; label: string; valor: string; destaque?: boolean }) {
   return (
-    <div className="info-row">
+    <div className={`info-row${destaque ? ' info-row-destaque' : ''}`}>
       <span className="info-icone">{icone}</span>
       <div>
         <div className="info-label">{label}</div>
-        <div className="info-valor">{valor}</div>
+        <div className={`info-valor${destaque ? ' info-valor-destaque' : ''}`}>{valor}</div>
       </div>
     </div>
   )

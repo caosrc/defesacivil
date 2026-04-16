@@ -143,6 +143,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       recomendacao: recomendacao || null,
       conclusao: conclusao || null,
       agentes,
+      responsavel_registro: sessionStorage.getItem('defesacivil-agente-sessao') || null,
     }
 
     if (isOnline) {
