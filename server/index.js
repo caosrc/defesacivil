@@ -82,6 +82,14 @@ wss.on('connection', (ws) => {
         }, ws)
       }
 
+      if (msg.tipo === 'parar') {
+        const idParar = msg.id || dispositivoId
+        if (dispositivosOnline.has(idParar)) {
+          dispositivosOnline.delete(idParar)
+          broadcastParaTodos({ tipo: 'remover', id: idParar })
+        }
+      }
+
       if (msg.tipo === 'ping') {
         ws.send(JSON.stringify({ tipo: 'pong' }))
       }
@@ -102,16 +110,16 @@ wss.on('connection', (ws) => {
   })
 })
 
-// Limpa dispositivos silenciosos há mais de 3 minutos
+// Limpa dispositivos silenciosos há mais de 90 segundos
 setInterval(() => {
-  const limite = Date.now() - 3 * 60 * 1000
+  const limite = Date.now() - 90 * 1000
   for (const [id, d] of dispositivosOnline) {
     if (d.ts < limite || d.ws.readyState !== 1) {
       dispositivosOnline.delete(id)
       broadcastParaTodos({ tipo: 'remover', id })
     }
   }
-}, 60 * 1000)
+}, 15 * 1000)
 
 const MESES = [
   'janeiro',

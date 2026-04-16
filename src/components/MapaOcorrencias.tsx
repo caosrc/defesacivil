@@ -163,6 +163,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const [selecionada, setSelecionada] = useState<Ocorrencia | null>(null)
   const [legendaAberta, setLegendaAberta] = useState(false)
   const [camadaMapa, setCamadaMapa] = useState<CamadaMapa>('padrao')
+  const [mostrarOcorrencias, setMostrarOcorrencias] = useState(false)
 
   // GPS local
   const [statusGps, setStatusGps] = useState<StatusGps>('inativo')
@@ -276,7 +277,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
       if (!wsDesligandoRef.current) {
         setTimeout(() => {
           if (!wsDesligandoRef.current) conectarWs()
-        }, 4000)
+        }, 1500)
       }
     }
 
@@ -370,6 +371,9 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current)
       watchIdRef.current = null
+    }
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ tipo: 'parar', id: dispositivoId.current }))
     }
     setStatusGps('inativo')
     setPosicaoAtual(null)
@@ -541,7 +545,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         })}
 
         {/* Ocorrências — todas, com ou sem GPS */}
-        {ocorrencias.map((o) => {
+        {mostrarOcorrencias && ocorrencias.map((o) => {
           const temGps = !!(o.lat && o.lng)
           const pos: [number, number] = temGps ? [o.lat!, o.lng!] : coordsSemGps(o.id)
           return (
@@ -619,6 +623,12 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
           onClick={() => setCamadaMapa('satelite')}
         >
           🛰️ Satélite
+        </button>
+        <button
+          className={`mapa-camada-btn ${mostrarOcorrencias ? 'ativo' : ''}`}
+          onClick={() => { setMostrarOcorrencias((v) => !v); setSelecionada(null) }}
+        >
+          📋 Ocorrências
         </button>
       </div>
 

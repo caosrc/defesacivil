@@ -480,6 +480,9 @@ export default function App() {
                         <span>{o.tipo}</span>
                         {o.endereco && <span>📍 {o.endereco}</span>}
                         <span>🕐 {new Date(o.created_at).toLocaleDateString('pt-BR')}</span>
+                        {Array.isArray(o.agentes) && o.agentes.length > 0 && (
+                          <span>👤 {o.agentes.join(', ')}</span>
+                        )}
                       </div>
                     </div>
                   </button>

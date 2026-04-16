@@ -28,7 +28,10 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const [situacao, setSituacao] = useState('')
   const [recomendacao, setRecomendacao] = useState('')
   const [conclusao, setConclusao] = useState('')
-  const [agentes, setAgentes] = useState<string[]>([])
+  const [agentes, setAgentes] = useState<string[]>(() => {
+    const agenteLogado = sessionStorage.getItem('defesacivil-agente-sessao')
+    return agenteLogado ? [agenteLogado] : []
+  })
   const [buscandoGps, setBuscandoGps] = useState(false)
   const [geocodificando, setGeocodificando] = useState(false)
   const [geoMsg, setGeoMsg] = useState('')
