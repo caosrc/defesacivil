@@ -86,6 +86,7 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 - Mapa OpenStreetMap centrado em Ouro Branco com marcadores por tipo (emoji + cor)
 - Popup no marcador com botão "Ver detalhes"
 - Modal de detalhe com exportação KMZ individual
+- Edição de coordenadas no detalhe da ocorrência feita apenas em graus, minutos e segundos, com direção N/S e L/O; o app converte internamente para latitude/longitude decimal ao salvar.
 - Botão “Salvar relatório” no detalhe da ocorrência, gerando DOCX com dados, coordenadas em graus/minutos/segundos e até 6 fotos
 - Exportação KMZ global de todas as ocorrências com GPS
 - Exportação Excel de todas as ocorrências

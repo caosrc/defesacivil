@@ -5,7 +5,7 @@ import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES } fr
 import { deletarOcorrencia, atualizarOcorrencia } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
-import { formatarCoordenadas, parseDateLocal, decimalParaGms } from '../utils'
+import { formatarCoordenadas, parseDateLocal } from '../utils'
 import ModalSenha from './ModalSenha'
 
 interface Props {
@@ -13,6 +13,56 @@ interface Props {
   onFechar: () => void
   onDeletado: () => void
   onAtualizado: (o: Ocorrencia) => void
+}
+
+type DmsEdicao = {
+  graus: string
+  minutos: string
+  segundos: string
+  direcao: string
+}
+
+function decimalParaPartesGms(valor: number | null, positivo: string, negativo: string): DmsEdicao {
+  if (valor == null) return { graus: '', minutos: '', segundos: '', direcao: negativo }
+  const absoluto = Math.abs(valor)
+  let graus = Math.floor(absoluto)
+  const minutosFloat = (absoluto - graus) * 60
+  let minutos = Math.floor(minutosFloat)
+  let segundosNum = Math.round((minutosFloat - minutos) * 6000) / 100
+  if (segundosNum >= 60) {
+    segundosNum = 0
+    minutos += 1
+  }
+  if (minutos >= 60) {
+    minutos = 0
+    graus += 1
+  }
+  const segundos = segundosNum.toFixed(2).replace('.', ',')
+  return {
+    graus: String(graus),
+    minutos: String(minutos),
+    segundos,
+    direcao: valor >= 0 ? positivo : negativo,
+  }
+}
+
+function partesGmsParaDecimal(partes: DmsEdicao, negativo: string, limiteGraus: number, label: string): number | null {
+  const temValor = partes.graus.trim() || partes.minutos.trim() || partes.segundos.trim()
+  if (!temValor) return null
+
+  const graus = Number(partes.graus.replace(',', '.'))
+  const minutos = Number((partes.minutos || '0').replace(',', '.'))
+  const segundos = Number((partes.segundos || '0').replace(',', '.'))
+
+  if (!Number.isFinite(graus) || !Number.isFinite(minutos) || !Number.isFinite(segundos)) {
+    throw new Error(`${label}: informe apenas números em graus, minutos e segundos.`)
+  }
+  if (!Number.isInteger(graus) || !Number.isInteger(minutos) || graus < 0 || graus > limiteGraus || minutos < 0 || minutos >= 60 || segundos < 0 || segundos >= 60) {
+    throw new Error(`${label}: confira os valores de graus, minutos e segundos.`)
+  }
+
+  const sinal = partes.direcao === negativo ? -1 : 1
+  return parseFloat((sinal * (graus + minutos / 60 + segundos / 3600)).toFixed(6))
 }
 
 export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado, onAtualizado }: Props) {
@@ -37,8 +87,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [eStatus, setEStatus] = useState<StatusOc>(o.status_oc)
   const [eDataOcorrencia, setEDataOcorrencia] = useState(o.data_ocorrencia ?? '')
   const [eEndereco, setEEndereco] = useState(o.endereco ?? '')
-  const [eLat, setELat] = useState<number | null>(o.lat)
-  const [eLng, setELng] = useState<number | null>(o.lng)
+  const [eLatDms, setELatDms] = useState<DmsEdicao>(decimalParaPartesGms(o.lat, 'N', 'S'))
+  const [eLngDms, setELngDms] = useState<DmsEdicao>(decimalParaPartesGms(o.lng, 'L', 'O'))
   const [eProprietario, setEProprietario] = useState(o.proprietario ?? '')
   const [eSituacao, setESituacao] = useState(o.situacao ?? '')
   const [eRecomendacao, setERecomendacao] = useState(o.recomendacao ?? '')
@@ -61,8 +111,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setEStatus(o.status_oc)
     setEDataOcorrencia(o.data_ocorrencia ?? '')
     setEEndereco(o.endereco ?? '')
-    setELat(o.lat)
-    setELng(o.lng)
+    setELatDms(decimalParaPartesGms(o.lat, 'N', 'S'))
+    setELngDms(decimalParaPartesGms(o.lng, 'L', 'O'))
     setEProprietario(o.proprietario ?? '')
     setESituacao(o.situacao ?? '')
     setERecomendacao(o.recomendacao ?? '')
@@ -86,8 +136,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     const res = await geocodificarEndereco(eEndereco)
     setGeocodificando(false)
     if (res) {
-      setELat(res.lat)
-      setELng(res.lng)
+      setELatDms(decimalParaPartesGms(res.lat, 'N', 'S'))
+      setELngDms(decimalParaPartesGms(res.lng, 'L', 'O'))
       setGeoMsg(`✅ ${formatarCoordenadas(res.lat, res.lng)}`)
     } else {
       setGeoMsg('⚠️ Endereço não encontrado')
@@ -99,9 +149,20 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     if (!tipoFinal) { setErroEdit('Selecione o tipo.'); return }
     if (!eNatureza) { setErroEdit('Selecione a natureza.'); return }
 
-    let finalLat = eLat
-    let finalLng = eLng
-    if (!finalLat && eEndereco.trim() && navigator.onLine) {
+    let finalLat: number | null
+    let finalLng: number | null
+    try {
+      finalLat = partesGmsParaDecimal(eLatDms, 'S', 90, 'Latitude')
+      finalLng = partesGmsParaDecimal(eLngDms, 'O', 180, 'Longitude')
+    } catch (err) {
+      setErroEdit(err instanceof Error ? err.message : 'Confira as coordenadas.')
+      return
+    }
+    if ((finalLat == null || finalLng == null) && (finalLat != null || finalLng != null)) {
+      setErroEdit('Informe latitude e longitude completas, ou limpe as duas coordenadas.')
+      return
+    }
+    if (finalLat == null && eEndereco.trim() && navigator.onLine) {
       const geo = await geocodificarEndereco(eEndereco)
       if (geo) { finalLat = geo.lat; finalLng = geo.lng }
     }
@@ -399,59 +460,59 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                 {/* Coordenadas GPS */}
                 <div className="campo campo-edit">
                   <label className="campo-label">🛰️ Coordenadas GPS</label>
-                  <div className="gps-edit-row">
-                    <input
-                      className="campo-input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Latitude (ex: -20.519500)"
-                      value={eLat ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        setELat(v === '' || v === '-' ? null : isNaN(parseFloat(v)) ? eLat : parseFloat(v))
-                      }}
-                      style={{ flex: 1 }}
-                    />
-                    <input
-                      className="campo-input"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="Longitude (ex: -43.698300)"
-                      value={eLng ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value
-                        setELng(v === '' || v === '-' ? null : isNaN(parseFloat(v)) ? eLng : parseFloat(v))
-                      }}
-                      style={{ flex: 1 }}
-                    />
+                  <div className="gps-dms-edit">
+                    <div className="gps-dms-linha">
+                      <span className="gps-dms-label">Lat.</span>
+                      <input className="campo-input gps-dms-num" type="text" inputMode="numeric" placeholder="Graus" value={eLatDms.graus} onChange={(e) => setELatDms((p) => ({ ...p, graus: e.target.value }))} />
+                      <span className="gps-dms-unidade">°</span>
+                      <input className="campo-input gps-dms-num" type="text" inputMode="numeric" placeholder="Min" value={eLatDms.minutos} onChange={(e) => setELatDms((p) => ({ ...p, minutos: e.target.value }))} />
+                      <span className="gps-dms-unidade">'</span>
+                      <input className="campo-input gps-dms-sec" type="text" inputMode="decimal" placeholder="Seg" value={eLatDms.segundos} onChange={(e) => setELatDms((p) => ({ ...p, segundos: e.target.value }))} />
+                      <span className="gps-dms-unidade">"</span>
+                      <select className="campo-select gps-dms-dir" value={eLatDms.direcao} onChange={(e) => setELatDms((p) => ({ ...p, direcao: e.target.value }))}>
+                        <option>S</option>
+                        <option>N</option>
+                      </select>
+                    </div>
+                    <div className="gps-dms-linha">
+                      <span className="gps-dms-label">Long.</span>
+                      <input className="campo-input gps-dms-num" type="text" inputMode="numeric" placeholder="Graus" value={eLngDms.graus} onChange={(e) => setELngDms((p) => ({ ...p, graus: e.target.value }))} />
+                      <span className="gps-dms-unidade">°</span>
+                      <input className="campo-input gps-dms-num" type="text" inputMode="numeric" placeholder="Min" value={eLngDms.minutos} onChange={(e) => setELngDms((p) => ({ ...p, minutos: e.target.value }))} />
+                      <span className="gps-dms-unidade">'</span>
+                      <input className="campo-input gps-dms-sec" type="text" inputMode="decimal" placeholder="Seg" value={eLngDms.segundos} onChange={(e) => setELngDms((p) => ({ ...p, segundos: e.target.value }))} />
+                      <span className="gps-dms-unidade">"</span>
+                      <select className="campo-select gps-dms-dir" value={eLngDms.direcao} onChange={(e) => setELngDms((p) => ({ ...p, direcao: e.target.value }))}>
+                        <option>O</option>
+                        <option>L</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="gps-edit-row gps-edit-row-acoes">
                     <button
                       className="btn-gps"
                       title="Obter GPS atual"
                       onClick={() => {
                         navigator.geolocation?.getCurrentPosition((p) => {
-                          setELat(parseFloat(p.coords.latitude.toFixed(6)))
-                          setELng(parseFloat(p.coords.longitude.toFixed(6)))
+                          setELatDms(decimalParaPartesGms(parseFloat(p.coords.latitude.toFixed(6)), 'N', 'S'))
+                          setELngDms(decimalParaPartesGms(parseFloat(p.coords.longitude.toFixed(6)), 'L', 'O'))
                           setGeoMsg('✅ GPS atualizado!')
                         })
                       }}
                     >
-                      📍
+                      📍 Usar GPS atual
                     </button>
-                    {eLat != null && eLng != null && (
-                      <button
-                        className="btn-gps btn-gps-limpar"
-                        title="Limpar coordenadas"
-                        onClick={() => { setELat(null); setELng(null) }}
-                      >
-                        ✕
-                      </button>
-                    )}
+                    <button
+                      className="btn-gps btn-gps-limpar"
+                      title="Limpar coordenadas"
+                      onClick={() => {
+                        setELatDms(decimalParaPartesGms(null, 'N', 'S'))
+                        setELngDms(decimalParaPartesGms(null, 'L', 'O'))
+                      }}
+                    >
+                      ✕ Limpar
+                    </button>
                   </div>
-                  {eLat != null && eLng != null && (
-                    <div className="gps-dms-preview">
-                      🛰️ {decimalParaGms(eLat, 'N', 'S')} · {decimalParaGms(eLng, 'L', 'O')}
-                    </div>
-                  )}
                 </div>
 
                 {/* Proprietário */}
