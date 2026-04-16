@@ -7,7 +7,7 @@ Sistema web completo de registro e gerenciamento de ocorrências para a Defesa C
 - **Frontend**: React 19 + TypeScript + Vite 5 (porta 5000 em desenvolvimento)
 - **Backend**: Express.js API REST (porta 3001 em desenvolvimento, PORT env em produção)
 - **Banco de Dados**: Replit PostgreSQL (DATABASE_URL)
-- **Mapa**: React-Leaflet com OpenStreetMap
+- **Mapa**: React-Leaflet com OpenStreetMap e opção de visão satélite
 - **Exportação**: KMZ via JSZip, Excel via ExcelJS
 - **Relatórios**: DOCX gerado a partir do modelo anexado em `attached_assets`
 
@@ -83,7 +83,7 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 
 ## Funcionalidades
 - Formulário com campos (tipo → natureza → subnatureza condicional → nível → status → fotos → GPS/endereço → proprietário → agentes → observações → data)
-- Mapa OpenStreetMap centrado em Ouro Branco com marcadores por tipo (emoji + cor)
+- Mapa centrado em Ouro Branco com alternância entre visão padrão e satélite, marcadores por tipo (emoji + cor)
 - Popup no marcador com botão "Ver detalhes"
 - Modal de detalhe com exportação KMZ individual
 - Edição de coordenadas no detalhe da ocorrência feita apenas em graus, minutos e segundos, com direção N/S e L/O; o app converte internamente para latitude/longitude decimal ao salvar.

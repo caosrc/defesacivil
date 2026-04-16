@@ -152,6 +152,7 @@ interface DispositivoRemoto {
 type StatusGps = 'inativo' | 'aguardando' | 'ativo' | 'erro'
 type StatusOffline = 'idle' | 'baixando' | 'concluido' | 'erro'
 type StatusWs = 'desconectado' | 'conectando' | 'conectado'
+type CamadaMapa = 'padrao' | 'satelite'
 
 const OURO_BRANCO: [number, number] = [-20.5195, -43.6983]
 const MAX_TRILHA = 300
@@ -160,6 +161,7 @@ const MAX_TRILHA = 300
 export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const [selecionada, setSelecionada] = useState<Ocorrencia | null>(null)
   const [legendaAberta, setLegendaAberta] = useState(false)
+  const [camadaMapa, setCamadaMapa] = useState<CamadaMapa>('padrao')
 
   // GPS local
   const [statusGps, setStatusGps] = useState<StatusGps>('inativo')
@@ -432,12 +434,23 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         zoomControl={false}
         whenReady={() => {}}
       >
-        <TileLayer
-          url="/api/tiles/{z}/{x}/{y}"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          maxZoom={19}
-          keepBuffer={4}
-        />
+        {camadaMapa === 'padrao' ? (
+          <TileLayer
+            key="mapa-padrao"
+            url="/api/tiles/{z}/{x}/{y}"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            maxZoom={19}
+            keepBuffer={4}
+          />
+        ) : (
+          <TileLayer
+            key="mapa-satelite"
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            attribution='Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics'
+            maxZoom={19}
+            keepBuffer={4}
+          />
+        )}
 
         <MapClickHandler onMapClick={() => setSelecionada(null)} />
 
@@ -583,6 +596,21 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         </div>
         <button className="mapa-legenda-btn" onClick={() => setLegendaAberta((v) => !v)}>
           🗂 Legenda
+        </button>
+      </div>
+
+      <div className="mapa-camadas" aria-label="Escolher visualização do mapa">
+        <button
+          className={`mapa-camada-btn ${camadaMapa === 'padrao' ? 'ativo' : ''}`}
+          onClick={() => setCamadaMapa('padrao')}
+        >
+          🗺️ Mapa
+        </button>
+        <button
+          className={`mapa-camada-btn ${camadaMapa === 'satelite' ? 'ativo' : ''}`}
+          onClick={() => setCamadaMapa('satelite')}
+        >
+          🛰️ Satélite
         </button>
       </div>
 

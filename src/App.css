@@ -560,10 +560,42 @@ input, select, textarea { font-family: inherit; }
 }
 .mapa-legenda-btn:hover { background: #e5e7eb; }
 
+.mapa-camadas {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  background: white;
+  border-radius: 22px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  padding: 0.22rem;
+  display: flex;
+  gap: 0.2rem;
+}
+.mapa-camada-btn {
+  border: none;
+  border-radius: 18px;
+  background: transparent;
+  color: #374151;
+  padding: 0.34rem 0.7rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mapa-camada-btn.ativo {
+  background: #1a4b8c;
+  color: white;
+}
+.mapa-camada-btn:not(.ativo):hover {
+  background: #f3f4f6;
+}
+
 /* Legend panel */
 .mapa-legenda {
   position: absolute;
-  top: 50px;
+  top: 98px;
   right: 10px;
   z-index: 500;
   background: white;
@@ -573,6 +605,25 @@ input, select, textarea { font-family: inherit; }
   min-width: 190px;
   max-height: 60vh;
   overflow-y: auto;
+}
+
+@media (max-width: 520px) {
+  .mapa-topbar {
+    top: 8px;
+    max-width: calc(100vw - 16px);
+    padding: 0.28rem 0.5rem;
+    gap: 0.35rem;
+  }
+  .mapa-camadas {
+    top: 54px;
+  }
+  .mapa-camada-btn {
+    padding: 0.32rem 0.6rem;
+    font-size: 0.72rem;
+  }
+  .mapa-legenda {
+    top: 94px;
+  }
 }
 .mapa-legenda-header {
   display: flex;
