@@ -5,7 +5,7 @@ import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES } fr
 import { deletarOcorrencia, atualizarOcorrencia } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
-import { formatarCoordenadas, parseDateLocal } from '../utils'
+import { formatarCoordenadas, parseDateLocal, gpsBloqueadoNoNavegador, mensagemErroGps } from '../utils'
 import ModalSenha from './ModalSenha'
 
 interface Props {
@@ -492,12 +492,20 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                     <button
                       className="btn-gps"
                       title="Obter GPS atual"
-                      onClick={() => {
-                        navigator.geolocation?.getCurrentPosition((p) => {
+                      onClick={async () => {
+                        if (!navigator.geolocation) {
+                          setGeoMsg('⚠️ GPS não suportado neste dispositivo.')
+                          return
+                        }
+                        if (await gpsBloqueadoNoNavegador()) {
+                          setGeoMsg('⚠️ GPS bloqueado. Libere Localização nas permissões do site/app e toque novamente.')
+                          return
+                        }
+                        navigator.geolocation.getCurrentPosition((p) => {
                           setELatDms(decimalParaPartesGms(parseFloat(p.coords.latitude.toFixed(6)), 'N', 'S'))
                           setELngDms(decimalParaPartesGms(parseFloat(p.coords.longitude.toFixed(6)), 'L', 'O'))
                           setGeoMsg('✅ GPS atualizado!')
-                        })
+                        }, (err) => setGeoMsg(`⚠️ ${mensagemErroGps(err)}`), { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 })
                       }}
                     >
                       📍 Usar GPS atual

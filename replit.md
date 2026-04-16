@@ -84,6 +84,7 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 ## Funcionalidades
 - Formulário com campos (tipo → natureza → subnatureza condicional → nível → status → fotos → GPS/endereço → proprietário → agentes → observações → data)
 - Mapa centrado em Ouro Branco com alternância entre visão padrão e satélite, marcadores por tipo (emoji + cor)
+- Botões de GPS na nova ocorrência e no mapa sempre tentam novamente; se o navegador tiver bloqueado a permissão, o app orienta liberar Localização nas permissões do site/app e tentar de novo.
 - Popup no marcador com botão "Ver detalhes"
 - Modal de detalhe com exportação KMZ individual
 - Edição de coordenadas no detalhe da ocorrência feita apenas em graus, minutos e segundos, com direção N/S e L/O; o app converte internamente para latitude/longitude decimal ao salvar.

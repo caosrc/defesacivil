@@ -3,7 +3,7 @@ import { TIPOS_OCORRENCIA, NATUREZAS, AGENTES } from '../types'
 import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
 import { savePending, geocodificarEndereco } from '../offline'
-import { formatarCoordenadas, adicionarMarcaDagua } from '../utils'
+import { formatarCoordenadas, adicionarMarcaDagua, gpsBloqueadoNoNavegador, mensagemErroGps } from '../utils'
 
 interface Props {
   onSalvo: (offline: boolean) => void
@@ -40,20 +40,29 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const precisaSubnatureza = natureza === 'Queda de Estrutura' || natureza === 'Apreensão e Captura de Animal'
   const labelSubnatureza = natureza === 'Queda de Estrutura' ? 'Qual é a estrutura?' : 'Qual é o animal?'
 
-  function obterGps() {
+  async function obterGps() {
     if (!navigator.geolocation) { setErro('Geolocalização não disponível.'); return }
+    setErro('')
+    setGeoMsg('')
     setBuscandoGps(true)
+    if (await gpsBloqueadoNoNavegador()) {
+      setErro('O GPS está bloqueado para este app. Libere Localização nas permissões do site/app e toque em "Obter GPS" novamente.')
+      setBuscandoGps(false)
+      return
+    }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLat(parseFloat(pos.coords.latitude.toFixed(6)))
         setLng(parseFloat(pos.coords.longitude.toFixed(6)))
         setGeoMsg('✅ GPS obtido com sucesso!')
+        setErro('')
         setBuscandoGps(false)
       },
-      () => {
-        setErro('Não foi possível obter GPS. Informe o endereço e clique em "Localizar no mapa".')
+      (err) => {
+        setErro(mensagemErroGps(err))
         setBuscandoGps(false)
-      }
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
     )
   }
 
@@ -327,6 +336,11 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
             {geoMsg && (
               <div className={`geo-msg ${geoMsg.startsWith('✅') ? 'geo-ok' : 'geo-warn'}`}>
                 {geoMsg}
+              </div>
+            )}
+            {erro.includes('GPS') && (
+              <div className="gps-permissao-dica">
+                No celular: toque no cadeado/ícone do site, abra Permissões, marque Localização como Permitir e depois toque em “Obter GPS” novamente.
               </div>
             )}
             <div className="geo-dica">

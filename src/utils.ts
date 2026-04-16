@@ -19,6 +19,30 @@ export function formatarCoordenadas(lat: number | null, lng: number | null): str
   return `${decimalParaGms(lat, 'N', 'S')}  ${decimalParaGms(lng, 'L', 'O')}`
 }
 
+export async function gpsBloqueadoNoNavegador(): Promise<boolean> {
+  try {
+    const permissions = (navigator as any).permissions
+    if (!permissions?.query) return false
+    const status = await permissions.query({ name: 'geolocation' })
+    return status.state === 'denied'
+  } catch {
+    return false
+  }
+}
+
+export function mensagemErroGps(err?: GeolocationPositionError | null): string {
+  if (err?.code === 1) {
+    return 'Permissão de GPS negada. Para permitir, libere Localização nas permissões deste site/app e toque no botão GPS novamente.'
+  }
+  if (err?.code === 2) {
+    return 'GPS indisponível no momento. Verifique se a localização do celular está ligada e tente novamente.'
+  }
+  if (err?.code === 3) {
+    return 'Tempo esgotado ao obter GPS. Toque novamente para tentar de novo.'
+  }
+  return 'Não foi possível obter GPS. Toque novamente para tentar ou informe o endereço.'
+}
+
 function gmsCompacto(valor: number, positivo: string, negativo: string): string {
   const absoluto = Math.abs(valor)
   const graus = Math.floor(absoluto)

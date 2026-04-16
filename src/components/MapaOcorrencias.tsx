@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import type { Ocorrencia } from '../types'
 import { NATUREZA_ICONE, NATUREZA_COR } from '../types'
 import { baixarMapaOffline, obterInfoCacheMapa, limparCacheMapa, type ProgressoMapa } from '../offline'
+import { gpsBloqueadoNoNavegador, mensagemErroGps } from '../utils'
 
 // Fix leaflet default marker icons
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -321,15 +322,25 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   }, [])
 
   // ── GPS ───────────────────────────────────────────────────────
-  function ativarGps() {
+  async function ativarGps() {
     if (!navigator.geolocation) {
       setErroGps('GPS não suportado neste dispositivo.')
       setStatusGps('erro')
       return
     }
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current)
+      watchIdRef.current = null
+    }
     setStatusGps('aguardando')
     setErroGps(null)
     conectarWs()
+
+    if (await gpsBloqueadoNoNavegador()) {
+      setErroGps('O GPS está bloqueado para este app. Libere Localização nas permissões do site/app e toque em GPS novamente.')
+      setStatusGps('erro')
+      return
+    }
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
@@ -343,15 +354,12 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
           const nova = [...prev, coords]
           return nova.length > MAX_TRILHA ? nova.slice(nova.length - MAX_TRILHA) : nova
         })
+        setErroGps(null)
         setStatusGps('ativo')
         enviarPosicao(coords[0], coords[1], prec, vel)
       },
       (err) => {
-        let msg = 'Erro ao obter localização.'
-        if (err.code === 1) msg = 'Permissão de GPS negada.'
-        else if (err.code === 2) msg = 'GPS indisponível no momento.'
-        else if (err.code === 3) msg = 'Tempo esgotado ao obter GPS.'
-        setErroGps(msg)
+        setErroGps(mensagemErroGps(err))
         setStatusGps('erro')
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
@@ -811,7 +819,11 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
       {/* Erro GPS */}
       {statusGps === 'erro' && erroGps && (
         <div className="mapa-gps-erro">
-          ⚠️ {erroGps}
+          <div>
+            <strong>⚠️ GPS não permitido</strong>
+            <span>{erroGps}</span>
+            <small>Depois de liberar no navegador/celular, toque no botão GPS novamente.</small>
+          </div>
           <button onClick={() => setStatusGps('inativo')}>✕</button>
         </div>
       )}

@@ -851,10 +851,26 @@ input, select, textarea { font-family: inherit; }
   font-size: 0.76rem;
   font-weight: 600;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
   box-shadow: 0 3px 10px rgba(0,0,0,0.12);
   max-width: 240px;
+}
+.mapa-gps-erro div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+.mapa-gps-erro strong {
+  font-size: 0.76rem;
+}
+.mapa-gps-erro span,
+.mapa-gps-erro small {
+  line-height: 1.25;
+}
+.mapa-gps-erro small {
+  color: #7f1d1d;
+  font-weight: 500;
 }
 .mapa-gps-erro button {
   background: none;
@@ -1858,6 +1874,17 @@ input, select, textarea { font-family: inherit; }
   background: #eff6ff;
   border-radius: 6px;
   padding: 0.3rem 0.6rem;
+}
+.gps-permissao-dica {
+  margin-top: 0.45rem;
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 @media (max-width: 480px) {
