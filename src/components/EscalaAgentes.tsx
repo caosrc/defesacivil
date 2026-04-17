@@ -870,7 +870,7 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, ferias, hoje, edita
           const emFolga = !diaSobreaviso && diaUtil(chave) ? agentesEmFolga(chave) : []
           const agentes = diaSobreaviso
             ? (sobreavisoSemanal[segundaDaSemana(chave)] ?? []).filter(nome => !agenteEmFerias(nome, chave, ferias))
-            : (dados[chave] ?? []).filter(nome =>
+            : AGENTES_ESCALA.map(ag => ag.nome).filter(nome =>
               !emFolga.includes(nome) && !agenteEmFerias(nome, chave, ferias)
             )
           const temAgente = agentes.length > 0
