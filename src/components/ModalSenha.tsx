@@ -2,13 +2,14 @@ import { useState, useEffect, useRef } from 'react'
 
 interface Props {
   titulo: string
+  senhaCorreta?: string
   onConfirmar: () => void
   onCancelar: () => void
 }
 
-const SENHA_CORRETA = '093067'
+const SENHA_PADRAO = '093067'
 
-export default function ModalSenha({ titulo, onConfirmar, onCancelar }: Props) {
+export default function ModalSenha({ titulo, senhaCorreta = SENHA_PADRAO, onConfirmar, onCancelar }: Props) {
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState(false)
   const [mostrarSenha, setMostrarSenha] = useState(false)
@@ -19,7 +20,7 @@ export default function ModalSenha({ titulo, onConfirmar, onCancelar }: Props) {
   }, [])
 
   function confirmar() {
-    if (senha === SENHA_CORRETA) {
+    if (senha === senhaCorreta) {
       onConfirmar()
     } else {
       setErro(true)

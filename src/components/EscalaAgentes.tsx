@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { getAgenteLogado } from './Login'
+import ModalSenha from './ModalSenha'
 import './EscalaAgentes.css'
 
 // ── Constantes ────────────────────────────────────────────────────
@@ -960,6 +961,7 @@ export default function EscalaAgentes() {
   const [mes, setMes] = useState(agora.getMonth())
   const [dados, setDados] = useState<EscalaData>(carregarDados)
   const [editando, setEditando] = useState(false)
+  const [pedirSenha, setPedirSenha] = useState(false)
   const [modalDia, setModalDia] = useState<string | null>(null)
   const [modalSemana, setModalSemana] = useState<string | null>(null)
 
@@ -1058,10 +1060,26 @@ export default function EscalaAgentes() {
       {isMoises && (
         <button
           className={`escala-btn-editar ${editando ? 'ativo' : ''}`}
-          onClick={() => { setEditando(e => !e); setModalDia(null) }}
+          onClick={() => {
+            if (editando) {
+              setEditando(false)
+              setModalDia(null)
+            } else {
+              setPedirSenha(true)
+            }
+          }}
         >
           {editando ? '✅ Concluir edição' : '✏️ Editar escala'}
         </button>
+      )}
+
+      {pedirSenha && (
+        <ModalSenha
+          titulo="Editar Escala"
+          senhaCorreta="2026"
+          onConfirmar={() => { setPedirSenha(false); setEditando(true) }}
+          onCancelar={() => setPedirSenha(false)}
+        />
       )}
 
       {editando && isMoises && (
