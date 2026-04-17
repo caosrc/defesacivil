@@ -189,21 +189,45 @@
   line-height: 1;
 }
 
-.escala-cal-folgas {
+/* Nomes de agentes trabalhando nas células de dia — Calendário ADM */
+.escala-adm-nomes {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   gap: 1px;
   margin-top: 1px;
+  width: 100%;
 }
 
-.escala-cal-folga-dot {
+.escala-adm-nome {
+  font-size: 0.5rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Células de cauda (após o último dia) — agentes de folga */
+.escala-cal-folga-cauda {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px 2px;
+  background: #f0fdf4;
+  border: 1px dashed #86efac;
+  border-radius: 6px;
+  min-height: 52px;
+}
+
+.escala-cal-folga-cauda-nome {
   font-size: 0.48rem;
-  line-height: 1;
-  border: 1px solid;
-  border-radius: 3px;
-  padding: 0 1px;
-  opacity: 0.6;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.3;
 }
 
 /* ── Calendário Sobreaviso — células com nomes ──────────────── */

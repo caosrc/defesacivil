@@ -688,12 +688,10 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, hoje, editando, onD
   const total = diasNoMes(ano, mes)
   const inicio = primeiroDiaSemana(ano, mes)
 
-  const celulas: (number | null)[] = [
-    ...Array(inicio).fill(null),
-    ...Array.from({ length: total }, (_, i) => i + 1),
-  ]
+  // Nº de células de cauda (após o último dia) para completar a grade
+  const trailingCount = (7 - ((inicio + total) % 7)) % 7
 
-  // Retorna agentes de folga nesta semana (fizeram sobreaviso na semana anterior)
+  // Retorna agentes de folga para a semana que contém 'chave'
   function agentesEmFolga(chave: string): string[] {
     const mapa = sobreavisoSemanal ?? {}
     const seg = segundaDaSemana(chave)
@@ -712,6 +710,10 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, hoje, editando, onD
     return dow >= 1 && dow <= 5
   }
 
+  // Agentes de folga na última semana do mês (para exibir nas células de cauda)
+  const ultimaChave = chaveData(ano, mes, total)
+  const folgaUltimaSemana = agentesEmFolga(ultimaChave)
+
   return (
     <div className="escala-calendario-bloco escala-bloco-adm">
       <div className="escala-bloco-header">
@@ -722,15 +724,19 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, hoje, editando, onD
         {DIAS_SEMANA_HDR.map((d, i) => (
           <div key={i} className="escala-cal-diahdr">{d}</div>
         ))}
-        {celulas.map((dia, i) => {
-          if (dia === null) return <div key={`v-${i}`} className="escala-cal-vazio" />
+
+        {/* Células vazias de cabeça (antes do dia 1) */}
+        {Array.from({ length: inicio }).map((_, i) => (
+          <div key={`lead-${i}`} className="escala-cal-vazio" />
+        ))}
+
+        {/* Células de dias */}
+        {Array.from({ length: total }, (_, i) => i + 1).map(dia => {
           const chave = chaveData(ano, mes, dia)
           const isHoje = chave === hoje
-
-          // Filtra agentes de folga (Seg–Sex da semana seguinte ao sobreaviso)
           const emFolga = diaUtil(chave) ? agentesEmFolga(chave) : []
           const agentes = (dados[chave] ?? []).filter(nome => !emFolga.includes(nome))
-          const temAgente = agentes.length > 0 || emFolga.length > 0
+          const temAgente = agentes.length > 0
 
           return (
             <button
@@ -739,29 +745,54 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, hoje, editando, onD
               onClick={() => editando && onDiaClick(chave)}
             >
               <span className="escala-cal-num">{dia}</span>
-              <div className="escala-cal-dots">
-                {agentes.slice(0, 3).map(nome => {
+              <div className="escala-adm-nomes">
+                {agentes.map(nome => {
                   const info = AGENTE_MAP[nome]
-                  return info ? (
-                    <span key={nome} className="escala-cal-dot" style={{ background: info.cor }} title={nome} />
-                  ) : null
+                  return (
+                    <span
+                      key={nome}
+                      className="escala-adm-nome"
+                      style={{ color: info?.cor ?? '#374151' }}
+                    >
+                      {nome}
+                    </span>
+                  )
                 })}
-                {agentes.length > 3 && <span className="escala-cal-mais">+{agentes.length - 3}</span>}
               </div>
-              {emFolga.length > 0 && diaUtil(chave) && (
-                <div className="escala-cal-folgas">
-                  {emFolga.map(nome => {
-                    const info = AGENTE_MAP[nome]
-                    return info ? (
-                      <span key={nome} className="escala-cal-folga-dot" title={`${nome} — folga`} style={{ borderColor: info.cor }}>
-                        🏠
-                      </span>
-                    ) : null
-                  })}
-                </div>
-              )}
             </button>
           )
+        })}
+
+        {/* Células de cauda — mostram agentes de folga da última semana */}
+        {Array.from({ length: trailingCount }).map((_, i) => {
+          const agenteFolga = folgaUltimaSemana[i]
+          if (agenteFolga) {
+            const info = AGENTE_MAP[agenteFolga]
+            return (
+              <div key={`tail-${i}`} className="escala-cal-folga-cauda">
+                <span className="escala-cal-folga-cauda-nome" style={{ color: info?.cor ?? '#6b7280' }}>
+                  {agenteFolga} - Folga
+                </span>
+              </div>
+            )
+          }
+          // Se tiver mais agentes de folga do que células, acumula no último
+          if (i === trailingCount - 1 && folgaUltimaSemana.length > trailingCount) {
+            const extras = folgaUltimaSemana.slice(i)
+            return (
+              <div key={`tail-${i}`} className="escala-cal-folga-cauda">
+                {extras.map(nome => {
+                  const info = AGENTE_MAP[nome]
+                  return (
+                    <span key={nome} className="escala-cal-folga-cauda-nome" style={{ color: info?.cor ?? '#6b7280' }}>
+                      {nome} - Folga
+                    </span>
+                  )
+                })}
+              </div>
+            )
+          }
+          return <div key={`tail-${i}`} className="escala-cal-vazio" />
         })}
       </div>
     </div>
