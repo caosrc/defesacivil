@@ -949,6 +949,170 @@
   text-align: center;
 }
 
+/* ── Banco de Horas: lista de semanas ───────────────────────── */
+.bh-semanas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border-top: 1px solid #f0f4f8;
+  padding-top: 0.5rem;
+}
+
+.bh-semana-bloco {
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+
+.bh-semana-header {
+  width: 100%;
+  background: #f8fafc;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.bh-semana-header.aberta {
+  background: #ede9fe;
+  border-bottom: 1px solid #c4b5fd;
+}
+
+.bh-semana-titulo {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #374151;
+  flex: 1;
+}
+
+.bh-semana-resumo {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+}
+
+.bh-semana-base { color: #6b7280; }
+
+.bh-semana-extra {
+  color: #16a34a;
+  font-weight: 700;
+}
+
+.bh-semana-total {
+  color: #7c3aed;
+  font-weight: 800;
+}
+
+.bh-semana-chevron {
+  font-size: 0.65rem;
+  color: #9ca3af;
+  margin-left: 0.25rem;
+}
+
+/* ── Banco de Horas: dias de cada semana ─────────────────────── */
+.bh-semana-dias {
+  background: #fff;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.bh-semana-instrucao {
+  font-size: 0.7rem;
+  color: #6b7280;
+  margin: 0 0 0.25rem 0;
+  line-height: 1.3;
+}
+
+.bh-dia-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  background: #f9fafb;
+}
+
+.bh-dia-row.feriado-dom {
+  background: #fef9c3;
+}
+
+.bh-dia-info {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.bh-dia-nome {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #374151;
+  width: 30px;
+}
+
+.bh-dia-data {
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.bh-dia-badge {
+  font-size: 0.62rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.bh-dia-badge.mult15 {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.bh-dia-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.bh-dia-input {
+  width: 56px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #374151;
+  text-align: center;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.bh-dia-input:focus {
+  border-color: #7c3aed;
+}
+
+.bh-dia-input-h {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  font-weight: 600;
+}
+
+.bh-dia-calc {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #7c3aed;
+  margin-left: auto;
+}
+
 /* ── Banco de Horas: painel Moisés ─────────────────────────── */
 .bh-moises-painel {
   background: #fff;
