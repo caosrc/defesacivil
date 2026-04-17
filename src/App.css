@@ -2172,32 +2172,33 @@ input, select, textarea { font-family: inherit; }
   padding: 0.2rem 0.15rem; min-width: 14px;
 }
 .ck-header-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 20px);
+  display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 42px);
   background: #1a4b8c; color: white;
   min-width: 0;
 }
 .ck-header-cell {
-  font-size: 0.58rem; font-weight: 700;
-  text-align: center; padding: 0.2rem 0.05rem;
+  font-size: 0.6rem; font-weight: 700;
+  text-align: center; padding: 0.25rem 0;
 }
 .ck-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 20px);
+  display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 42px);
   align-items: center; border-bottom: 1px solid #e5e7eb;
-  min-height: 22px;
+  min-height: 26px;
   min-width: 0;
 }
 .ck-row:last-child { border-bottom: none; }
 .ck-row:nth-child(even) { background: #f0f4fa; }
 .ck-row-label {
-  padding: 0.12rem 0.25rem; font-size: 0.64rem; color: #1f2937;
+  padding: 0.15rem 0.3rem; font-size: 0.66rem; color: #1f2937;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ck-row-cell {
   display: flex; align-items: center; justify-content: center;
+  padding: 0.2rem 0;
 }
 .ck-dot {
-  width: 12px; height: 12px; border: 1.5px solid #9ca3af;
-  border-radius: 2px; cursor: pointer; background: white;
+  width: 16px; height: 16px; border: 1.5px solid #9ca3af;
+  border-radius: 3px; cursor: pointer; background: white;
   transition: all 0.1s; flex-shrink: 0;
 }
 .ck-dot:hover { border-color: #1a4b8c; }
@@ -2296,17 +2297,17 @@ input, select, textarea { font-family: inherit; }
 
   .ck-header-row,
   .ck-row {
-    grid-template-columns: minmax(0, 1fr) repeat(3, 17px);
+    grid-template-columns: minmax(0, 1fr) repeat(3, 36px);
   }
 
   .ck-header-cell {
-    font-size: 0.5rem;
-    padding: 0.18rem 0;
+    font-size: 0.55rem;
+    padding: 0.2rem 0;
   }
 
   .ck-row-label {
-    font-size: 0.58rem;
-    padding: 0.12rem 0.18rem;
+    font-size: 0.62rem;
+    padding: 0.13rem 0.22rem;
   }
 
   .ck-row-cell {
@@ -2314,8 +2315,8 @@ input, select, textarea { font-family: inherit; }
   }
 
   .ck-dot {
-    width: 11px;
-    height: 11px;
+    width: 14px;
+    height: 14px;
   }
 
   .foto-thumb {
