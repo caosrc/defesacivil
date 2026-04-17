@@ -13,16 +13,16 @@
   "lang": "pt-BR",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/logo-dc.jpg",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/jpeg",
+      "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/logo-dc.jpg",
       "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/jpeg",
+      "purpose": "any"
     }
   ],
   "categories": ["utilities", "productivity"],
