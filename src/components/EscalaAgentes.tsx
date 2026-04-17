@@ -809,19 +809,18 @@ interface CalendarioProps {
   mes: number
   dados: Record<string, string[]>
   sobreavisoSemanal: Record<string, string[]>
+  ferias: Ferias[]
   hoje: string
   editando: boolean
   onDiaClick: (chave: string) => void
 }
 
-function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, hoje, editando, onDiaClick }: CalendarioProps) {
+function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, ferias, hoje, editando, onDiaClick }: CalendarioProps) {
   const total = diasNoMes(ano, mes)
   const inicio = primeiroDiaSemana(ano, mes)
 
-  // Nº de células de cauda (após o último dia) para completar a grade
   const trailingCount = (7 - ((inicio + total) % 7)) % 7
 
-  // Retorna agentes de folga para a semana que contém 'chave'
   function agentesEmFolga(chave: string): string[] {
     const mapa = sobreavisoSemanal ?? {}
     const seg = segundaDaSemana(chave)
@@ -833,16 +832,11 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, hoje, editando, onD
     return Array.isArray(lista) ? lista : []
   }
 
-  // Folga se aplica apenas de Seg a Sex
   function diaUtil(chave: string): boolean {
     const [y, m, d] = chave.split('-').map(Number)
     const dow = new Date(y, m - 1, d).getDay()
     return dow >= 1 && dow <= 5
   }
-
-  // Agentes de folga na última semana do mês (para exibir nas células de cauda)
-  const ultimaChave = chaveData(ano, mes, total)
-  const folgaUltimaSemana = agentesEmFolga(ultimaChave)
 
   return (
     <div className="escala-calendario-bloco escala-bloco-adm">
@@ -865,7 +859,9 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, hoje, editando, onD
           const chave = chaveData(ano, mes, dia)
           const isHoje = chave === hoje
           const emFolga = diaUtil(chave) ? agentesEmFolga(chave) : []
-          const agentes = (dados[chave] ?? []).filter(nome => !emFolga.includes(nome))
+          const agentes = (dados[chave] ?? []).filter(nome =>
+            !emFolga.includes(nome) && !agenteEmFerias(nome, chave, ferias)
+          )
           const temAgente = agentes.length > 0
 
           return (
@@ -893,37 +889,9 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, hoje, editando, onD
           )
         })}
 
-        {/* Células de cauda — mostram agentes de folga da última semana */}
-        {Array.from({ length: trailingCount }).map((_, i) => {
-          const agenteFolga = folgaUltimaSemana[i]
-          if (agenteFolga) {
-            const info = AGENTE_MAP[agenteFolga]
-            return (
-              <div key={`tail-${i}`} className="escala-cal-folga-cauda">
-                <span className="escala-cal-folga-cauda-nome" style={{ color: info?.cor ?? '#6b7280' }}>
-                  {agenteFolga} - Folga
-                </span>
-              </div>
-            )
-          }
-          // Se tiver mais agentes de folga do que células, acumula no último
-          if (i === trailingCount - 1 && folgaUltimaSemana.length > trailingCount) {
-            const extras = folgaUltimaSemana.slice(i)
-            return (
-              <div key={`tail-${i}`} className="escala-cal-folga-cauda">
-                {extras.map(nome => {
-                  const info = AGENTE_MAP[nome]
-                  return (
-                    <span key={nome} className="escala-cal-folga-cauda-nome" style={{ color: info?.cor ?? '#6b7280' }}>
-                      {nome} - Folga
-                    </span>
-                  )
-                })}
-              </div>
-            )
-          }
-          return <div key={`tail-${i}`} className="escala-cal-vazio" />
-        })}
+        {Array.from({ length: trailingCount }).map((_, i) => (
+          <div key={`tail-${i}`} className="escala-cal-vazio" />
+        ))}
       </div>
     </div>
   )
@@ -1104,6 +1072,7 @@ export default function EscalaAgentes() {
         ano={ano} mes={mes}
         dados={dados.adm}
         sobreavisoSemanal={dados.sobreavisoSemanal}
+        ferias={dados.ferias}
         hoje={hoje}
         editando={editando && isMoises}
         onDiaClick={onDiaClick}

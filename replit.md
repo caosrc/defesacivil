@@ -94,7 +94,7 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 - Filtros por nível, status e busca de texto
 - Resumo numérico no topo (Alto, Médio, Baixo, Total)
 - Checklists de viatura com fotos por ângulo, avarias, assinatura digital, histórico, exportação Excel geral e PDF individual via impressão do navegador
-- Aba Escala no menu inferior, atualmente com tela “Em desenvolvimento” para futura gestão de escala de trabalho
+- Aba Escala no menu inferior com calendário ADM, sobreaviso semanal, férias/folgas prolongadas e banco de horas; no calendário ADM aparecem apenas os agentes escalados para cada data, ocultando quem estiver de folga ou férias.
 - Suporte offline completo via PWA (Service Worker + IndexedDB + manifest)
 - Rastreamento em tempo real no mapa via WebSocket: a aba Mapa conecta ao servidor mesmo com o GPS local desligado, permitindo ver outros agentes online que estejam com GPS ativo.
 
