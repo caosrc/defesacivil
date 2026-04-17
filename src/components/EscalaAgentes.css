@@ -1255,3 +1255,16 @@
   border-top: 1px solid #ede9fe;
   text-align: center;
 }
+
+.escala-em-desenvolvimento {
+  background: #fffbeb;
+  border: 1.5px dashed #f59e0b;
+  color: #92400e;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  letter-spacing: 0.01em;
+}

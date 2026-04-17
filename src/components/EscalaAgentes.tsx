@@ -1051,6 +1051,7 @@ export default function EscalaAgentes() {
 
   return (
     <div className="escala-wrap">
+      <div className="escala-em-desenvolvimento">🚧 Em desenvolvimento...</div>
       <div className="escala-nav-mes">
         <button className="escala-nav-btn" onClick={mesAnterior}>‹</button>
         <span className="escala-nav-label">{MESES[mes]} {ano}</span>
