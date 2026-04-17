@@ -76,7 +76,7 @@ export default function Login({ onLogin, apenasAgente = false }: Props) {
       <div className="login-tela">
         <div className="login-box login-box--agente">
           <div className="login-logo-wrap">
-            <img src="/icon-512.png" alt="Defesa Civil Ouro Branco" className="login-logo" />
+            <img src="/logo-dc.jpg" alt="Defesa Civil Ouro Branco" className="login-logo" />
           </div>
           <div className="login-titulo">Defesa Civil</div>
           <div className="login-subtitulo">Ouro Branco — MG</div>
@@ -102,7 +102,7 @@ export default function Login({ onLogin, apenasAgente = false }: Props) {
     <div className="login-tela">
       <div className="login-box">
         <div className="login-logo-wrap">
-          <img src="/icon-512.png" alt="Defesa Civil Ouro Branco" className="login-logo" />
+          <img src="/logo-dc.jpg" alt="Defesa Civil Ouro Branco" className="login-logo" />
         </div>
         <div className="login-titulo">Defesa Civil</div>
         <div className="login-subtitulo">Ouro Branco — MG</div>

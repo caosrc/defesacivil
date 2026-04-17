@@ -97,7 +97,7 @@ function BannerInstalar() {
   return (
     <div className="pwa-banner">
       <div className="pwa-banner-icone">
-        <img src="/icon-192.png" alt="" />
+        <img src="/logo-dc.jpg" alt="" />
       </div>
       <div className="pwa-banner-texto">
         <strong>Instale no celular</strong>
@@ -328,7 +328,7 @@ export default function App() {
 
       <header className="header">
         <div className="header-logo">
-          <img src="/logo-dc.png" alt="Defesa Civil" className="logo-img" />
+          <img src="/logo-dc.jpg" alt="Defesa Civil" className="logo-img" />
           <div className="header-textos">
             <span className="header-nome">Defesa Civil</span>
             <span className="header-cidade">Ouro Branco — MG</span>

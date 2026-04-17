@@ -168,7 +168,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       <header className="header">
         <button className="btn-voltar" onClick={onVoltar}>‹</button>
         <div className="header-logo-mini">
-          <img src="/logo-dc.png" alt="Defesa Civil" className="logo-img-mini" />
+          <img src="/logo-dc.jpg" alt="Defesa Civil" className="logo-img-mini" />
           <span className="header-titulo-texto">Nova Ocorrência</span>
         </div>
         <div style={{ width: 36 }}>
