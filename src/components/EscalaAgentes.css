@@ -166,6 +166,7 @@
 }
 
 .escala-cal-dia.tem-agente { background: #f8faff; }
+.escala-cal-dia.tem-folga { background: #f0fdf4; }
 
 .escala-bloco-adm .escala-cal-dia,
 .escala-bloco-adm .escala-cal-vazio {
@@ -213,6 +214,33 @@
   text-overflow: ellipsis;
   max-width: 100%;
   letter-spacing: -0.04em;
+}
+
+.escala-adm-folgas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  margin-top: 2px;
+  width: 100%;
+}
+
+.escala-adm-folga-label {
+  font-size: 0.5rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: #166534;
+}
+
+.escala-adm-folga-nome {
+  font-size: 0.48rem;
+  font-weight: 800;
+  line-height: 1.08;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  letter-spacing: -0.03em;
 }
 
 /* Células de cauda (após o último dia) — agentes de folga */

@@ -866,36 +866,35 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, ferias, hoje, edita
         {Array.from({ length: total }, (_, i) => i + 1).map(dia => {
           const chave = chaveData(ano, mes, dia)
           const isHoje = chave === hoje
-          const diaSobreaviso = sabadoDomingoOuFeriado(chave)
-          const emFolga = !diaSobreaviso && diaUtil(chave) ? agentesEmFolga(chave) : []
-          const agentes = diaSobreaviso
-            ? (sobreavisoSemanal[segundaDaSemana(chave)] ?? []).filter(nome => !agenteEmFerias(nome, chave, ferias))
-            : AGENTES_ESCALA.map(ag => ag.nome).filter(nome =>
-              !emFolga.includes(nome) && !agenteEmFerias(nome, chave, ferias)
-            )
-          const temAgente = agentes.length > 0
+          const folgas = diaUtil(chave)
+            ? agentesEmFolga(chave).filter(nome => !agenteEmFerias(nome, chave, ferias))
+            : []
+          const temFolga = folgas.length > 0
 
           return (
             <button
               key={chave}
-              className={`escala-cal-dia ${isHoje ? 'hoje' : ''} ${temAgente ? 'tem-agente' : ''} ${editando ? 'editavel' : ''}`}
+              className={`escala-cal-dia ${isHoje ? 'hoje' : ''} ${temFolga ? 'tem-folga' : ''} ${editando ? 'editavel' : ''}`}
               onClick={() => editando && onDiaClick(chave)}
             >
               <span className="escala-cal-num">{dia}</span>
-              <div className="escala-adm-nomes" title={agentes.join(', ')}>
-                {agentes.map(nome => {
-                  const info = AGENTE_MAP[nome]
-                  return (
-                    <span
-                      key={nome}
-                      className="escala-adm-nome"
-                      style={{ color: info?.cor ?? '#374151' }}
-                    >
-                      {nome}
-                    </span>
-                  )
-                })}
-              </div>
+              {temFolga && (
+                <div className="escala-adm-folgas" title={folgas.join(', ')}>
+                  <span className="escala-adm-folga-label">Folga:</span>
+                  {folgas.map(nome => {
+                    const info = AGENTE_MAP[nome]
+                    return (
+                      <span
+                        key={nome}
+                        className="escala-adm-folga-nome"
+                        style={{ color: info?.cor ?? '#166534' }}
+                      >
+                        {nome}
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
             </button>
           )
         })}
