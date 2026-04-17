@@ -35,7 +35,7 @@ Sistema web completo de registro e gerenciamento de ocorrências para a Defesa C
 ```
 
 ## Workflows
-- **Start application**: `PORT=5000 node server/index.js` → porta 5000 (webview), servindo a API e o frontend estático já gerado em `dist/`
+- **Start application**: `npm run start` → inicia a API Express na porta 3001 e o Vite na porta 5000 (webview), com proxy `/api` e `/ws` para manter separação cliente/servidor em desenvolvimento.
 
 ## Deployment
 - Build: `npx vite build` (gera dist/ sem bloquear a publicação por validações TypeScript de desenvolvimento)
@@ -43,7 +43,7 @@ Sistema web completo de registro e gerenciamento de ocorrências para a Defesa C
 - Target: autoscale
 
 ## Banco de Dados
-O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as tabelas necessárias se elas ainda não existirem.
+O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as tabelas necessárias se elas ainda não existirem. A migração para Replit usa o PostgreSQL integrado com as variáveis `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` e `PGDATABASE` provisionadas pelo ambiente.
 
 ### Tabela `ocorrencias`
 | Campo | Tipo | Descrição |
