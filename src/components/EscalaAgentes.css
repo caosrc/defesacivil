@@ -124,7 +124,7 @@
 
 .escala-cal-vazio {
   background: #f8fafc;
-  min-height: 56px;
+  min-height: 40px;
 }
 
 .escala-cal-dia {
@@ -133,9 +133,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0.28rem 0.1rem 0.2rem;
-  min-height: 56px;
-  gap: 0.15rem;
+  padding: 0.18rem 0.1rem 0.14rem;
+  min-height: 40px;
+  gap: 0.1rem;
   cursor: default;
   transition: background 0.12s;
   position: relative;
@@ -170,7 +170,7 @@
 
 .escala-bloco-adm .escala-cal-dia,
 .escala-bloco-adm .escala-cal-vazio {
-  min-height: 82px;
+  min-height: 58px;
 }
 
 .escala-cal-dots {
