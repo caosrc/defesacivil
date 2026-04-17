@@ -206,8 +206,16 @@
   box-shadow: inset 0 0 0 2px rgba(124,58,237,0.25);
 }
 
+.sb-nomes-dia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  width: 100%;
+}
+
 .sb-nome-dia {
-  font-size: 0.58rem;
+  font-size: 0.56rem;
   font-weight: 800;
   text-align: center;
   line-height: 1.1;
@@ -340,6 +348,14 @@
   font-size: 0.72rem;
 }
 
+.sb-semana-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: flex-end;
+  max-width: 180px;
+}
+
 .sb-semana-vago {
   font-size: 0.75rem;
   color: #9ca3af;
@@ -370,6 +386,23 @@
   color: #5b21b6;
   font-weight: 500;
   line-height: 1.4;
+}
+
+/* ── Contador e check do modal semanal ──────────────────────── */
+.sb-modal-counter {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #7c3aed;
+  background: #f5f3ff;
+  border-radius: 8px;
+  padding: 0.35rem 0.75rem;
+  text-align: center;
+}
+
+.sb-modal-check {
+  font-size: 0.85rem;
+  font-weight: 800;
+  margin-left: auto;
 }
 
 /* ── Tag de folga no modal ──────────────────────────────────── */
