@@ -3,7 +3,7 @@ import { TIPOS_OCORRENCIA, NATUREZAS, AGENTES } from '../types'
 import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
 import { savePending, geocodificarEndereco } from '../offline'
-import { formatarCoordenadas, adicionarMarcaDagua, gpsBloqueadoNoNavegador, mensagemErroGps } from '../utils'
+import { formatarCoordenadas, adicionarMarcaDagua, mensagemErroGps } from '../utils'
 
 interface Props {
   onSalvo: (offline: boolean) => void
@@ -43,16 +43,14 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const precisaSubnatureza = natureza === 'Queda de Estrutura' || natureza === 'Apreensão e Captura de Animal'
   const labelSubnatureza = natureza === 'Queda de Estrutura' ? 'Qual é a estrutura?' : 'Qual é o animal?'
 
-  async function obterGps() {
+  function obterGps() {
     if (!navigator.geolocation) { setErro('Geolocalização não disponível.'); return }
     setErro('')
     setGeoMsg('')
     setBuscandoGps(true)
-    if (await gpsBloqueadoNoNavegador()) {
-      setErro('O GPS está bloqueado para este app. Libere Localização nas permissões do site/app e toque em "Obter GPS" novamente.')
-      setBuscandoGps(false)
-      return
-    }
+    // IMPORTANTE: no iOS o getCurrentPosition deve ser chamado de forma
+    // síncrona dentro do handler do gesto do usuário. Qualquer await
+    // antes desta chamada faz o iOS bloquear a permissão.
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLat(parseFloat(pos.coords.latitude.toFixed(6)))

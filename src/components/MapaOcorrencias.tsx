@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import type { Ocorrencia } from '../types'
 import { NATUREZA_ICONE, NATUREZA_COR } from '../types'
 import { baixarMapaOffline, obterInfoCacheMapa, limparCacheMapa, type ProgressoMapa } from '../offline'
-import { gpsBloqueadoNoNavegador, mensagemErroGps } from '../utils'
+import { mensagemErroGps } from '../utils'
 
 // Fix leaflet default marker icons
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -323,7 +323,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   }, [])
 
   // ── GPS ───────────────────────────────────────────────────────
-  async function ativarGps() {
+  function ativarGps() {
     if (!navigator.geolocation) {
       setErroGps('GPS não suportado neste dispositivo.')
       setStatusGps('erro')
@@ -337,12 +337,9 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     setErroGps(null)
     conectarWs()
 
-    if (await gpsBloqueadoNoNavegador()) {
-      setErroGps('O GPS está bloqueado para este app. Libere Localização nas permissões do site/app e toque em GPS novamente.')
-      setStatusGps('erro')
-      return
-    }
-
+    // IMPORTANTE: no iOS o watchPosition deve ser chamado de forma
+    // síncrona dentro do handler do gesto do usuário. Qualquer await
+    // antes desta chamada faz o iOS bloquear a permissão.
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude]

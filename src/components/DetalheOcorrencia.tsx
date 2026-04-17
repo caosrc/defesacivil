@@ -5,7 +5,7 @@ import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES } fr
 import { deletarOcorrencia, atualizarOcorrencia } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
-import { formatarCoordenadas, parseDateLocal, gpsBloqueadoNoNavegador, mensagemErroGps } from '../utils'
+import { formatarCoordenadas, parseDateLocal, mensagemErroGps } from '../utils'
 import ModalSenha from './ModalSenha'
 
 interface Props {
@@ -495,15 +495,13 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                     <button
                       className="btn-gps"
                       title="Obter GPS atual"
-                      onClick={async () => {
+                      onClick={() => {
                         if (!navigator.geolocation) {
                           setGeoMsg('⚠️ GPS não suportado neste dispositivo.')
                           return
                         }
-                        if (await gpsBloqueadoNoNavegador()) {
-                          setGeoMsg('⚠️ GPS bloqueado. Libere Localização nas permissões do site/app e toque novamente.')
-                          return
-                        }
+                        // IMPORTANTE: no iOS o getCurrentPosition deve ser chamado de forma
+                        // síncrona dentro do handler do gesto do usuário.
                         navigator.geolocation.getCurrentPosition((p) => {
                           setELatDms(decimalParaPartesGms(parseFloat(p.coords.latitude.toFixed(6)), 'N', 'S'))
                           setELngDms(decimalParaPartesGms(parseFloat(p.coords.longitude.toFixed(6)), 'L', 'O'))
