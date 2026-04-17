@@ -838,6 +838,14 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, ferias, hoje, edita
     return dow >= 1 && dow <= 5
   }
 
+  function sabadoDomingoOuFeriado(chave: string): boolean {
+    const [y, m, d] = chave.split('-').map(Number)
+    const dow = new Date(y, m - 1, d).getDay()
+    if (dow === 0 || dow === 6) return true
+    const mmdd = `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    return FERIADOS_FIXOS.has(mmdd)
+  }
+
   return (
     <div className="escala-calendario-bloco escala-bloco-adm">
       <div className="escala-bloco-header">
@@ -858,10 +866,13 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, ferias, hoje, edita
         {Array.from({ length: total }, (_, i) => i + 1).map(dia => {
           const chave = chaveData(ano, mes, dia)
           const isHoje = chave === hoje
-          const emFolga = diaUtil(chave) ? agentesEmFolga(chave) : []
-          const agentes = (dados[chave] ?? []).filter(nome =>
-            !emFolga.includes(nome) && !agenteEmFerias(nome, chave, ferias)
-          )
+          const diaSobreaviso = sabadoDomingoOuFeriado(chave)
+          const emFolga = !diaSobreaviso && diaUtil(chave) ? agentesEmFolga(chave) : []
+          const agentes = diaSobreaviso
+            ? (sobreavisoSemanal[segundaDaSemana(chave)] ?? []).filter(nome => !agenteEmFerias(nome, chave, ferias))
+            : (dados[chave] ?? []).filter(nome =>
+              !emFolga.includes(nome) && !agenteEmFerias(nome, chave, ferias)
+            )
           const temAgente = agentes.length > 0
 
           return (
@@ -871,17 +882,15 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, ferias, hoje, edita
               onClick={() => editando && onDiaClick(chave)}
             >
               <span className="escala-cal-num">{dia}</span>
-              <div className="escala-adm-nomes">
+              <div className="escala-cal-dots" title={agentes.join(', ')}>
                 {agentes.map(nome => {
                   const info = AGENTE_MAP[nome]
                   return (
                     <span
                       key={nome}
-                      className="escala-adm-nome"
-                      style={{ color: info?.cor ?? '#374151' }}
-                    >
-                      {nome}
-                    </span>
+                      className="escala-cal-dot"
+                      style={{ background: info?.cor ?? '#64748b' }}
+                    />
                   )
                 })}
               </div>
