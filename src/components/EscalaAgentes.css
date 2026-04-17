@@ -182,22 +182,6 @@
   flex-shrink: 0;
 }
 
-/* Linha de férias embaixo do dia */
-.escala-cal-ferias {
-  display: flex;
-  justify-content: center;
-  gap: 2px;
-  margin-top: auto;
-  padding-bottom: 2px;
-}
-
-.escala-cal-ferias-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  opacity: 0.55;
-  border: 1px solid rgba(0,0,0,0.12);
-}
 
 .escala-cal-mais {
   font-size: 0.52rem;
@@ -237,11 +221,6 @@
   gap: 0.35rem;
 }
 
-.escala-legenda-item.em-ferias .escala-legenda-nome {
-  text-decoration: line-through;
-  color: #9ca3af;
-}
-
 .escala-legenda-cor {
   width: 11px;
   height: 11px;
@@ -258,35 +237,52 @@
   text-overflow: ellipsis;
 }
 
-.escala-legenda-ferias {
-  font-size: 0.65rem;
-  flex-shrink: 0;
-}
-
-.escala-legenda-refs {
-  display: flex;
-  gap: 1rem;
+/* Bloco de férias na legenda */
+.escala-legenda-ferias-bloco {
   border-top: 1px solid #f0f4f8;
-  padding-top: 0.55rem;
+  margin-top: 0.55rem;
+  padding-top: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
-.escala-legenda-ref-item {
+.escala-legenda-ferias-titulo {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #92400e;
+  margin-bottom: 0.1rem;
+}
+
+.escala-legenda-ferias-row {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-  font-size: 0.72rem;
-  color: #6b7280;
+  gap: 0.4rem;
 }
 
-.escala-legenda-ref-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+.escala-legenda-ferias-nome {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #374151;
+  min-width: 72px;
   flex-shrink: 0;
 }
 
-.escala-ref-escalado { background: #2563eb; }
-.escala-ref-ferias   { background: #94a3b8; opacity: 0.55; border: 1px solid rgba(0,0,0,0.12); }
+.escala-legenda-ferias-periodos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.escala-legenda-ferias-periodo {
+  font-size: 0.72rem;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 5px;
+  padding: 0.1rem 0.4rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 /* ── Painel de férias ───────────────────────────────────────── */
 .escala-ferias-painel {

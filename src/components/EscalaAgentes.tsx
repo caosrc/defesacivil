@@ -235,13 +235,12 @@ interface CalendarioProps {
   ano: number
   mes: number
   dados: Record<string, string[]>
-  ferias: Ferias[]
   hoje: string
   editando: boolean
   onDiaClick: (chave: string, tipo: TipoEscala) => void
 }
 
-function Calendario({ tipo, titulo, icone, ano, mes, dados, ferias, hoje, editando, onDiaClick }: CalendarioProps) {
+function Calendario({ tipo, titulo, icone, ano, mes, dados, hoje, editando, onDiaClick }: CalendarioProps) {
   const total = diasNoMes(ano, mes)
   const inicio = primeiroDiaSemana(ano, mes)
 
@@ -268,7 +267,6 @@ function Calendario({ tipo, titulo, icone, ano, mes, dados, ferias, hoje, editan
           const chave = chaveData(ano, mes, dia)
           const agentes = dados[chave] ?? []
           const isHoje = chave === hoje
-          const agentesEmFerias = AGENTES_ESCALA.filter(ag => agenteEmFerias(ag.nome, chave, ferias))
 
           return (
             <button
@@ -286,14 +284,6 @@ function Calendario({ tipo, titulo, icone, ano, mes, dados, ferias, hoje, editan
                 })}
                 {agentes.length > 3 && <span className="escala-cal-mais">+{agentes.length - 3}</span>}
               </div>
-              {agentesEmFerias.length > 0 && (
-                <div className="escala-cal-ferias">
-                  {agentesEmFerias.slice(0, 2).map(ag => (
-                    <span key={ag.nome} className="escala-cal-ferias-dot" style={{ background: ag.cor }} title={`${ag.nome} — Férias`} />
-                  ))}
-                  {agentesEmFerias.length > 2 && <span className="escala-cal-mais">+{agentesEmFerias.length - 2}</span>}
-                </div>
-              )}
             </button>
           )
         })}
@@ -306,41 +296,60 @@ function Calendario({ tipo, titulo, icone, ano, mes, dados, ferias, hoje, editan
 function Legenda({ ferias, mes, ano }: { ferias: Ferias[]; mes: number; ano: number }) {
   const mesStr = String(mes + 1).padStart(2, '0')
   const anoStr = String(ano)
-  const emFeriasNoMes = useMemo(() => {
-    return AGENTES_ESCALA.filter(ag =>
-      ferias.some(f =>
+
+  function fmt(str: string) {
+    const [, m, d] = str.split('-')
+    return `${d}/${m}`
+  }
+
+  const { ativos, deFerias } = useMemo(() => {
+    const deFerias: Array<{ ag: typeof AGENTES_ESCALA[0]; periodos: Ferias[] }> = []
+    const ativos: typeof AGENTES_ESCALA = []
+
+    AGENTES_ESCALA.forEach(ag => {
+      const periodos = ferias.filter(f =>
         f.agente === ag.nome &&
         f.inicio <= `${anoStr}-${mesStr}-31` &&
         f.fim >= `${anoStr}-${mesStr}-01`
       )
-    )
+      if (periodos.length > 0) deFerias.push({ ag, periodos })
+      else ativos.push(ag)
+    })
+
+    return { ativos, deFerias }
   }, [ferias, mes, ano, mesStr, anoStr])
 
   return (
     <div className="escala-legenda">
       <span className="escala-legenda-titulo">Legenda</span>
+
       <div className="escala-legenda-lista">
-        {AGENTES_ESCALA.map(ag => {
-          const emFerias = emFeriasNoMes.some(a => a.nome === ag.nome)
-          return (
-            <div key={ag.nome} className={`escala-legenda-item ${emFerias ? 'em-ferias' : ''}`}>
+        {ativos.map(ag => (
+          <div key={ag.nome} className="escala-legenda-item">
+            <span className="escala-legenda-cor" style={{ background: ag.cor }} />
+            <span className="escala-legenda-nome">{ag.nome}</span>
+          </div>
+        ))}
+      </div>
+
+      {deFerias.length > 0 && (
+        <div className="escala-legenda-ferias-bloco">
+          <span className="escala-legenda-ferias-titulo">☀️🌊 De férias este mês</span>
+          {deFerias.map(({ ag, periodos }) => (
+            <div key={ag.nome} className="escala-legenda-ferias-row">
               <span className="escala-legenda-cor" style={{ background: ag.cor }} />
-              <span className="escala-legenda-nome">{ag.nome}</span>
-              {emFerias && <span className="escala-legenda-ferias">🌴</span>}
+              <span className="escala-legenda-ferias-nome">{ag.nome}</span>
+              <div className="escala-legenda-ferias-periodos">
+                {periodos.map((p, i) => (
+                  <span key={i} className="escala-legenda-ferias-periodo">
+                    {fmt(p.inicio)} → {fmt(p.fim)}
+                  </span>
+                ))}
+              </div>
             </div>
-          )
-        })}
-      </div>
-      <div className="escala-legenda-refs">
-        <div className="escala-legenda-ref-item">
-          <span className="escala-legenda-ref-dot escala-ref-escalado" />
-          <span>Escalado</span>
+          ))}
         </div>
-        <div className="escala-legenda-ref-item">
-          <span className="escala-legenda-ref-dot escala-ref-ferias" />
-          <span>Férias (linha inferior)</span>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -427,7 +436,6 @@ export default function EscalaAgentes() {
         ano={ano}
         mes={mes}
         dados={dados.adm}
-        ferias={dados.ferias}
         hoje={hoje}
         editando={editando && isMoises}
         onDiaClick={onDiaClick}
@@ -440,7 +448,6 @@ export default function EscalaAgentes() {
         ano={ano}
         mes={mes}
         dados={dados.sobreaviso}
-        ferias={dados.ferias}
         hoje={hoje}
         editando={editando && isMoises}
         onDiaClick={onDiaClick}
