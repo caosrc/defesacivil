@@ -567,3 +567,346 @@
   color: #fff;
 }
 .escala-modal-salvar:active { background: #1d4ed8; }
+.escala-modal-salvar:disabled { background: #93c5fd; cursor: not-allowed; }
+
+/* ── Calendário: indicadores de horas ──────────────────────── */
+.escala-cal-dia.bh-pendente {
+  background: #fffbeb;
+  outline: 2px solid #fbbf24;
+  outline-offset: -2px;
+}
+
+.escala-cal-dia.bh-registrado {
+  background: #f0fdf4;
+}
+
+.bh-dia-h-badge {
+  font-size: 0.5rem;
+  font-weight: 800;
+  color: #16a34a;
+  background: #dcfce7;
+  border-radius: 4px;
+  padding: 0 2px;
+  line-height: 1.4;
+}
+
+/* ── Modal de registro de horas ────────────────────────────── */
+.bh-modal-agente {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1;
+}
+
+.bh-modal-iniciais {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.bh-modal-nome {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1a202c;
+  line-height: 1.1;
+}
+
+.bh-modal-sub {
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.bh-pendentes-aviso {
+  background: #fef3c7;
+  border: 1px solid #fbbf24;
+  border-radius: 9px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  color: #92400e;
+  font-weight: 600;
+}
+
+.bh-dias-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.bh-dia-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  background: #f8fafc;
+  border-radius: 10px;
+  border: 1.5px solid #e5e7eb;
+}
+
+.bh-dia-row.pendente {
+  background: #fffbeb;
+  border-color: #fbbf24;
+}
+
+.bh-dia-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.bh-dia-dow {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #374151;
+}
+
+.bh-dia-data {
+  font-size: 0.7rem;
+  color: #6b7280;
+}
+
+.bh-dia-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.bh-dia-input {
+  width: 56px;
+  padding: 0.45rem 0.4rem;
+  border-radius: 8px;
+  border: 1.5px solid #d1d5db;
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-align: center;
+  color: #1a202c;
+  background: #fff;
+}
+
+.bh-dia-input:focus {
+  outline: none;
+  border-color: #2563eb;
+}
+
+.bh-dia-unidade {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+/* ── Banco de Horas: card do agente ────────────────────────── */
+.bh-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 0.9rem;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.09);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.bh-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.bh-card-iniciais {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.bh-card-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.bh-card-nome {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.bh-card-subtitulo {
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.bh-card-total {
+  display: flex;
+  align-items: baseline;
+  gap: 0.15rem;
+}
+
+.bh-card-horas {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #2563eb;
+  line-height: 1;
+}
+
+.bh-card-h {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.bh-card-aviso {
+  background: #fef3c7;
+  border: 1.5px solid #fbbf24;
+  border-radius: 9px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.78rem;
+  color: #92400e;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.bh-card-aviso:active { background: #fde68a; }
+
+.bh-card-meses {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border-top: 1px solid #f0f4f8;
+  padding-top: 0.5rem;
+}
+
+.bh-card-mes-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+}
+
+.bh-card-mes-label { color: #374151; }
+
+.bh-card-mes-h {
+  font-weight: 700;
+  color: #2563eb;
+}
+
+.bh-card-vazio {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  text-align: center;
+}
+
+.bh-card-btn-registrar {
+  padding: 0.6rem;
+  border-radius: 10px;
+  border: 1.5px solid #2563eb;
+  background: #fff;
+  color: #2563eb;
+  font-size: 0.85rem;
+  font-weight: 700;
+  transition: all 0.15s;
+}
+.bh-card-btn-registrar:active { background: #eff6ff; }
+
+/* ── Banco de Horas: painel Moisés ─────────────────────────── */
+.bh-moises-painel {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.09);
+  overflow: hidden;
+}
+
+.bh-moises-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0.9rem;
+  background: linear-gradient(90deg, #1e3a5f 0%, #1a4b8c 100%);
+  color: #fff;
+}
+
+.bh-moises-titulo {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.bh-moises-total {
+  font-size: 0.85rem;
+  font-weight: 700;
+  background: rgba(255,255,255,0.2);
+  border-radius: 6px;
+  padding: 0.2rem 0.5rem;
+}
+
+.bh-moises-lista {
+  display: flex;
+  flex-direction: column;
+}
+
+.bh-moises-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid #f0f4f8;
+}
+
+.bh-moises-row:last-child { border-bottom: none; }
+
+.bh-moises-rank {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #9ca3af;
+  width: 20px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.bh-moises-cor {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bh-moises-nome {
+  flex: 1;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.bh-moises-direita {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.bh-moises-pendente {
+  font-size: 0.7rem;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 5px;
+  padding: 0.1rem 0.3rem;
+  font-weight: 700;
+}
+
+.bh-moises-h {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #2563eb;
+  min-width: 32px;
+  text-align: right;
+}
