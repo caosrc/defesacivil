@@ -124,7 +124,7 @@
 
 .escala-cal-vazio {
   background: #f8fafc;
-  min-height: 26px;
+  min-height: 40px;
 }
 
 .escala-cal-dia {
@@ -134,7 +134,7 @@
   flex-direction: column;
   align-items: center;
   padding: 0.1rem 0.05rem 0.08rem;
-  min-height: 26px;
+  min-height: 40px;
   gap: 0.05rem;
   cursor: default;
   transition: background 0.12s;
