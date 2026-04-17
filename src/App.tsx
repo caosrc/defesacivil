@@ -10,6 +10,7 @@ const MapaOcorrencias = lazy(() => import('./components/MapaOcorrencias'))
 const NovaOcorrencia = lazy(() => import('./components/NovaOcorrencia'))
 const DetalheOcorrencia = lazy(() => import('./components/DetalheOcorrencia'))
 const ChecklistViatura = lazy(() => import('./components/ChecklistViatura'))
+const EscalaAgentes = lazy(() => import('./components/EscalaAgentes'))
 
 type Aba = 'lista' | 'mapa' | 'nova' | 'viatura' | 'escala'
 
@@ -35,30 +36,6 @@ function NivelBadge({ nivel }: { nivel: NivelRisco }) {
   )
 }
 
-function EscalaEmDesenvolvimento() {
-  return (
-    <div className="escala-dev">
-      <div className="escala-card">
-        <div className="escala-ilustracao" aria-hidden="true">
-          <div className="escala-calendario">
-            <div className="escala-cal-top" />
-            <div className="escala-cal-grid">
-              {Array.from({ length: 12 }, (_, i) => <span key={i} className={i % 4 === 0 ? 'ativo' : ''} />)}
-            </div>
-          </div>
-          <div className="escala-pessoas">
-            <span />
-            <span />
-            <span />
-          </div>
-        </div>
-        <h2>Escala</h2>
-        <strong>Em desenvolvimento</strong>
-        <p>Esta área será usada futuramente para organizar a escala das pessoas que estão trabalhando.</p>
-      </div>
-    </div>
-  )
-}
 
 const LazyFallback = () => <div className="carregando">⏳ Carregando...</div>
 
@@ -507,7 +484,11 @@ export default function App() {
           </Suspense>
         )}
 
-        {aba === 'escala' && <EscalaEmDesenvolvimento />}
+        {aba === 'escala' && (
+          <Suspense fallback={<LazyFallback />}>
+            <EscalaAgentes />
+          </Suspense>
+        )}
       </div>
 
       <nav className="bottom-nav">

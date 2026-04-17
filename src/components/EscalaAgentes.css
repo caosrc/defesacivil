@@ -1,0 +1,331 @@
+/* ── Wrapper ────────────────────────────────────────────────── */
+.escala-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.75rem 0.75rem 1.5rem;
+}
+
+/* ── Navegação de mês ───────────────────────────────────────── */
+.escala-nav-mes {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.55rem 0.75rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.escala-nav-btn {
+  background: #f0f4f8;
+  border: none;
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  font-size: 1.3rem;
+  color: #1a4b8c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  transition: background 0.15s;
+}
+.escala-nav-btn:active { background: #dbeafe; }
+
+.escala-nav-label {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1a202c;
+  letter-spacing: 0.01em;
+}
+
+/* ── Bloco de calendário ────────────────────────────────────── */
+.escala-calendario-bloco {
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.09);
+}
+
+.escala-bloco-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.escala-bloco-adm .escala-bloco-header {
+  background: linear-gradient(90deg, #1a4b8c 0%, #2563eb 100%);
+  color: #fff;
+}
+
+.escala-bloco-sobreaviso .escala-bloco-header {
+  background: linear-gradient(90deg, #7c3aed 0%, #a855f7 100%);
+  color: #fff;
+}
+
+.escala-bloco-icone {
+  font-size: 1.1rem;
+}
+
+/* ── Grade do calendário ────────────────────────────────────── */
+.escala-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: #e5e7eb;
+  border-top: 1px solid #e5e7eb;
+}
+
+.escala-cal-diahdr {
+  background: #f8fafc;
+  text-align: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #64748b;
+  padding: 0.35rem 0;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.escala-cal-vazio {
+  background: #f8fafc;
+  min-height: 52px;
+}
+
+.escala-cal-dia {
+  background: #fff;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.3rem 0.1rem 0.25rem;
+  min-height: 52px;
+  gap: 0.2rem;
+  cursor: pointer;
+  transition: background 0.12s;
+  position: relative;
+}
+
+.escala-cal-dia:active { background: #f0f4f8; }
+
+.escala-cal-num {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #374151;
+  line-height: 1;
+}
+
+.escala-cal-dia.hoje .escala-cal-num {
+  background: #2563eb;
+  color: #fff;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+}
+
+.escala-cal-dia.tem-agente { background: #f8faff; }
+
+.escala-cal-dots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+  max-width: 36px;
+}
+
+.escala-cal-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.escala-cal-mais {
+  font-size: 0.55rem;
+  color: #6b7280;
+  font-weight: 700;
+}
+
+/* ── Legenda ────────────────────────────────────────────────── */
+.escala-legenda {
+  background: #fff;
+  border-radius: 14px;
+  padding: 0.85rem;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+}
+
+.escala-legenda-titulo {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #6b7280;
+  display: block;
+  margin-bottom: 0.6rem;
+}
+
+.escala-legenda-lista {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.5rem 0.4rem;
+}
+
+.escala-legenda-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.escala-legenda-cor {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.escala-legenda-nome {
+  font-size: 0.78rem;
+  color: #374151;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Modal de seleção ───────────────────────────────────────── */
+.escala-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 500;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.escala-modal {
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-width: 480px;
+  padding: 1.2rem 1rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 85vh;
+  overflow-y: auto;
+  animation: slideUp 0.22s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+
+.escala-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.escala-modal-titulo {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.escala-modal-fechar {
+  background: #f0f4f8;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 0.85rem;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.escala-modal-sub {
+  font-size: 0.82rem;
+  color: #6b7280;
+  margin-top: -0.25rem;
+}
+
+.escala-modal-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.escala-modal-agente {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 10px;
+  border: 2px solid #e5e7eb;
+  background: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.escala-modal-agente.selecionado {
+  color: #fff;
+}
+
+.escala-modal-iniciais {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.escala-modal-acoes {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+}
+
+.escala-modal-limpar {
+  flex: 1;
+  padding: 0.7rem;
+  border-radius: 10px;
+  border: 2px solid #e5e7eb;
+  background: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.escala-modal-salvar {
+  flex: 2;
+  padding: 0.7rem;
+  border-radius: 10px;
+  border: none;
+  background: #2563eb;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.escala-modal-salvar:active { background: #1d4ed8; }
