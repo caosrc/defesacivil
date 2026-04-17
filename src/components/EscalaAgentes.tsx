@@ -882,15 +882,17 @@ function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, ferias, hoje, edita
               onClick={() => editando && onDiaClick(chave)}
             >
               <span className="escala-cal-num">{dia}</span>
-              <div className="escala-cal-dots" title={agentes.join(', ')}>
+              <div className="escala-adm-nomes" title={agentes.join(', ')}>
                 {agentes.map(nome => {
                   const info = AGENTE_MAP[nome]
                   return (
                     <span
                       key={nome}
-                      className="escala-cal-dot"
-                      style={{ background: info?.cor ?? '#64748b' }}
-                    />
+                      className="escala-adm-nome"
+                      style={{ color: info?.cor ?? '#374151' }}
+                    >
+                      {nome}
+                    </span>
                   )
                 })}
               </div>
