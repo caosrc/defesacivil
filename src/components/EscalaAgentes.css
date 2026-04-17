@@ -189,6 +189,23 @@
   line-height: 1;
 }
 
+.escala-cal-folgas {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1px;
+  margin-top: 1px;
+}
+
+.escala-cal-folga-dot {
+  font-size: 0.48rem;
+  line-height: 1;
+  border: 1px solid;
+  border-radius: 3px;
+  padding: 0 1px;
+  opacity: 0.6;
+}
+
 /* ── Calendário Sobreaviso — células com nomes ──────────────── */
 .sb-vazio {
   min-height: 72px;

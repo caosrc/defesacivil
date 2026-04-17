@@ -362,7 +362,7 @@ function CalendarioSobreaviso({ ano, mes, sobreavisoSemanal, hoje }: CalendarioS
     <div className="escala-calendario-bloco escala-bloco-sobreaviso">
       <div className="escala-bloco-header">
         <span className="escala-bloco-icone">📟</span>
-        <span className="escala-bloco-titulo">Sobreaviso — 17h às 07h</span>
+        <span className="escala-bloco-titulo">Sobreaviso</span>
       </div>
       <div className="escala-cal-grid">
         {DIAS_SEMANA_HDR.map((d, i) => (
@@ -678,12 +678,13 @@ interface CalendarioProps {
   ano: number
   mes: number
   dados: Record<string, string[]>
+  sobreavisoSemanal: Record<string, string[]>
   hoje: string
   editando: boolean
   onDiaClick: (chave: string) => void
 }
 
-function CalendarioADM({ ano, mes, dados, hoje, editando, onDiaClick }: CalendarioProps) {
+function CalendarioADM({ ano, mes, dados, sobreavisoSemanal, hoje, editando, onDiaClick }: CalendarioProps) {
   const total = diasNoMes(ano, mes)
   const inicio = primeiroDiaSemana(ano, mes)
 
@@ -692,11 +693,30 @@ function CalendarioADM({ ano, mes, dados, hoje, editando, onDiaClick }: Calendar
     ...Array.from({ length: total }, (_, i) => i + 1),
   ]
 
+  // Retorna agentes de folga nesta semana (fizeram sobreaviso na semana anterior)
+  function agentesEmFolga(chave: string): string[] {
+    const mapa = sobreavisoSemanal ?? {}
+    const seg = segundaDaSemana(chave)
+    const [y, m, d] = seg.split('-').map(Number)
+    const dt = new Date(y, m - 1, d)
+    dt.setDate(dt.getDate() - 7)
+    const segAnterior = chaveData(dt.getFullYear(), dt.getMonth(), dt.getDate())
+    const lista = mapa[segAnterior]
+    return Array.isArray(lista) ? lista : []
+  }
+
+  // Folga se aplica apenas de Seg a Sex
+  function diaUtil(chave: string): boolean {
+    const [y, m, d] = chave.split('-').map(Number)
+    const dow = new Date(y, m - 1, d).getDay()
+    return dow >= 1 && dow <= 5
+  }
+
   return (
     <div className="escala-calendario-bloco escala-bloco-adm">
       <div className="escala-bloco-header">
         <span className="escala-bloco-icone">🏢</span>
-        <span className="escala-bloco-titulo">Plantão ADM</span>
+        <span className="escala-bloco-titulo">ADM</span>
       </div>
       <div className="escala-cal-grid">
         {DIAS_SEMANA_HDR.map((d, i) => (
@@ -705,13 +725,17 @@ function CalendarioADM({ ano, mes, dados, hoje, editando, onDiaClick }: Calendar
         {celulas.map((dia, i) => {
           if (dia === null) return <div key={`v-${i}`} className="escala-cal-vazio" />
           const chave = chaveData(ano, mes, dia)
-          const agentes = dados[chave] ?? []
           const isHoje = chave === hoje
+
+          // Filtra agentes de folga (Seg–Sex da semana seguinte ao sobreaviso)
+          const emFolga = diaUtil(chave) ? agentesEmFolga(chave) : []
+          const agentes = (dados[chave] ?? []).filter(nome => !emFolga.includes(nome))
+          const temAgente = agentes.length > 0 || emFolga.length > 0
 
           return (
             <button
               key={chave}
-              className={`escala-cal-dia ${isHoje ? 'hoje' : ''} ${agentes.length > 0 ? 'tem-agente' : ''} ${editando ? 'editavel' : ''}`}
+              className={`escala-cal-dia ${isHoje ? 'hoje' : ''} ${temAgente ? 'tem-agente' : ''} ${editando ? 'editavel' : ''}`}
               onClick={() => editando && onDiaClick(chave)}
             >
               <span className="escala-cal-num">{dia}</span>
@@ -724,6 +748,18 @@ function CalendarioADM({ ano, mes, dados, hoje, editando, onDiaClick }: Calendar
                 })}
                 {agentes.length > 3 && <span className="escala-cal-mais">+{agentes.length - 3}</span>}
               </div>
+              {emFolga.length > 0 && diaUtil(chave) && (
+                <div className="escala-cal-folgas">
+                  {emFolga.map(nome => {
+                    const info = AGENTE_MAP[nome]
+                    return info ? (
+                      <span key={nome} className="escala-cal-folga-dot" title={`${nome} — folga`} style={{ borderColor: info.cor }}>
+                        🏠
+                      </span>
+                    ) : null
+                  })}
+                </div>
+              )}
             </button>
           )
         })}
@@ -880,7 +916,7 @@ export default function EscalaAgentes() {
 
       {editando && isMoises && (
         <div className="escala-edit-aviso">
-          Toque em qualquer dia no Plantão ADM para editar. Use o painel de escalas semanais para o Sobreaviso.
+          Toque em qualquer dia no ADM para editar. Use o painel de escalas semanais para o Sobreaviso.
         </div>
       )}
 
@@ -888,6 +924,7 @@ export default function EscalaAgentes() {
       <CalendarioADM
         ano={ano} mes={mes}
         dados={dados.adm}
+        sobreavisoSemanal={dados.sobreavisoSemanal}
         hoje={hoje}
         editando={editando && isMoises}
         onDiaClick={onDiaClick}
