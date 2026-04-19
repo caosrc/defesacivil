@@ -37,6 +37,7 @@ const MESES = [
 
 const HORAS_POR_SEMANA_SOBREAVISO = 16
 const HORAS_POR_DIA_SOBREAVISO = 14
+const HORAS_POR_FOLGA_BANCO = 8
 
 // Feriados nacionais fixos (MM-DD)
 const FERIADOS_FIXOS = new Set([
@@ -62,15 +63,22 @@ function ehFeriadoOuDomingo(chave: string, feriadosCustom: string[] = []): boole
   return FERIADOS_FIXOS.has(mmdd)
 }
 
+function ehSabadoComum(chave: string, feriadosCustom: string[] = []): boolean {
+  if (ehFeriadoOuDomingo(chave, feriadosCustom)) return false
+  const [y, m, d] = chave.split('-').map(Number)
+  return new Date(y, m - 1, d).getDay() === 6
+}
+
 function multiplicadorDia(
   chave: string,
   percDomFer: number = 100,
   percSb: number = 50,
+  percSabado: number = 50,
   feriadosCustom: string[] = [],
 ): number {
-  return ehFeriadoOuDomingo(chave, feriadosCustom)
-    ? 1 + percDomFer / 100
-    : 1 + percSb / 100
+  if (ehFeriadoOuDomingo(chave, feriadosCustom)) return 1 + percDomFer / 100
+  if (ehSabadoComum(chave, feriadosCustom)) return 1 + percSabado / 100
+  return 1 + percSb / 100
 }
 
 // Retorna os 7 dias (Seg–Dom) de uma semana dado o Monday
@@ -102,6 +110,8 @@ interface EscalaData {
   feriadosCustom: string[]           // feriados municipais/locais: YYYY-MM-DD
   percDomingoFeriado: number         // % de aumento p/ domingo/feriado (padrão 100 → ×2)
   percSobreaviso: number             // % de aumento p/ horas acionado no sobreaviso (padrão 50 → ×1,5)
+  percSabado: number
+  descontosFolgaBanco: Record<string, Record<string, number>>
 }
 
 // ── Storage ───────────────────────────────────────────────────────
@@ -131,6 +141,8 @@ function carregarDados(): EscalaData {
         feriadosCustom: p.feriadosCustom ?? [],
         percDomingoFeriado: p.percDomingoFeriado ?? 100,
         percSobreaviso: p.percSobreaviso ?? 50,
+        percSabado: p.percSabado ?? 50,
+        descontosFolgaBanco: p.descontosFolgaBanco ?? {},
       }
     }
     // Migra v2
@@ -147,10 +159,12 @@ function carregarDados(): EscalaData {
         feriadosCustom: [],
         percDomingoFeriado: 100,
         percSobreaviso: 50,
+        percSabado: 50,
+        descontosFolgaBanco: {},
       }
     }
   } catch { /* */ }
-  return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, ferias: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {}, feriadosCustom: [], percDomingoFeriado: 100, percSobreaviso: 50 }
+  return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, ferias: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {}, feriadosCustom: [], percDomingoFeriado: 100, percSobreaviso: 50, percSabado: 50, descontosFolgaBanco: {} }
 }
 
 function salvarDados(data: EscalaData) {
@@ -240,15 +254,18 @@ function calcularBancoHoras(
   horasTrabalhadasSobreaviso: Record<string, Record<string, number>> = {},
   percDomFer: number = 100,
   percSb: number = 50,
+  percSabado: number = 50,
   feriadosCustom: string[] = [],
+  descontosFolgaBanco: Record<string, Record<string, number>> = {},
 ): number {
   const horasFlat = Object.values(sobreavisoDiario)
     .filter(lista => lista.includes(agente)).length * HORAS_POR_DIA_SOBREAVISO
   const horasAgente = horasTrabalhadasSobreaviso[agente] ?? {}
   const horasExtras = Object.entries(horasAgente).reduce((acc, [data, h]) => {
-    return acc + (h * multiplicadorDia(data, percDomFer, percSb, feriadosCustom))
+    return acc + (h * multiplicadorDia(data, percDomFer, percSb, percSabado, feriadosCustom))
   }, 0)
-  return horasFlat + horasExtras
+  const descontos = Object.values(descontosFolgaBanco[agente] ?? {}).reduce((acc, h) => acc + h, 0)
+  return Math.max(0, horasFlat + horasExtras - descontos)
 }
 
 // Folgas do agente: segunda da semana APÓS cada sobreaviso
@@ -501,8 +518,10 @@ interface BancoHorasAgenteProps {
   agente: string
   sobreavisoSemanal: Record<string, string[]>
   horasTrabalhadasSobreaviso: Record<string, Record<string, number>>
+  descontosFolgaBanco: Record<string, Record<string, number>>
   percDomingoFeriado: number
   percSobreaviso: number
+  percSabado: number
   feriadosCustom: string[]
   onUpdateHoras: (data: string, horas: number) => void
 }
@@ -511,10 +530,11 @@ function fmtH(h: number): string {
   return h % 1 === 0 ? String(h) : h.toFixed(1)
 }
 
-function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, feriadosCustom, onUpdateHoras }: BancoHorasAgenteProps) {
+function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, onUpdateHoras }: BancoHorasAgenteProps) {
   const info = AGENTE_MAP[agente]
   const hoje = hojeStr()
   const horasAgente = horasTrabalhadasSobreaviso[agente] ?? {}
+  const descontosAgente = descontosFolgaBanco[agente] ?? {}
 
   // Folgas futuras
   const folgas = folgasDoAgente(agente, sobreavisoSemanal)
@@ -537,30 +557,35 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
   // Bucket 1 — Sobreaviso: base (14h × turnos) + acionamentos em dias úteis
   // Bucket 2 — Domingos/Feriados: acionamentos em domingos/feriados
 
-  const { horasSobreaviso, horasDomFer } = useMemo(() => {
+  const { horasSobreaviso, horasSabado, horasDomFer, descontosFolga } = useMemo(() => {
     const numTurnos = semanasDoAgente.length
     const base = numTurnos * HORAS_POR_DIA_SOBREAVISO
 
     let extSb = 0   // extras em dias úteis de sobreaviso
+    let extSab = 0
     let extDF = 0   // extras em domingos/feriados durante sobreaviso
 
     for (const [data, h] of Object.entries(horasAgente)) {
       const isFerOuDom = ehFeriadoOuDomingo(data, feriadosCustom)
-      const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, feriadosCustom)
+      const isSabado = ehSabadoComum(data, feriadosCustom)
+      const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
       if (isFerOuDom) extDF += h * mult
+      else if (isSabado) extSab += h * mult
       else extSb += h * mult
     }
 
-    return { horasSobreaviso: base + extSb, horasDomFer: extDF }
-  }, [semanasDoAgente, horasAgente, percDomingoFeriado, percSobreaviso, feriadosCustom])
+    const descontos = Object.values(descontosAgente).reduce((acc, h) => acc + h, 0)
+    return { horasSobreaviso: base + extSb, horasSabado: extSab, horasDomFer: extDF, descontosFolga: descontos }
+  }, [semanasDoAgente, horasAgente, descontosAgente, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom])
 
-  const totalGeral = horasSobreaviso + horasDomFer
+  const totalBruto = horasSobreaviso + horasSabado + horasDomFer
+  const totalGeral = Math.max(0, totalBruto - descontosFolga)
 
   // Horas de acionamento em dias úteis de uma semana específica
   function horasExtrasDaSemana(seg: string): number {
-    return diasDaSemana(seg).reduce((acc, data) => {
+    return [seg].reduce((acc, data) => {
       const h = horasAgente[data] ?? 0
-      return acc + (h * multiplicadorDia(data, percDomingoFeriado, percSobreaviso, feriadosCustom))
+      return acc + (h * multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom))
     }, 0)
   }
 
@@ -589,11 +614,10 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
         </div>
       )}
 
-      {/* ── Bloco 1: Sobreaviso ─────────────────────────────────── */}
       <div className="bh-bloco">
         <div className="bh-bloco-header">
           <span className="bh-bloco-icone">📟</span>
-          <span className="bh-bloco-titulo">Banco de Horas — Sobreaviso</span>
+          <span className="bh-bloco-titulo">Banco de Horas</span>
           <span className="bh-bloco-total">{fmtH(horasSobreaviso)}h</span>
         </div>
 
@@ -629,24 +653,26 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
                   {aberta && (
                     <div className="bh-semana-dias">
                       <p className="bh-semana-instrucao">
-                        Informe as horas acionadas neste dia. Dias úteis ×{(1 + percSobreaviso / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)}
+                        Informe as horas acionadas neste dia. Dias úteis ×{(1 + percSobreaviso / 100).toFixed(1)} · Sábado ×{(1 + percSabado / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)}
                       </p>
                       {dias.map(data => {
                         const [y, m, d] = data.split('-').map(Number)
                         const dow = new Date(y, m - 1, d).getDay()
                         const nomeDia = DIAS_SEMANA_NOMES[dow]
                         const isFerOuDom = ehFeriadoOuDomingo(data, feriadosCustom)
-                        const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, feriadosCustom)
+                        const isSabado = ehSabadoComum(data, feriadosCustom)
+                        const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
                         const hInput = horasAgente[data] ?? 0
                         const hCalc = hInput * mult
 
                         return (
-                          <div key={data} className={`bh-dia-row ${isFerOuDom ? 'feriado-dom' : ''}`}>
+                          <div key={data} className={`bh-dia-row ${isFerOuDom ? 'feriado-dom' : ''} ${isSabado ? 'sabado' : ''}`}>
                             <div className="bh-dia-info">
                               <span className="bh-dia-nome">{nomeDia}</span>
                               <span className="bh-dia-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}</span>
                               {isFerOuDom && <span className="bh-dia-badge">×{(1 + percDomingoFeriado / 100).toFixed(1)}</span>}
-                              {!isFerOuDom && <span className="bh-dia-badge mult15">×{(1 + percSobreaviso / 100).toFixed(1)}</span>}
+                              {isSabado && <span className="bh-dia-badge sabado">×{(1 + percSabado / 100).toFixed(1)}</span>}
+                              {!isFerOuDom && !isSabado && <span className="bh-dia-badge mult15">×{(1 + percSobreaviso / 100).toFixed(1)}</span>}
                             </div>
                             <div className="bh-dia-input-wrap">
                               <input
@@ -681,7 +707,37 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
         )}
       </div>
 
-      {/* ── Bloco 2: Domingos e Feriados ────────────────────────── */}
+      <div className="bh-bloco bh-bloco-sabado">
+        <div className="bh-bloco-header">
+          <span className="bh-bloco-icone">🗓️</span>
+          <span className="bh-bloco-titulo">Banco de Horas — Sábados</span>
+          <span className="bh-bloco-total">{fmtH(horasSabado)}h</span>
+        </div>
+
+        {horasSabado === 0 ? (
+          <p className="bh-card-vazio">Nenhuma hora em sábado registrada.</p>
+        ) : (
+          <div className="bh-domfer-lista">
+            {Object.entries(horasAgente)
+              .filter(([data]) => ehSabadoComum(data, feriadosCustom) && (horasAgente[data] ?? 0) > 0)
+              .sort(([a], [b]) => b.localeCompare(a))
+              .map(([data, hInput]) => {
+                const [y, m, d] = data.split('-').map(Number)
+                const hCalc = hInput * multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
+                return (
+                  <div key={data} className="bh-domfer-row">
+                    <span className="bh-domfer-dia">Sáb</span>
+                    <span className="bh-domfer-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}/{y}</span>
+                    <span className="bh-domfer-input">{fmtH(hInput)}h</span>
+                    <span className="bh-domfer-mult">×{(1 + percSabado / 100).toFixed(1)}</span>
+                    <span className="bh-domfer-calc">= {fmtH(hCalc)}h</span>
+                  </div>
+                )
+              })}
+          </div>
+        )}
+      </div>
+
       <div className="bh-bloco bh-bloco-domfer">
         <div className="bh-bloco-header">
           <span className="bh-bloco-icone">☀️</span>
@@ -700,7 +756,7 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
                 const [y, m, d] = data.split('-').map(Number)
                 const dow = new Date(y, m - 1, d).getDay()
                 const nomeDia = DIAS_SEMANA_NOMES[dow]
-                const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, feriadosCustom)
+                const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
                 const hCalc = hInput * mult
                 return (
                   <div key={data} className="bh-domfer-row">
@@ -716,7 +772,27 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
         )}
       </div>
 
-      {/* ── Total Geral ─────────────────────────────────────────── */}
+      {descontosFolga > 0 && (
+        <div className="bh-bloco bh-bloco-descontos">
+          <div className="bh-bloco-header">
+            <span className="bh-bloco-icone">🏠</span>
+            <span className="bh-bloco-titulo">Folgas descontadas</span>
+            <span className="bh-bloco-total">-{fmtH(descontosFolga)}h</span>
+          </div>
+          <div className="bh-domfer-lista">
+            {Object.entries(descontosAgente)
+              .sort(([a], [b]) => b.localeCompare(a))
+              .map(([data, horas]) => (
+                <div key={data} className="bh-domfer-row desconto">
+                  <span className="bh-domfer-dia">Folga</span>
+                  <span className="bh-domfer-data">{fmtDataLonga(data)}</span>
+                  <span className="bh-domfer-calc">- {fmtH(horas)}h</span>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       <div className="bh-total-geral">
         <span className="bh-total-label">Total de Horas</span>
         <span className="bh-total-valor">{fmtH(totalGeral)}<span className="bh-total-h">h</span></span>
@@ -729,31 +805,33 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
 interface BancoHorasMoisesProps {
   sobreavisoSemanal: Record<string, string[]>
   horasTrabalhadasSobreaviso: Record<string, Record<string, number>>
+  descontosFolgaBanco: Record<string, Record<string, number>>
   percDomingoFeriado: number
   percSobreaviso: number
+  percSabado: number
   feriadosCustom: string[]
 }
 
-function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, feriadosCustom }: BancoHorasMoisesProps) {
+function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom }: BancoHorasMoisesProps) {
   const hoje = hojeStr()
 
   const lista = useMemo(() => {
     return AGENTES_SOBREAVISO.map(ag => {
-      const total = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, feriadosCustom)
+      const total = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco)
       const semanas = Object.values(sobreavisoSemanal).filter(lista => lista.includes(ag.nome)).length
       const desobreaviso = (sobreavisoSemanal[hoje] ?? []).includes(ag.nome)
       const folgas = folgasDoAgente(ag.nome, sobreavisoSemanal)
       const temFolga = folgas.includes(hoje)
       return { ...ag, total, semanas, desobreaviso, temFolga }
     }).sort((a, b) => b.total - a.total)
-  }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, feriadosCustom, hoje])
+  }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, hoje])
 
   const totalGeral = lista.reduce((s, ag) => s + ag.total, 0)
 
   return (
     <div className="bh-moises-painel">
       <div className="bh-moises-header">
-        <span className="bh-moises-titulo">⏱️ Banco de Horas — Sobreaviso</span>
+        <span className="bh-moises-titulo">⏱️ Banco de Horas</span>
         <span className="bh-moises-total">{totalGeral % 1 === 0 ? totalGeral : totalGeral.toFixed(1)}h total</span>
       </div>
       <div className="bh-moises-lista">
@@ -778,7 +856,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, percD
         ))}
       </div>
       <div className="bh-moises-rodape">
-        {HORAS_POR_DIA_SOBREAVISO}h por dia de sobreaviso · Seg–Sáb ×{(1 + percSobreaviso / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)}
+        {HORAS_POR_DIA_SOBREAVISO}h por dia de sobreaviso · Dias úteis ×{(1 + percSobreaviso / 100).toFixed(1)} · Sábado ×{(1 + percSabado / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)} · folga desconta {HORAS_POR_FOLGA_BANCO}h
       </div>
     </div>
   )
@@ -1074,16 +1152,18 @@ function Legenda({ ferias, mes, ano }: { ferias: Ferias[]; mes: number; ano: num
 interface PainelRegrasProps {
   percDomingoFeriado: number
   percSobreaviso: number
-  onChange: (percDomFer: number, percSb: number) => void
+  percSabado: number
+  onChange: (percDomFer: number, percSb: number, percSabado: number) => void
 }
 
-function PainelRegras({ percDomingoFeriado, percSobreaviso, onChange }: PainelRegrasProps) {
+function PainelRegras({ percDomingoFeriado, percSobreaviso, percSabado, onChange }: PainelRegrasProps) {
   const [domFer, setDomFer] = useState(percDomingoFeriado)
   const [sb, setSb] = useState(percSobreaviso)
+  const [sab, setSab] = useState(percSabado)
   const [salvo, setSalvo] = useState(false)
 
   function aplicar() {
-    onChange(Math.max(0, domFer), Math.max(0, sb))
+    onChange(Math.max(0, domFer), Math.max(0, sb), Math.max(0, sab))
     setSalvo(true)
     setTimeout(() => setSalvo(false), 2000)
   }
@@ -1125,6 +1205,24 @@ function PainelRegras({ percDomingoFeriado, percSobreaviso, onChange }: PainelRe
         </div>
         <span className="escala-regras-ex">
           Multiplicador: ×{(1 + sb / 100).toFixed(2)} — a cada hora acionada vale {(1 + sb / 100).toFixed(2)}h no banco
+        </span>
+      </div>
+
+      <div className="escala-regras-item">
+        <div className="escala-regras-label">
+          <span className="escala-regras-icone">🗓️</span>
+          <span>Sábado</span>
+        </div>
+        <div className="escala-regras-input-wrap">
+          <input
+            type="number" min={0} max={500} step={5}
+            value={sab}
+            onChange={e => setSab(Number(e.target.value))}
+          />
+          <span className="escala-regras-pct">%</span>
+        </div>
+        <span className="escala-regras-ex">
+          Multiplicador: ×{(1 + sab / 100).toFixed(2)} — a cada hora acionada no sábado vale {(1 + sab / 100).toFixed(2)}h no banco
         </span>
       </div>
 
@@ -1220,6 +1318,12 @@ export default function EscalaAgentes() {
           sobreavisoSemanal: {},
           ferias: p.ferias ?? [],
           horasSobreaviso: p.horasSobreaviso ?? {},
+          horasTrabalhadasSobreaviso: {},
+          feriadosCustom: [],
+          percDomingoFeriado: 100,
+          percSobreaviso: 50,
+          percSabado: 50,
+          descontosFolgaBanco: {},
         }
         salvarDados(migrado)
         setDados(migrado)
@@ -1275,8 +1379,49 @@ export default function EscalaAgentes() {
     salvarDados(novos)
   }
 
-  function onRegrasChange(percDomFer: number, percSb: number) {
-    const novos = { ...dados, percDomingoFeriado: percDomFer, percSobreaviso: percSb }
+  useEffect(() => {
+    const agentesDeFolgaHoje = dados.sobreaviso[diaAnterior(hoje)] ?? []
+    if (agentesDeFolgaHoje.length === 0) return
+
+    let mudou = false
+    const novosDescontos: Record<string, Record<string, number>> = { ...dados.descontosFolgaBanco }
+
+    agentesDeFolgaHoje.forEach(agente => {
+      const descontosAgente = { ...(novosDescontos[agente] ?? {}) }
+      if (descontosAgente[hoje]) {
+        novosDescontos[agente] = descontosAgente
+        return
+      }
+
+      const saldoAtual = calcularBancoHoras(
+        agente,
+        dados.sobreaviso,
+        dados.horasTrabalhadasSobreaviso,
+        dados.percDomingoFeriado,
+        dados.percSobreaviso,
+        dados.percSabado,
+        dados.feriadosCustom,
+        novosDescontos,
+      )
+
+      if (saldoAtual <= 0) {
+        novosDescontos[agente] = descontosAgente
+        return
+      }
+
+      descontosAgente[hoje] = Math.min(HORAS_POR_FOLGA_BANCO, saldoAtual)
+      novosDescontos[agente] = descontosAgente
+      mudou = true
+    })
+
+    if (!mudou) return
+    const novos = { ...dados, descontosFolgaBanco: novosDescontos }
+    setDados(novos)
+    salvarDados(novos)
+  }, [dados, hoje])
+
+  function onRegrasChange(percDomFer: number, percSb: number, percSabado: number) {
+    const novos = { ...dados, percDomingoFeriado: percDomFer, percSobreaviso: percSb, percSabado }
     setDados(novos)
     salvarDados(novos)
   }
@@ -1369,8 +1514,10 @@ export default function EscalaAgentes() {
           agente={agenteLogado}
           sobreavisoSemanal={dados.sobreaviso}
           horasTrabalhadasSobreaviso={dados.horasTrabalhadasSobreaviso}
+          descontosFolgaBanco={dados.descontosFolgaBanco}
           percDomingoFeriado={dados.percDomingoFeriado}
           percSobreaviso={dados.percSobreaviso}
+          percSabado={dados.percSabado}
           feriadosCustom={dados.feriadosCustom}
           onUpdateHoras={atualizarHorasTrabalhadasSobreaviso}
         />
@@ -1381,8 +1528,10 @@ export default function EscalaAgentes() {
         <BancoHorasMoises
           sobreavisoSemanal={dados.sobreaviso}
           horasTrabalhadasSobreaviso={dados.horasTrabalhadasSobreaviso}
+          descontosFolgaBanco={dados.descontosFolgaBanco}
           percDomingoFeriado={dados.percDomingoFeriado}
           percSobreaviso={dados.percSobreaviso}
+          percSabado={dados.percSabado}
           feriadosCustom={dados.feriadosCustom}
         />
       )}
@@ -1393,6 +1542,7 @@ export default function EscalaAgentes() {
           <PainelRegras
             percDomingoFeriado={dados.percDomingoFeriado}
             percSobreaviso={dados.percSobreaviso}
+            percSabado={dados.percSabado}
             onChange={onRegrasChange}
           />
           <PainelFeriadosCustom

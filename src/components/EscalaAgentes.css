@@ -1076,6 +1076,10 @@
   background: #fef9c3;
 }
 
+.bh-dia-row.sabado {
+  background: #eff6ff;
+}
+
 .bh-dia-info {
   display: flex;
   align-items: center;
@@ -1108,6 +1112,11 @@
 .bh-dia-badge.mult15 {
   background: #e0f2fe;
   color: #0369a1;
+}
+
+.bh-dia-badge.sabado {
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .bh-dia-input-wrap {
@@ -1537,6 +1546,14 @@
   border-top: 3px solid #f59e0b;
 }
 
+.bh-bloco-sabado {
+  border-top: 3px solid #2563eb;
+}
+
+.bh-bloco-descontos {
+  border-top: 3px solid #16a34a;
+}
+
 .bh-bloco-header {
   display: flex;
   align-items: center;
@@ -1571,6 +1588,16 @@
   background: #fef3c7;
 }
 
+.bh-bloco-sabado .bh-bloco-total {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.bh-bloco-descontos .bh-bloco-total {
+  color: #166534;
+  background: #dcfce7;
+}
+
 /* Lista de Domingos/Feriados */
 .bh-domfer-lista {
   display: flex;
@@ -1588,6 +1615,11 @@
   border-radius: 8px;
   padding: 0.4rem 0.6rem;
   font-size: 0.82rem;
+}
+
+.bh-domfer-row.desconto {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
 }
 
 .bh-domfer-dia {

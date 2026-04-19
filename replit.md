@@ -94,7 +94,7 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 - Filtros por nível, status e busca de texto
 - Resumo numérico no topo (Alto, Médio, Baixo, Total)
 - Checklists de viatura com fotos por ângulo, avarias, assinatura digital, histórico, exportação Excel geral e PDF individual via impressão do navegador
-- Aba Escala no menu inferior com calendário ADM, sobreaviso diário, férias/folgas prolongadas e banco de horas; no calendário de Sobreaviso o responsável é marcado por dia, e o ADM mostra automaticamente “Folga:” no dia seguinte para quem ficou de sobreaviso.
+- Aba Escala no menu inferior com calendário ADM, sobreaviso diário, férias/folgas prolongadas e banco de horas; no calendário de Sobreaviso o responsável é marcado por dia, o ADM mostra automaticamente “Folga:” no dia seguinte, e quando essa folga chega no dia atual o sistema desconta automaticamente até 8h do banco do agente. As regras do banco têm percentuais separados para dias úteis, sábado e domingos/feriados.
 - Suporte offline completo via PWA (Service Worker + IndexedDB + manifest)
 - Rastreamento em tempo real no mapa via WebSocket: a aba Mapa conecta ao servidor mesmo com o GPS local desligado, permitindo ver outros agentes online que estejam com GPS ativo.
 
