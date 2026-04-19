@@ -53,7 +53,8 @@ const FERIADOS_FIXOS = new Set([
 
 const DIAS_SEMANA_NOMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
-function ehFeriadoOuDomingo(chave: string): boolean {
+function ehFeriadoOuDomingo(chave: string, feriadosCustom: string[] = []): boolean {
+  if (feriadosCustom.includes(chave)) return true
   const [y, m, d] = chave.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
   if (dt.getDay() === 0) return true
@@ -61,8 +62,15 @@ function ehFeriadoOuDomingo(chave: string): boolean {
   return FERIADOS_FIXOS.has(mmdd)
 }
 
-function multiplicadorDia(chave: string): number {
-  return ehFeriadoOuDomingo(chave) ? 2 : 1.5
+function multiplicadorDia(
+  chave: string,
+  percDomFer: number = 100,
+  percSb: number = 50,
+  feriadosCustom: string[] = [],
+): number {
+  return ehFeriadoOuDomingo(chave, feriadosCustom)
+    ? 1 + percDomFer / 100
+    : 1 + percSb / 100
 }
 
 // Retorna os 7 dias (Seg–Dom) de uma semana dado o Monday
@@ -91,6 +99,9 @@ interface EscalaData {
   ferias: Ferias[]
   horasSobreaviso: Record<string, Record<string, number>>   // legado
   horasTrabalhadasSobreaviso: Record<string, Record<string, number>> // agente → { data: horas }
+  feriadosCustom: string[]           // feriados municipais/locais: YYYY-MM-DD
+  percDomingoFeriado: number         // % de aumento p/ domingo/feriado (padrão 100 → ×2)
+  percSobreaviso: number             // % de aumento p/ horas acionado no sobreaviso (padrão 50 → ×1,5)
 }
 
 // ── Storage ───────────────────────────────────────────────────────
@@ -117,6 +128,9 @@ function carregarDados(): EscalaData {
         ferias: p.ferias ?? [],
         horasSobreaviso: p.horasSobreaviso ?? {},
         horasTrabalhadasSobreaviso: p.horasTrabalhadasSobreaviso ?? {},
+        feriadosCustom: p.feriadosCustom ?? [],
+        percDomingoFeriado: p.percDomingoFeriado ?? 100,
+        percSobreaviso: p.percSobreaviso ?? 50,
       }
     }
     // Migra v2
@@ -130,10 +144,13 @@ function carregarDados(): EscalaData {
         ferias: p.ferias ?? [],
         horasSobreaviso: p.horasSobreaviso ?? {},
         horasTrabalhadasSobreaviso: p.horasTrabalhadasSobreaviso ?? {},
+        feriadosCustom: [],
+        percDomingoFeriado: 100,
+        percSobreaviso: 50,
       }
     }
   } catch { /* */ }
-  return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, ferias: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {} }
+  return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, ferias: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {}, feriadosCustom: [], percDomingoFeriado: 100, percSobreaviso: 50 }
 }
 
 function salvarDados(data: EscalaData) {
@@ -220,13 +237,16 @@ function agenteEmFerias(nome: string, chave: string, ferias: Ferias[]): boolean 
 function calcularBancoHoras(
   agente: string,
   sobreavisoDiario: Record<string, string[]>,
-  horasTrabalhadasSobreaviso: Record<string, Record<string, number>> = {}
+  horasTrabalhadasSobreaviso: Record<string, Record<string, number>> = {},
+  percDomFer: number = 100,
+  percSb: number = 50,
+  feriadosCustom: string[] = [],
 ): number {
   const horasFlat = Object.values(sobreavisoDiario)
     .filter(lista => lista.includes(agente)).length * HORAS_POR_DIA_SOBREAVISO
   const horasAgente = horasTrabalhadasSobreaviso[agente] ?? {}
   const horasExtras = Object.entries(horasAgente).reduce((acc, [data, h]) => {
-    return acc + (h * multiplicadorDia(data))
+    return acc + (h * multiplicadorDia(data, percDomFer, percSb, feriadosCustom))
   }, 0)
   return horasFlat + horasExtras
 }
@@ -405,10 +425,11 @@ interface CalendarioSobreavisoProps {
   sobreavisoDiario: Record<string, string[]>
   hoje: string
   editando: boolean
+  feriadosCustom: string[]
   onDiaClick: (chave: string) => void
 }
 
-function CalendarioSobreaviso({ ano, mes, sobreavisoDiario, hoje, editando, onDiaClick }: CalendarioSobreavisoProps) {
+function CalendarioSobreaviso({ ano, mes, sobreavisoDiario, hoje, editando, feriadosCustom, onDiaClick }: CalendarioSobreavisoProps) {
   const total = diasNoMes(ano, mes)
   const inicio = primeiroDiaSemana(ano, mes)
 
@@ -433,17 +454,25 @@ function CalendarioSobreaviso({ ano, mes, sobreavisoDiario, hoje, editando, onDi
           const chave = chaveData(ano, mes, dia)
           const agentes = sobreavisoDiario[chave] ?? []
           const isHoje = chave === hoje
+          const isFerCustom = feriadosCustom.includes(chave)
+          const isFeriadoFixo = (() => {
+            const [y, m, d] = chave.split('-').map(Number)
+            const mmdd = `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+            const dt = new Date(y, m - 1, d)
+            return dt.getDay() === 0 || FERIADOS_FIXOS.has(mmdd)
+          })()
 
           const primeiraInfo = agentes.length > 0 ? AGENTE_MAP[agentes[0]] : null
 
           return (
             <button
               key={chave}
-              className={`escala-cal-dia sb-dia ${isHoje ? 'hoje' : ''} ${agentes.length > 0 ? 'tem-agente' : ''} ${editando ? 'editavel' : ''}`}
+              className={`escala-cal-dia sb-dia ${isHoje ? 'hoje' : ''} ${agentes.length > 0 ? 'tem-agente' : ''} ${editando ? 'editavel' : ''} ${isFerCustom ? 'feriado-custom' : ''} ${isFeriadoFixo && !isFerCustom ? 'feriado-fixo' : ''}`}
               style={primeiraInfo ? { backgroundColor: primeiraInfo.cor + '10', borderBottom: `2px solid ${primeiraInfo.cor}35` } : {}}
               onClick={() => editando && onDiaClick(chave)}
             >
               <span className="escala-cal-num">{dia}</span>
+              {isFerCustom && <span className="escala-cal-fer-tag sb-fer-tag">📅</span>}
               <div className="sb-nomes-dia">
                 {agentes.map(nome => {
                   const info = AGENTE_MAP[nome]
@@ -472,14 +501,17 @@ interface BancoHorasAgenteProps {
   agente: string
   sobreavisoSemanal: Record<string, string[]>
   horasTrabalhadasSobreaviso: Record<string, Record<string, number>>
+  percDomingoFeriado: number
+  percSobreaviso: number
+  feriadosCustom: string[]
   onUpdateHoras: (data: string, horas: number) => void
 }
 
-function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, onUpdateHoras }: BancoHorasAgenteProps) {
+function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, feriadosCustom, onUpdateHoras }: BancoHorasAgenteProps) {
   const info = AGENTE_MAP[agente]
   const hoje = hojeStr()
 
-  const totalHoras = calcularBancoHoras(agente, sobreavisoSemanal, horasTrabalhadasSobreaviso)
+  const totalHoras = calcularBancoHoras(agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, feriadosCustom)
 
   // Folgas futuras
   const folgas = folgasDoAgente(agente, sobreavisoSemanal)
@@ -503,7 +535,7 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
   function horasExtrasDaSemana(seg: string): number {
     return diasDaSemana(seg).reduce((acc, data) => {
       const h = horasAgente[data] ?? 0
-      return acc + (h * multiplicadorDia(data))
+      return acc + (h * multiplicadorDia(data, percDomingoFeriado, percSobreaviso, feriadosCustom))
     }, 0)
   }
 
@@ -573,8 +605,8 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
                       const [y, m, d] = data.split('-').map(Number)
                       const dow = new Date(y, m - 1, d).getDay()
                       const nomeDia = DIAS_SEMANA_NOMES[dow]
-                      const isFerOuDom = ehFeriadoOuDomingo(data)
-                      const mult = multiplicadorDia(data)
+                      const isFerOuDom = ehFeriadoOuDomingo(data, feriadosCustom)
+                      const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, feriadosCustom)
                       const hInput = horasAgente[data] ?? 0
                       const hCalc = hInput * mult
 
@@ -583,8 +615,8 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
                           <div className="bh-dia-info">
                             <span className="bh-dia-nome">{nomeDia}</span>
                             <span className="bh-dia-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}</span>
-                            {isFerOuDom && <span className="bh-dia-badge">×2</span>}
-                            {!isFerOuDom && <span className="bh-dia-badge mult15">×1,5</span>}
+                            {isFerOuDom && <span className="bh-dia-badge">×{(1 + percDomingoFeriado / 100).toFixed(1)}</span>}
+                            {!isFerOuDom && <span className="bh-dia-badge mult15">×{(1 + percSobreaviso / 100).toFixed(1)}</span>}
                           </div>
                           <div className="bh-dia-input-wrap">
                             <input
@@ -625,21 +657,24 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
 interface BancoHorasMoisesProps {
   sobreavisoSemanal: Record<string, string[]>
   horasTrabalhadasSobreaviso: Record<string, Record<string, number>>
+  percDomingoFeriado: number
+  percSobreaviso: number
+  feriadosCustom: string[]
 }
 
-function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso }: BancoHorasMoisesProps) {
+function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, feriadosCustom }: BancoHorasMoisesProps) {
   const hoje = hojeStr()
 
   const lista = useMemo(() => {
     return AGENTES_SOBREAVISO.map(ag => {
-      const total = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso)
+      const total = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, feriadosCustom)
       const semanas = Object.values(sobreavisoSemanal).filter(lista => lista.includes(ag.nome)).length
       const desobreaviso = (sobreavisoSemanal[hoje] ?? []).includes(ag.nome)
       const folgas = folgasDoAgente(ag.nome, sobreavisoSemanal)
       const temFolga = folgas.includes(hoje)
       return { ...ag, total, semanas, desobreaviso, temFolga }
     }).sort((a, b) => b.total - a.total)
-  }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, hoje])
+  }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, feriadosCustom, hoje])
 
   const totalGeral = lista.reduce((s, ag) => s + ag.total, 0)
 
@@ -671,7 +706,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso }: Ban
         ))}
       </div>
       <div className="bh-moises-rodape">
-        16h por semana de sobreaviso · Seg–Sáb ×1,5 · Dom/Feriado ×2
+        {HORAS_POR_DIA_SOBREAVISO}h por dia de sobreaviso · Seg–Sáb ×{(1 + percSobreaviso / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)}
       </div>
     </div>
   )
@@ -811,10 +846,11 @@ interface CalendarioProps {
   ferias: Ferias[]
   hoje: string
   editando: boolean
+  feriadosCustom: string[]
   onDiaClick: (chave: string) => void
 }
 
-function CalendarioADM({ ano, mes, dados, sobreavisoDiario, ferias, hoje, editando, onDiaClick }: CalendarioProps) {
+function CalendarioADM({ ano, mes, dados, sobreavisoDiario, ferias, hoje, editando, feriadosCustom, onDiaClick }: CalendarioProps) {
   const total = diasNoMes(ano, mes)
   const inicio = primeiroDiaSemana(ano, mes)
 
@@ -860,6 +896,12 @@ function CalendarioADM({ ano, mes, dados, sobreavisoDiario, ferias, hoje, editan
         {Array.from({ length: total }, (_, i) => i + 1).map(dia => {
           const chave = chaveData(ano, mes, dia)
           const isHoje = chave === hoje
+          const isFerCustom = feriadosCustom.includes(chave)
+          const isFeriadoFixo = (() => {
+            const [y, m, d] = chave.split('-').map(Number)
+            const mmdd = `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+            return FERIADOS_FIXOS.has(mmdd)
+          })()
           const folgas = diaUtil(chave)
             ? agentesEmFolga(chave).filter(nome => !agenteEmFerias(nome, chave, ferias))
             : []
@@ -868,10 +910,12 @@ function CalendarioADM({ ano, mes, dados, sobreavisoDiario, ferias, hoje, editan
           return (
             <button
               key={chave}
-              className={`escala-cal-dia ${isHoje ? 'hoje' : ''} ${temFolga ? 'tem-folga' : ''} ${editando ? 'editavel' : ''}`}
+              className={`escala-cal-dia ${isHoje ? 'hoje' : ''} ${temFolga ? 'tem-folga' : ''} ${editando ? 'editavel' : ''} ${isFerCustom ? 'feriado-custom' : ''} ${isFeriadoFixo ? 'feriado-fixo' : ''}`}
               onClick={() => editando && onDiaClick(chave)}
             >
               <span className="escala-cal-num">{dia}</span>
+              {isFerCustom && <span className="escala-cal-fer-tag">📅</span>}
+              {isFeriadoFixo && !isFerCustom && <span className="escala-cal-fer-tag">🏛️</span>}
               {temFolga && (
                 <div className="escala-adm-folgas" title={folgas.join(', ')}>
                   <span className="escala-adm-folga-label">Folga:</span>
@@ -954,6 +998,128 @@ function Legenda({ ferias, mes, ano }: { ferias: Ferias[]; mes: number; ano: num
   )
 }
 
+// ── Painel de Regras do Banco de Horas (Moisés) ───────────────────
+interface PainelRegrasProps {
+  percDomingoFeriado: number
+  percSobreaviso: number
+  onChange: (percDomFer: number, percSb: number) => void
+}
+
+function PainelRegras({ percDomingoFeriado, percSobreaviso, onChange }: PainelRegrasProps) {
+  const [domFer, setDomFer] = useState(percDomingoFeriado)
+  const [sb, setSb] = useState(percSobreaviso)
+  const [salvo, setSalvo] = useState(false)
+
+  function aplicar() {
+    onChange(Math.max(0, domFer), Math.max(0, sb))
+    setSalvo(true)
+    setTimeout(() => setSalvo(false), 2000)
+  }
+
+  return (
+    <div className="escala-regras-painel">
+      <div className="escala-regras-titulo">⚙️ Regras do Banco de Horas</div>
+
+      <div className="escala-regras-item">
+        <div className="escala-regras-label">
+          <span className="escala-regras-icone">☀️</span>
+          <span>Domingos e Feriados</span>
+        </div>
+        <div className="escala-regras-input-wrap">
+          <input
+            type="number" min={0} max={500} step={5}
+            value={domFer}
+            onChange={e => setDomFer(Number(e.target.value))}
+          />
+          <span className="escala-regras-pct">%</span>
+        </div>
+        <span className="escala-regras-ex">
+          Multiplicador: ×{(1 + domFer / 100).toFixed(2)} — a cada hora acionada vale {(1 + domFer / 100).toFixed(2)}h no banco
+        </span>
+      </div>
+
+      <div className="escala-regras-item">
+        <div className="escala-regras-label">
+          <span className="escala-regras-icone">📟</span>
+          <span>Sobreaviso (dias úteis)</span>
+        </div>
+        <div className="escala-regras-input-wrap">
+          <input
+            type="number" min={0} max={500} step={5}
+            value={sb}
+            onChange={e => setSb(Number(e.target.value))}
+          />
+          <span className="escala-regras-pct">%</span>
+        </div>
+        <span className="escala-regras-ex">
+          Multiplicador: ×{(1 + sb / 100).toFixed(2)} — a cada hora acionada vale {(1 + sb / 100).toFixed(2)}h no banco
+        </span>
+      </div>
+
+      <button
+        className={`escala-regras-salvar ${salvo ? 'salvo' : ''}`}
+        onClick={aplicar}
+      >
+        {salvo ? '✅ Regras salvas!' : 'Salvar regras'}
+      </button>
+    </div>
+  )
+}
+
+// ── Painel de Feriados Municipais / Locais (Moisés) ───────────────
+interface PainelFeriadosCustomProps {
+  feriados: string[]
+  onChange: (novas: string[]) => void
+}
+
+function PainelFeriadosCustom({ feriados, onChange }: PainelFeriadosCustomProps) {
+  const [novoFeriado, setNovoFeriado] = useState(hojeStr())
+  const [erro, setErro] = useState('')
+
+  function adicionar() {
+    if (!novoFeriado) { setErro('Selecione uma data.'); return }
+    if (feriados.includes(novoFeriado)) { setErro('Esta data já está marcada.'); return }
+    setErro('')
+    onChange([...feriados, novoFeriado].sort())
+  }
+
+  function remover(data: string) {
+    onChange(feriados.filter(d => d !== data))
+  }
+
+  return (
+    <div className="escala-fer-custom-painel">
+      <div className="escala-fer-custom-titulo">📅 Feriados Municipais / Locais</div>
+      <p className="escala-fer-custom-desc">
+        Marque datas específicas como feriado para que o multiplicador ☀️ Domingos/Feriados seja aplicado no banco de horas.
+      </p>
+      <div className="escala-fer-custom-form">
+        <input
+          type="date"
+          value={novoFeriado}
+          onChange={e => { setNovoFeriado(e.target.value); setErro('') }}
+          className="escala-fer-custom-input"
+        />
+        <button className="escala-fer-custom-add" onClick={adicionar}>+ Marcar feriado</button>
+      </div>
+      {erro && <span className="escala-fer-custom-erro">{erro}</span>}
+
+      {feriados.length > 0 ? (
+        <div className="escala-fer-custom-lista">
+          {feriados.map(data => (
+            <div key={data} className="escala-fer-custom-item">
+              <span className="escala-fer-custom-data">🗓️ {fmtDataLonga(data)}</span>
+              <button className="escala-fer-custom-remover" onClick={() => remover(data)}>✕</button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="escala-fer-custom-vazio">Nenhum feriado local marcado.</p>
+      )}
+    </div>
+  )
+}
+
 // ── Componente principal ──────────────────────────────────────────
 export default function EscalaAgentes() {
   const agora = new Date()
@@ -1031,6 +1197,18 @@ export default function EscalaAgentes() {
     salvarDados(novos)
   }
 
+  function onFeriadosCustomChange(novosFeriados: string[]) {
+    const novos = { ...dados, feriadosCustom: novosFeriados }
+    setDados(novos)
+    salvarDados(novos)
+  }
+
+  function onRegrasChange(percDomFer: number, percSb: number) {
+    const novos = { ...dados, percDomingoFeriado: percDomFer, percSobreaviso: percSb }
+    setDados(novos)
+    salvarDados(novos)
+  }
+
   function atualizarHorasTrabalhadasSobreaviso(data: string, horas: number) {
     const agenteHoras = { ...(dados.horasTrabalhadasSobreaviso[agenteLogado] ?? {}) }
     if (horas === 0) {
@@ -1097,6 +1275,7 @@ export default function EscalaAgentes() {
         ferias={dados.ferias}
         hoje={hoje}
         editando={editando && isMoises}
+        feriadosCustom={dados.feriadosCustom}
         onDiaClick={onDiaClick}
       />
 
@@ -1106,6 +1285,7 @@ export default function EscalaAgentes() {
         sobreavisoDiario={dados.sobreaviso}
         hoje={hoje}
         editando={editando && isMoises}
+        feriadosCustom={dados.feriadosCustom}
         onDiaClick={(chave) => setModalSemana(chave)}
       />
 
@@ -1117,6 +1297,9 @@ export default function EscalaAgentes() {
           agente={agenteLogado}
           sobreavisoSemanal={dados.sobreaviso}
           horasTrabalhadasSobreaviso={dados.horasTrabalhadasSobreaviso}
+          percDomingoFeriado={dados.percDomingoFeriado}
+          percSobreaviso={dados.percSobreaviso}
+          feriadosCustom={dados.feriadosCustom}
           onUpdateHoras={atualizarHorasTrabalhadasSobreaviso}
         />
       )}
@@ -1126,12 +1309,26 @@ export default function EscalaAgentes() {
         <BancoHorasMoises
           sobreavisoSemanal={dados.sobreaviso}
           horasTrabalhadasSobreaviso={dados.horasTrabalhadasSobreaviso}
+          percDomingoFeriado={dados.percDomingoFeriado}
+          percSobreaviso={dados.percSobreaviso}
+          feriadosCustom={dados.feriadosCustom}
         />
       )}
 
-      {/* Painel de férias — só Moisés em edição */}
+      {/* Painéis exclusivos do Moisés em modo edição */}
       {editando && isMoises && (
-        <PainelFerias ferias={dados.ferias} onChange={onFeriasChange} />
+        <>
+          <PainelRegras
+            percDomingoFeriado={dados.percDomingoFeriado}
+            percSobreaviso={dados.percSobreaviso}
+            onChange={onRegrasChange}
+          />
+          <PainelFeriadosCustom
+            feriados={dados.feriadosCustom}
+            onChange={onFeriadosCustomChange}
+          />
+          <PainelFerias ferias={dados.ferias} onChange={onFeriasChange} />
+        </>
       )}
 
       {/* Modal ADM por dia */}

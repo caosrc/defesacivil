@@ -1268,3 +1268,230 @@
   margin-bottom: 0.75rem;
   letter-spacing: 0.01em;
 }
+
+/* ── Calendário: feriados fixos e custom ───────────────────────── */
+.escala-cal-dia.feriado-custom {
+  background: #fef3c7 !important;
+  border-color: #f59e0b !important;
+}
+.escala-cal-dia.feriado-fixo {
+  background: #ede9fe !important;
+  border-color: #a78bfa !important;
+}
+.escala-cal-fer-tag {
+  display: block;
+  font-size: 0.6rem;
+  line-height: 1;
+  margin-top: 1px;
+}
+.sb-fer-tag {
+  font-size: 0.55rem;
+}
+
+/* ── Painel de Regras do Banco de Horas ─────────────────────────── */
+.escala-regras-painel {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.09);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.escala-regras-titulo {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1a4b8c;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.5rem;
+}
+
+.escala-regras-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 0.65rem 0.8rem;
+}
+
+.escala-regras-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: #374151;
+  font-size: 0.88rem;
+}
+
+.escala-regras-icone {
+  font-size: 1.1rem;
+}
+
+.escala-regras-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.escala-regras-input-wrap input {
+  width: 90px;
+  padding: 0.4rem 0.6rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1a4b8c;
+  background: #fff;
+  text-align: center;
+}
+
+.escala-regras-input-wrap input:focus {
+  outline: none;
+  border-color: #1a4b8c;
+}
+
+.escala-regras-pct {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #6b7280;
+}
+
+.escala-regras-ex {
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.escala-regras-salvar {
+  background: #1a4b8c;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  align-self: flex-start;
+}
+
+.escala-regras-salvar:hover {
+  background: #1e40af;
+}
+
+.escala-regras-salvar.salvo {
+  background: #16a34a;
+}
+
+/* ── Painel de Feriados Municipais / Locais ─────────────────────── */
+.escala-fer-custom-painel {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.09);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.escala-fer-custom-titulo {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1a4b8c;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.5rem;
+}
+
+.escala-fer-custom-desc {
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.escala-fer-custom-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.escala-fer-custom-input {
+  flex: 1;
+  min-width: 140px;
+  padding: 0.45rem 0.7rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #1a4b8c;
+  background: #f9fafb;
+}
+
+.escala-fer-custom-input:focus {
+  outline: none;
+  border-color: #1a4b8c;
+  background: #fff;
+}
+
+.escala-fer-custom-add {
+  background: #f59e0b;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.escala-fer-custom-add:hover {
+  background: #d97706;
+}
+
+.escala-fer-custom-erro {
+  font-size: 0.78rem;
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.escala-fer-custom-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.escala-fer-custom-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 0.45rem 0.7rem;
+}
+
+.escala-fer-custom-data {
+  font-size: 0.85rem;
+  color: #92400e;
+  font-weight: 500;
+}
+
+.escala-fer-custom-remover {
+  background: none;
+  border: none;
+  color: #dc2626;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  line-height: 1;
+}
+
+.escala-fer-custom-vazio {
+  font-size: 0.8rem;
+  color: #9ca3af;
+  text-align: center;
+  margin: 0;
+}
