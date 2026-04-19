@@ -1495,3 +1495,160 @@
   text-align: center;
   margin: 0;
 }
+
+/* ── Banco de Horas — visão do agente (novo layout) ─────────────── */
+.bh-agente-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bh-agente-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.09);
+}
+
+.bh-agente-nome-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.bh-agente-subtitulo {
+  font-size: 0.72rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* Blocos individuais */
+.bh-bloco {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.09);
+  overflow: hidden;
+}
+
+.bh-bloco-domfer {
+  border-top: 3px solid #f59e0b;
+}
+
+.bh-bloco-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.bh-bloco-icone {
+  font-size: 1.1rem;
+}
+
+.bh-bloco-titulo {
+  flex: 1;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #374151;
+}
+
+.bh-bloco-total {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #1a4b8c;
+  background: #e8f0fe;
+  padding: 0.15rem 0.6rem;
+  border-radius: 20px;
+}
+
+.bh-bloco-domfer .bh-bloco-total {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+/* Lista de Domingos/Feriados */
+.bh-domfer-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem 0.7rem;
+}
+
+.bh-domfer-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #fef9ee;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.82rem;
+}
+
+.bh-domfer-dia {
+  font-weight: 600;
+  color: #92400e;
+  min-width: 28px;
+}
+
+.bh-domfer-data {
+  color: #6b7280;
+  flex: 1;
+}
+
+.bh-domfer-input {
+  font-weight: 600;
+  color: #374151;
+}
+
+.bh-domfer-mult {
+  font-size: 0.75rem;
+  color: #d97706;
+  font-weight: 600;
+  background: #fef3c7;
+  padding: 0.1rem 0.35rem;
+  border-radius: 10px;
+}
+
+.bh-domfer-calc {
+  font-weight: 700;
+  color: #1a4b8c;
+  min-width: 40px;
+  text-align: right;
+}
+
+/* Total Geral */
+.bh-total-geral {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #1a4b8c, #2563eb);
+  color: #fff;
+  border-radius: 12px;
+  padding: 0.85rem 1.1rem;
+  box-shadow: 0 2px 8px rgba(26,75,140,0.25);
+}
+
+.bh-total-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.bh-total-valor {
+  font-size: 1.8rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.bh-total-h {
+  font-size: 1rem;
+  font-weight: 600;
+  opacity: 0.85;
+  margin-left: 2px;
+}

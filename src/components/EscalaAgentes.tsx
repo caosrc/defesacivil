@@ -507,11 +507,14 @@ interface BancoHorasAgenteProps {
   onUpdateHoras: (data: string, horas: number) => void
 }
 
+function fmtH(h: number): string {
+  return h % 1 === 0 ? String(h) : h.toFixed(1)
+}
+
 function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, feriadosCustom, onUpdateHoras }: BancoHorasAgenteProps) {
   const info = AGENTE_MAP[agente]
   const hoje = hojeStr()
-
-  const totalHoras = calcularBancoHoras(agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, feriadosCustom)
+  const horasAgente = horasTrabalhadasSobreaviso[agente] ?? {}
 
   // Folgas futuras
   const folgas = folgasDoAgente(agente, sobreavisoSemanal)
@@ -529,9 +532,31 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
   const [semanaAberta, setSemanaAberta] = useState<string | null>(null)
 
   const estaDesobreaviso = (sobreavisoSemanal[hoje] ?? []).includes(agente)
-  const horasAgente = horasTrabalhadasSobreaviso[agente] ?? {}
 
-  // Soma de horas extras de uma semana específica
+  // ── Cálculo separado dos dois buckets ─────────────────────────
+  // Bucket 1 — Sobreaviso: base (14h × turnos) + acionamentos em dias úteis
+  // Bucket 2 — Domingos/Feriados: acionamentos em domingos/feriados
+
+  const { horasSobreaviso, horasDomFer } = useMemo(() => {
+    const numTurnos = semanasDoAgente.length
+    const base = numTurnos * HORAS_POR_DIA_SOBREAVISO
+
+    let extSb = 0   // extras em dias úteis de sobreaviso
+    let extDF = 0   // extras em domingos/feriados durante sobreaviso
+
+    for (const [data, h] of Object.entries(horasAgente)) {
+      const isFerOuDom = ehFeriadoOuDomingo(data, feriadosCustom)
+      const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, feriadosCustom)
+      if (isFerOuDom) extDF += h * mult
+      else extSb += h * mult
+    }
+
+    return { horasSobreaviso: base + extSb, horasDomFer: extDF }
+  }, [semanasDoAgente, horasAgente, percDomingoFeriado, percSobreaviso, feriadosCustom])
+
+  const totalGeral = horasSobreaviso + horasDomFer
+
+  // Horas de acionamento em dias úteis de uma semana específica
   function horasExtrasDaSemana(seg: string): number {
     return diasDaSemana(seg).reduce((acc, data) => {
       const h = horasAgente[data] ?? 0
@@ -540,18 +565,15 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
   }
 
   return (
-    <div className="bh-card">
-      <div className="bh-card-header">
+    <div className="bh-agente-wrap">
+      {/* ── cabeçalho do agente ──────────────────────────────────── */}
+      <div className="bh-agente-cabecalho">
         <span className="bh-card-iniciais" style={{ background: info?.cor ?? '#64748b' }}>
           {info?.iniciais ?? agente.slice(0, 2).toUpperCase()}
         </span>
-        <div className="bh-card-info">
+        <div className="bh-agente-nome-wrap">
           <span className="bh-card-nome">{agente}</span>
-          <span className="bh-card-subtitulo">Banco de Horas — Sobreaviso</span>
-        </div>
-        <div className="bh-card-total">
-          <span className="bh-card-horas">{totalHoras % 1 === 0 ? totalHoras : totalHoras.toFixed(1)}</span>
-          <span className="bh-card-h">h</span>
+          <span className="bh-agente-subtitulo">Banco de Horas</span>
         </div>
       </div>
 
@@ -567,88 +589,138 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
         </div>
       )}
 
-      {semanasDoAgente.length === 0 ? (
-        <p className="bh-card-vazio">Nenhum dia de sobreaviso registrado ainda.</p>
-      ) : (
-        <div className="bh-semanas-lista">
-          {semanasDoAgente.map(seg => {
-            const dias = [seg]
-            const aberta = semanaAberta === seg
-            const horasExtras = horasExtrasDaSemana(seg)
-            const totalSemana = HORAS_POR_DIA_SOBREAVISO + horasExtras
-
-            return (
-              <div key={seg} className="bh-semana-bloco">
-                <button
-                  className={`bh-semana-header ${aberta ? 'aberta' : ''}`}
-                  onClick={() => setSemanaAberta(aberta ? null : seg)}
-                >
-                  <span className="bh-semana-titulo">
-                    Sobreaviso em {fmtDataCurta(seg)}
-                  </span>
-                  <div className="bh-semana-resumo">
-                    <span className="bh-semana-base">Base: {HORAS_POR_DIA_SOBREAVISO}h</span>
-                    {horasExtras > 0 && (
-                      <span className="bh-semana-extra">+ {horasExtras % 1 === 0 ? horasExtras : horasExtras.toFixed(1)}h extras</span>
-                    )}
-                    <span className="bh-semana-total">= {totalSemana % 1 === 0 ? totalSemana : totalSemana.toFixed(1)}h</span>
-                  </div>
-                  <span className="bh-semana-chevron">{aberta ? '▲' : '▼'}</span>
-                </button>
-
-                {aberta && (
-                  <div className="bh-semana-dias">
-                    <p className="bh-semana-instrucao">
-                      Informe as horas que você foi acionado neste dia. Seg–Sáb ×1,5 · Dom/Feriado ×2
-                    </p>
-                    {dias.map(data => {
-                      const [y, m, d] = data.split('-').map(Number)
-                      const dow = new Date(y, m - 1, d).getDay()
-                      const nomeDia = DIAS_SEMANA_NOMES[dow]
-                      const isFerOuDom = ehFeriadoOuDomingo(data, feriadosCustom)
-                      const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, feriadosCustom)
-                      const hInput = horasAgente[data] ?? 0
-                      const hCalc = hInput * mult
-
-                      return (
-                        <div key={data} className={`bh-dia-row ${isFerOuDom ? 'feriado-dom' : ''}`}>
-                          <div className="bh-dia-info">
-                            <span className="bh-dia-nome">{nomeDia}</span>
-                            <span className="bh-dia-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}</span>
-                            {isFerOuDom && <span className="bh-dia-badge">×{(1 + percDomingoFeriado / 100).toFixed(1)}</span>}
-                            {!isFerOuDom && <span className="bh-dia-badge mult15">×{(1 + percSobreaviso / 100).toFixed(1)}</span>}
-                          </div>
-                          <div className="bh-dia-input-wrap">
-                            <input
-                              type="number"
-                              min={0}
-                              max={24}
-                              step={0.5}
-                              value={hInput === 0 ? '' : hInput}
-                              placeholder="0"
-                              className="bh-dia-input"
-                              onChange={e => {
-                                const val = parseFloat(e.target.value) || 0
-                                onUpdateHoras(data, Math.min(24, Math.max(0, val)))
-                              }}
-                            />
-                            <span className="bh-dia-input-h">h</span>
-                          </div>
-                          {hInput > 0 && (
-                            <span className="bh-dia-calc">
-                              = {hCalc % 1 === 0 ? hCalc : hCalc.toFixed(1)}h
-                            </span>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+      {/* ── Bloco 1: Sobreaviso ─────────────────────────────────── */}
+      <div className="bh-bloco">
+        <div className="bh-bloco-header">
+          <span className="bh-bloco-icone">📟</span>
+          <span className="bh-bloco-titulo">Banco de Horas — Sobreaviso</span>
+          <span className="bh-bloco-total">{fmtH(horasSobreaviso)}h</span>
         </div>
-      )}
+
+        {semanasDoAgente.length === 0 ? (
+          <p className="bh-card-vazio">Nenhum turno de sobreaviso registrado.</p>
+        ) : (
+          <div className="bh-semanas-lista">
+            {semanasDoAgente.map(seg => {
+              const dias = [seg]
+              const aberta = semanaAberta === seg
+              const horasExtras = horasExtrasDaSemana(seg)
+              const totalSemana = HORAS_POR_DIA_SOBREAVISO + horasExtras
+
+              return (
+                <div key={seg} className="bh-semana-bloco">
+                  <button
+                    className={`bh-semana-header ${aberta ? 'aberta' : ''}`}
+                    onClick={() => setSemanaAberta(aberta ? null : seg)}
+                  >
+                    <span className="bh-semana-titulo">
+                      Sobreaviso em {fmtDataCurta(seg)}
+                    </span>
+                    <div className="bh-semana-resumo">
+                      <span className="bh-semana-base">Base: {HORAS_POR_DIA_SOBREAVISO}h</span>
+                      {horasExtras > 0 && (
+                        <span className="bh-semana-extra">+ {fmtH(horasExtras)}h extras</span>
+                      )}
+                      <span className="bh-semana-total">= {fmtH(totalSemana)}h</span>
+                    </div>
+                    <span className="bh-semana-chevron">{aberta ? '▲' : '▼'}</span>
+                  </button>
+
+                  {aberta && (
+                    <div className="bh-semana-dias">
+                      <p className="bh-semana-instrucao">
+                        Informe as horas acionadas neste dia. Dias úteis ×{(1 + percSobreaviso / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)}
+                      </p>
+                      {dias.map(data => {
+                        const [y, m, d] = data.split('-').map(Number)
+                        const dow = new Date(y, m - 1, d).getDay()
+                        const nomeDia = DIAS_SEMANA_NOMES[dow]
+                        const isFerOuDom = ehFeriadoOuDomingo(data, feriadosCustom)
+                        const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, feriadosCustom)
+                        const hInput = horasAgente[data] ?? 0
+                        const hCalc = hInput * mult
+
+                        return (
+                          <div key={data} className={`bh-dia-row ${isFerOuDom ? 'feriado-dom' : ''}`}>
+                            <div className="bh-dia-info">
+                              <span className="bh-dia-nome">{nomeDia}</span>
+                              <span className="bh-dia-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}</span>
+                              {isFerOuDom && <span className="bh-dia-badge">×{(1 + percDomingoFeriado / 100).toFixed(1)}</span>}
+                              {!isFerOuDom && <span className="bh-dia-badge mult15">×{(1 + percSobreaviso / 100).toFixed(1)}</span>}
+                            </div>
+                            <div className="bh-dia-input-wrap">
+                              <input
+                                type="number"
+                                min={0}
+                                max={24}
+                                step={0.5}
+                                value={hInput === 0 ? '' : hInput}
+                                placeholder="0"
+                                className="bh-dia-input"
+                                onChange={e => {
+                                  const val = parseFloat(e.target.value) || 0
+                                  onUpdateHoras(data, Math.min(24, Math.max(0, val)))
+                                }}
+                              />
+                              <span className="bh-dia-input-h">h</span>
+                            </div>
+                            {hInput > 0 && (
+                              <span className="bh-dia-calc">
+                                = {fmtH(hCalc)}h
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Bloco 2: Domingos e Feriados ────────────────────────── */}
+      <div className="bh-bloco bh-bloco-domfer">
+        <div className="bh-bloco-header">
+          <span className="bh-bloco-icone">☀️</span>
+          <span className="bh-bloco-titulo">Banco de Horas — Domingos e Feriados</span>
+          <span className="bh-bloco-total">{fmtH(horasDomFer)}h</span>
+        </div>
+
+        {horasDomFer === 0 ? (
+          <p className="bh-card-vazio">Nenhuma hora em domingo/feriado registrada.</p>
+        ) : (
+          <div className="bh-domfer-lista">
+            {Object.entries(horasAgente)
+              .filter(([data]) => ehFeriadoOuDomingo(data, feriadosCustom) && (horasAgente[data] ?? 0) > 0)
+              .sort(([a], [b]) => b.localeCompare(a))
+              .map(([data, hInput]) => {
+                const [y, m, d] = data.split('-').map(Number)
+                const dow = new Date(y, m - 1, d).getDay()
+                const nomeDia = DIAS_SEMANA_NOMES[dow]
+                const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, feriadosCustom)
+                const hCalc = hInput * mult
+                return (
+                  <div key={data} className="bh-domfer-row">
+                    <span className="bh-domfer-dia">{nomeDia}</span>
+                    <span className="bh-domfer-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}/{y}</span>
+                    <span className="bh-domfer-input">{fmtH(hInput)}h</span>
+                    <span className="bh-domfer-mult">×{(1 + percDomingoFeriado / 100).toFixed(1)}</span>
+                    <span className="bh-domfer-calc">= {fmtH(hCalc)}h</span>
+                  </div>
+                )
+              })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Total Geral ─────────────────────────────────────────── */}
+      <div className="bh-total-geral">
+        <span className="bh-total-label">Total de Horas</span>
+        <span className="bh-total-valor">{fmtH(totalGeral)}<span className="bh-total-h">h</span></span>
+      </div>
     </div>
   )
 }
