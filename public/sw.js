@@ -1,11 +1,13 @@
-const APP_CACHE = 'defesacivil-app-v15'
+const APP_CACHE = 'defesacivil-app-v16'
 const TILE_CACHE = 'defesacivil-tiles-v3'
 
 // Arquivos do app shell que serão cacheados na instalação
 const PRECACHE = [
   '/',
   '/index.html',
-  '/logo-dc.jpg',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/apple-touch-icon.png',
   '/manifest.json',
 ]
 
