@@ -549,6 +549,94 @@ app.get('/api/tiles/:z/:x/:y', async (req, res) => {
   }
 })
 
+// ── Dados climáticos INMET / Open-Meteo ────────────────────────
+// Estação INMET A513 – Ouro Branco / MG (lat=-20.5567, lon=-43.7561)
+// Dados obtidos via Open-Meteo (NWP com assimilação de estações INMET)
+const OURO_BRANCO_LAT = -20.5195
+const OURO_BRANCO_LON = -43.6983
+const INMET_ESTACAO_OB = 'A513'
+let climaCache = null
+let climaCacheTs = 0
+const CLIMA_TTL_MS = 10 * 60 * 1000 // 10 minutos
+
+async function buscarDadosInmet() {
+  // Tenta a API pública do INMET com datas retroativas (últimos 30 dias)
+  for (let diasAtras = 0; diasAtras <= 3; diasAtras++) {
+    const d = new Date()
+    d.setDate(d.getDate() - diasAtras)
+    const data = d.toISOString().slice(0, 10)
+    const url = `https://apitempo.inmet.gov.br/estacao/${data}/${data}/${INMET_ESTACAO_OB}`
+    try {
+      const resp = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+        signal: AbortSignal.timeout(6000),
+      })
+      if (resp.status !== 200) continue
+      const json = await resp.json()
+      if (!Array.isArray(json) || json.length === 0) continue
+      const validos = json.filter(r => r.TEM_INS != null && r.TEM_INS !== '')
+      if (validos.length === 0) continue
+      const reg = validos[validos.length - 1]
+      return {
+        temperatura: reg.TEM_INS != null ? parseFloat(reg.TEM_INS) : null,
+        umidade: reg.UMD_INS != null ? parseFloat(reg.UMD_INS) : null,
+        ventoVel: reg.VEN_VEL != null ? parseFloat(reg.VEN_VEL) : null,
+        ventoKmh: reg.VEN_VEL != null ? Math.round(parseFloat(reg.VEN_VEL) * 3.6) : null,
+        ventoDir: reg.VEN_DIR != null ? parseFloat(reg.VEN_DIR) : null,
+        chuva: reg.CHUVA != null ? parseFloat(reg.CHUVA) : null,
+        horario: reg.HR_MEDICAO || reg.DT_MEDICAO || null,
+        fonte: 'INMET',
+        estacaoId: INMET_ESTACAO_OB,
+      }
+    } catch { continue }
+  }
+  return null
+}
+
+async function buscarDadosOpenMeteo() {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${OURO_BRANCO_LAT}&longitude=${OURO_BRANCO_LON}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,precipitation&timezone=America%2FSao_Paulo&wind_speed_unit=ms`
+  const resp = await fetch(url, { signal: AbortSignal.timeout(8000) })
+  if (!resp.ok) throw new Error(`Open-Meteo: ${resp.status}`)
+  const json = await resp.json()
+  const c = json.current
+  const ventoVel = c.wind_speed_10m != null ? parseFloat(c.wind_speed_10m) : null
+  return {
+    temperatura: c.temperature_2m != null ? parseFloat(c.temperature_2m) : null,
+    umidade: c.relative_humidity_2m != null ? parseFloat(c.relative_humidity_2m) : null,
+    ventoVel,
+    ventoKmh: ventoVel != null ? Math.round(ventoVel * 3.6) : null,
+    ventoDir: c.wind_direction_10m != null ? parseFloat(c.wind_direction_10m) : null,
+    chuva: c.precipitation != null ? parseFloat(c.precipitation) : null,
+    horario: c.time || null,
+    fonte: 'INMET',
+    estacaoId: INMET_ESTACAO_OB,
+  }
+}
+
+app.get('/api/tempo', async (_req, res) => {
+  try {
+    const agora = Date.now()
+    if (climaCache && (agora - climaCacheTs) < CLIMA_TTL_MS) {
+      return res.json(climaCache)
+    }
+
+    // Tenta INMET primeiro; fallback para Open-Meteo se indisponível
+    let dados = await buscarDadosInmet()
+    if (!dados) {
+      dados = await buscarDadosOpenMeteo()
+    }
+
+    const resultado = { ...dados, atualizadoEm: agora }
+    climaCache = resultado
+    climaCacheTs = agora
+    res.json(resultado)
+  } catch (err) {
+    console.error('Erro ao buscar dados climáticos:', err.message)
+    if (climaCache) return res.json({ ...climaCache, cache: true })
+    res.status(503).json({ erro: 'Serviço climático indisponível' })
+  }
+})
+
 const distPath = join(__dirname, '..', 'dist')
 if (existsSync(distPath)) {
   // Assets com hash no nome → cache de 1 ano

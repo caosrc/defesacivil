@@ -155,6 +155,17 @@ type StatusOffline = 'idle' | 'baixando' | 'concluido' | 'erro'
 type StatusWs = 'desconectado' | 'conectando' | 'conectado'
 type CamadaMapa = 'padrao' | 'satelite'
 
+interface DadosClima {
+  temperatura: number | null
+  umidade: number | null
+  ventoKmh: number | null
+  ventoDir: number | null
+  chuva: number | null
+  horario: string | null
+  fonte: string
+  cache?: boolean
+}
+
 const OURO_BRANCO: [number, number] = [-20.5195, -43.6983]
 const MAX_TRILHA = 300
 
@@ -193,6 +204,11 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const [nomeEditando, setNomeEditando] = useState('')
   const dispositivoId = useRef(getDispositivoId())
 
+  // Clima INMET
+  const [clima, setClima] = useState<DadosClima | null>(null)
+  const [climaCarregando, setClimaCarregando] = useState(false)
+  const [climaAberto, setClimaAberto] = useState(false)
+
   // Mapa offline
   const [statusOffline, setStatusOffline] = useState<StatusOffline>('idle')
   const [progressoMapa, setProgressoMapa] = useState<ProgressoMapa | null>(null)
@@ -201,6 +217,26 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
 
   // Mantém ref sempre atualizada com o nome atual
   useEffect(() => { nomeLocalRef.current = nomeLocal }, [nomeLocal])
+
+  // ── Clima INMET ────────────────────────────────────────────────
+  const buscarClima = useCallback(async () => {
+    setClimaCarregando(true)
+    try {
+      const resp = await fetch('/api/tempo')
+      if (resp.ok) {
+        const dados = await resp.json()
+        if (!dados.erro) setClima(dados)
+      }
+    } catch { /* silencioso */ } finally {
+      setClimaCarregando(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    buscarClima()
+    const intervalo = setInterval(buscarClima, 10 * 60 * 1000)
+    return () => clearInterval(intervalo)
+  }, [buscarClima])
 
   const comGeo = useMemo(() => ocorrencias.filter((o) => o.lat && o.lng), [ocorrencias])
   const semGeo = ocorrencias.length - comGeo.length
@@ -420,6 +456,12 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     setSelecionada((prev) => (prev?.id === o.id ? null : o))
   }
 
+  function direcaoVento(graus: number | null): string {
+    if (graus == null) return '–'
+    const dirs = ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO']
+    return dirs[Math.round(graus / 45) % 8]
+  }
+
   const naturezasUnicas = useMemo(() => [...new Set(comGeo.map((o) => o.natureza))], [comGeo])
   const velocidadeKmh = useMemo(
     () => velocidade != null ? Math.round(velocidade * 3.6) : null,
@@ -627,6 +669,85 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         >
           📋 Ocorrências
         </button>
+      </div>
+
+      {/* Widget Clima INMET */}
+      <div className="mapa-clima-widget">
+        <button
+          className="mapa-clima-btn"
+          onClick={() => setClimaAberto(v => !v)}
+          title="Condições meteorológicas de Ouro Branco"
+        >
+          {climaCarregando && !clima ? (
+            <span className="mapa-gps-spinner" />
+          ) : (
+            <>
+              <span>🌡️</span>
+              <span>{clima?.temperatura != null ? `${clima.temperatura.toFixed(1)}°C` : '–'}</span>
+              <span className="mapa-clima-btn-sep">|</span>
+              <span>💧{clima?.umidade != null ? `${Math.round(clima.umidade)}%` : '–'}</span>
+            </>
+          )}
+        </button>
+
+        {climaAberto && (
+          <div className="mapa-clima-painel">
+            <div className="mapa-clima-painel-header">
+              <div>
+                <span className="mapa-clima-titulo">🌤️ Clima – Ouro Branco, MG</span>
+                {clima?.horario && (
+                  <span className="mapa-clima-horario">Medição: {clima.horario}</span>
+                )}
+              </div>
+              <button onClick={() => setClimaAberto(false)}>✕</button>
+            </div>
+
+            <div className="mapa-clima-grid">
+              <div className="mapa-clima-card">
+                <span className="mapa-clima-card-icone">🌡️</span>
+                <span className="mapa-clima-card-val">
+                  {clima?.temperatura != null ? `${clima.temperatura.toFixed(1)}°C` : '–'}
+                </span>
+                <span className="mapa-clima-card-label">Temperatura</span>
+              </div>
+              <div className="mapa-clima-card">
+                <span className="mapa-clima-card-icone">💧</span>
+                <span className="mapa-clima-card-val">
+                  {clima?.umidade != null ? `${Math.round(clima.umidade)}%` : '–'}
+                </span>
+                <span className="mapa-clima-card-label">Umidade</span>
+              </div>
+              <div className="mapa-clima-card">
+                <span className="mapa-clima-card-icone">💨</span>
+                <span className="mapa-clima-card-val">
+                  {clima?.ventoKmh != null ? `${clima.ventoKmh} km/h` : '–'}
+                  {clima?.ventoDir != null && (
+                    <span className="mapa-clima-vento-dir"> {direcaoVento(clima.ventoDir)}</span>
+                  )}
+                </span>
+                <span className="mapa-clima-card-label">Vento</span>
+              </div>
+              <div className="mapa-clima-card">
+                <span className="mapa-clima-card-icone">🌧️</span>
+                <span className="mapa-clima-card-val">
+                  {clima?.chuva != null ? `${clima.chuva.toFixed(1)} mm` : '–'}
+                </span>
+                <span className="mapa-clima-card-label">Chuva (hora)</span>
+              </div>
+            </div>
+
+            <div className="mapa-clima-rodape">
+              <span>Fonte: INMET – Est. A513, Ouro Branco/MG</span>
+              <button
+                className="mapa-clima-atualizar"
+                onClick={buscarClima}
+                disabled={climaCarregando}
+              >
+                {climaCarregando ? '⏳' : '🔄'} Atualizar
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Botão GPS */}

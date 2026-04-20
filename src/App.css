@@ -1019,6 +1019,141 @@ input, select, textarea { font-family: inherit; }
   padding-top: 0.4rem;
 }
 
+/* ── Widget Clima INMET ──────────────────────────────────────── */
+.mapa-clima-widget {
+  position: absolute;
+  bottom: 90px;
+  left: 14px;
+  z-index: 600;
+}
+.mapa-clima-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(255,255,255,0.96);
+  border: none;
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1a202c;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.18);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mapa-clima-btn:active { transform: scale(0.97); }
+.mapa-clima-btn-sep {
+  color: #d1d5db;
+  margin: 0 1px;
+}
+.mapa-clima-painel {
+  position: absolute;
+  bottom: 42px;
+  left: 0;
+  background: white;
+  border-radius: 18px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+  width: 280px;
+  max-width: calc(100vw - 28px);
+  overflow: hidden;
+}
+.mapa-clima-painel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 0.75rem 0.9rem 0.5rem;
+  border-bottom: 1px solid #f3f4f6;
+  background: linear-gradient(135deg, #1a4b8c 0%, #2563eb 100%);
+  color: white;
+}
+.mapa-clima-painel-header button {
+  background: rgba(255,255,255,0.2);
+  border: none;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  color: white;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.mapa-clima-titulo {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.mapa-clima-horario {
+  display: block;
+  font-size: 0.68rem;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+.mapa-clima-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: #f3f4f6;
+}
+.mapa-clima-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 0.7rem 0.5rem;
+  background: white;
+}
+.mapa-clima-card-icone {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+.mapa-clima-card-val {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1a4b8c;
+  line-height: 1.2;
+  text-align: center;
+}
+.mapa-clima-vento-dir {
+  font-size: 0.78rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+.mapa-clima-card-label {
+  font-size: 0.65rem;
+  color: #9ca3af;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.mapa-clima-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.8rem;
+  background: #f9fafb;
+  border-top: 1px solid #f3f4f6;
+  font-size: 0.62rem;
+  color: #9ca3af;
+  gap: 0.5rem;
+}
+.mapa-clima-atualizar {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 0.65rem;
+  color: #4b5563;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.mapa-clima-atualizar:disabled { opacity: 0.5; cursor: not-allowed; }
+.mapa-clima-atualizar:not(:disabled):hover { background: #f3f4f6; }
+
 /* ── Painel equipes em campo ─────────────────────────────────── */
 .mapa-equipes-painel {
   position: absolute;
