@@ -11,6 +11,7 @@ const NovaOcorrencia = lazy(() => import('./components/NovaOcorrencia'))
 const DetalheOcorrencia = lazy(() => import('./components/DetalheOcorrencia'))
 const ChecklistViatura = lazy(() => import('./components/ChecklistViatura'))
 const EscalaAgentes = lazy(() => import('./components/EscalaAgentes'))
+const Dashboard = lazy(() => import('./components/Dashboard'))
 
 type Aba = 'lista' | 'mapa' | 'nova' | 'viatura' | 'escala'
 
@@ -419,6 +420,10 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            <Suspense fallback={null}>
+              <Dashboard ocorrencias={ocorrencias} />
+            </Suspense>
 
             {carregando ? (
               <div className="carregando">⏳ Carregando ocorrências...</div>
