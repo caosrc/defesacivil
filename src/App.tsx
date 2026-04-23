@@ -165,6 +165,7 @@ export default function App() {
       lng: p.lng ?? null,
       endereco: p.endereco ?? null,
       proprietario: p.proprietario ?? null,
+      responsavel_registro: p.responsavel_registro ?? null,
       situacao: p.situacao ?? null,
       recomendacao: p.recomendacao ?? null,
       conclusao: p.conclusao ?? null,

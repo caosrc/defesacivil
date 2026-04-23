@@ -82,7 +82,7 @@ function multiplicadorDia(
 }
 
 // Retorna os 7 dias (Seg–Dom) de uma semana dado o Monday
-function diasDaSemana(seg: string): string[] {
+function _diasDaSemana(seg: string): string[] {
   const [y, m, d] = seg.split('-').map(Number)
   return Array.from({ length: 7 }, (_, i) => {
     const dt = new Date(y, m - 1, d)
@@ -365,7 +365,7 @@ interface PainelSemanasProps {
   onEscalar: (seg: string) => void
 }
 
-function PainelEscalasSemanas({ sobreavisoSemanal, ferias, onEscalar }: PainelSemanasProps) {
+function _PainelEscalasSemanas({ sobreavisoSemanal, ferias: _ferias, onEscalar }: PainelSemanasProps) {
   const hoje = hojeStr()
   const segHoje = segundaDaSemana(hoje)
 
@@ -872,7 +872,7 @@ interface ModalDiaProps {
   onFechar: () => void
 }
 
-function ModalDia({ data, tipo, selecionados, ferias, onSalvar, onFechar }: ModalDiaProps) {
+function ModalDia({ data, tipo: _tipo, selecionados, ferias, onSalvar, onFechar }: ModalDiaProps) {
   const [escolhidos, setEscolhidos] = useState<string[]>(selecionados)
   const [, mesStr, diaStr] = data.split('-')
   const label = `${diaStr}/${mesStr} — Plantão ADM`
@@ -1000,7 +1000,7 @@ interface CalendarioProps {
   onDiaClick: (chave: string) => void
 }
 
-function CalendarioADM({ ano, mes, dados, sobreavisoDiario, ferias, hoje, editando, feriadosCustom, onDiaClick }: CalendarioProps) {
+function CalendarioADM({ ano, mes, dados: _dados, sobreavisoDiario, ferias, hoje, editando, feriadosCustom, onDiaClick }: CalendarioProps) {
   const total = diasNoMes(ano, mes)
   const inicio = primeiroDiaSemana(ano, mes)
 
@@ -1018,13 +1018,15 @@ function CalendarioADM({ ano, mes, dados, sobreavisoDiario, ferias, hoje, editan
     return dow >= 1 && dow <= 5
   }
 
-  function sabadoDomingoOuFeriado(chave: string): boolean {
+  function _sabadoDomingoOuFeriado(chave: string): boolean {
     const [y, m, d] = chave.split('-').map(Number)
+    void y;
     const dow = new Date(y, m - 1, d).getDay()
     if (dow === 0 || dow === 6) return true
     const mmdd = `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
     return FERIADOS_FIXOS.has(mmdd)
   }
+  void _sabadoDomingoOuFeriado;
 
   return (
     <div className="escala-calendario-bloco escala-bloco-adm">
@@ -1048,7 +1050,7 @@ function CalendarioADM({ ano, mes, dados, sobreavisoDiario, ferias, hoje, editan
           const isHoje = chave === hoje
           const isFerCustom = feriadosCustom.includes(chave)
           const isFeriadoFixo = (() => {
-            const [y, m, d] = chave.split('-').map(Number)
+            const [, m, d] = chave.split('-').map(Number)
             const mmdd = `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
             return FERIADOS_FIXOS.has(mmdd)
           })()
@@ -1578,3 +1580,6 @@ export default function EscalaAgentes() {
     </div>
   )
 }
+
+void _diasDaSemana;
+void _PainelEscalasSemanas;

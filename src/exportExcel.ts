@@ -585,7 +585,6 @@ function adicionarAbaDashboard(wb: ExcelWorkbook, ocorrencias: Ocorrencia[]): vo
     const nKey = ['alto','medio','baixo'][ni] as 'alto' | 'medio' | 'baixo'
     const sub = ocorrencias.filter(o => o.nivel_risco === nKey)
     const resS = sub.filter(o => o.status_oc === 'resolvido').length
-    const cor = ['C_VERM','C_AMAR','C_VERDE'][ni]
     const corHex = [C_VERM, C_AMAR, C_VERDE][ni]
     ws.mergeCells(`B${r}:F${r}`)
     const c = ws.getCell(`B${r}`)
