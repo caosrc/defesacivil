@@ -4,6 +4,7 @@ import Login, { estaLogado, agenteEscolhido } from './components/Login'
 import type { Ocorrencia, NivelRisco } from './types'
 import { NATUREZA_ICONE } from './types'
 import { listarOcorrencias, criarOcorrencia } from './api'
+import { supabase } from './supabaseClient'
 import { cacheOcorrencias, getCachedOcorrencias, getPending, removePending, countPending } from './offline'
 
 const MapaOcorrencias = lazy(() => import('./components/MapaOcorrencias'))
@@ -207,6 +208,19 @@ export default function App() {
 
   useEffect(() => {
     carregar()
+  }, [carregar])
+
+  // Realtime: recarrega a lista quando outro usuário cria/edita/apaga uma ocorrência
+  useEffect(() => {
+    const canal = supabase
+      .channel('ocorrencias-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ocorrencias' },
+        () => { carregar() }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(canal) }
   }, [carregar])
 
   useEffect(() => {
