@@ -363,6 +363,18 @@ async function initDb() {
   await pool.query(`ALTER TABLE checklists_viatura ADD COLUMN IF NOT EXISTS itens JSONB NOT NULL DEFAULT '{}'::jsonb`)
   await pool.query(`ALTER TABLE checklists_viatura ADD COLUMN IF NOT EXISTS assinatura_data TEXT`)
   await pool.query(`ALTER TABLE ocorrencias ADD COLUMN IF NOT EXISTS responsavel_registro VARCHAR(255)`)
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS escala_estado (
+      id INTEGER PRIMARY KEY,
+      data JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `)
+}
+
+function broadcastOcorrenciasAtualizadas() {
+  broadcastParaTodos({ tipo: 'ocorrencias_atualizadas' })
 }
 
 app.get('/api/ocorrencias', async (req, res) => {
@@ -383,6 +395,7 @@ app.post('/api/ocorrencias', async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
       [tipo, natureza, subnatureza || null, nivel_risco, status_oc || 'ativo', JSON.stringify(Array.isArray(fotos) ? fotos : []), lat || null, lng || null, endereco || null, proprietario || null, situacao || null, recomendacao || null, conclusao || null, data_ocorrencia || null, JSON.stringify(Array.isArray(agentes) ? agentes : []), responsavel_registro || null]
     )
+    broadcastOcorrenciasAtualizadas()
     res.status(201).json(result.rows[0])
   } catch (err) {
     console.error('POST /api/ocorrencias error:', err)
@@ -439,6 +452,7 @@ app.put('/api/ocorrencias/:id', async (req, res) => {
     if (!sel.rows.length) return res.status(404).json({ error: 'Ocorrência não encontrada' })
 
     console.log(`PUT /api/ocorrencias/${id} — salvo com sucesso`)
+    broadcastOcorrenciasAtualizadas()
     return res.json(sel.rows[0])
   } catch (err) {
     console.error('PUT /api/ocorrencias error:', err)
@@ -449,8 +463,35 @@ app.put('/api/ocorrencias/:id', async (req, res) => {
 app.delete('/api/ocorrencias/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM ocorrencias WHERE id=$1', [req.params.id])
+    broadcastOcorrenciasAtualizadas()
     res.json({ success: true })
   } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/escala', async (_req, res) => {
+  try {
+    const result = await pool.query('SELECT data FROM escala_estado WHERE id=1')
+    if (!result.rows.length) return res.json(null)
+    res.json(result.rows[0].data)
+  } catch (err) {
+    console.error('GET /api/escala error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.put('/api/escala', async (req, res) => {
+  try {
+    const data = req.body && typeof req.body === 'object' ? req.body : {}
+    await pool.query(
+      `INSERT INTO escala_estado (id, data, updated_at) VALUES (1, $1::jsonb, NOW())
+       ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [JSON.stringify(data)]
+    )
+    res.json({ success: true })
+  } catch (err) {
+    console.error('PUT /api/escala error:', err)
     res.status(500).json({ error: err.message })
   }
 })

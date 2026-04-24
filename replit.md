@@ -45,6 +45,8 @@ Sistema web completo de registro e gerenciamento de ocorrências para a Defesa C
 ## Banco de Dados
 O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as tabelas necessárias se elas ainda não existirem. A migração para Replit usa o PostgreSQL integrado com as variáveis `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD` e `PGDATABASE` provisionadas pelo ambiente.
 
+Toda a leitura/escrita do frontend passa pelo backend Express (`/api/*`); o cliente nunca acessa o banco diretamente. O realtime de ocorrências é entregue por WebSocket (`/ws`) — o servidor envia `{ tipo: 'ocorrencias_atualizadas' }` em cada criação/edição/exclusão e o app recarrega a lista.
+
 ### Tabela `ocorrencias`
 | Campo | Tipo | Descrição |
 |---|---|---|
@@ -63,6 +65,9 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 | data_ocorrencia | TIMESTAMP | Data da ocorrência |
 | agentes | JSONB | Array de agentes empenhados |
 | created_at | TIMESTAMP | Data/hora automática |
+
+### Tabela `escala_estado`
+Documento JSON único (id=1) com a escala completa, regras de banco de horas, feriados municipais e descontos de folga. Persistido via `GET/PUT /api/escala`.
 
 ### Tabela `checklists_viatura`
 | Campo | Tipo | Descrição |
