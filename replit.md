@@ -47,6 +47,8 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 
 Toda a leitura/escrita do frontend passa pelo backend Express (`/api/*`); o cliente nunca acessa o banco diretamente. O realtime de ocorrências é entregue por WebSocket (`/ws`) — o servidor envia `{ tipo: 'ocorrencias_atualizadas' }` em cada criação/edição/exclusão e o app recarrega a lista.
 
+> Migração para Replit (2026): removida a dependência `@supabase/supabase-js`. Todo o acesso a dados (`api.ts`, `EscalaAgentes.tsx`, `ChecklistViatura.tsx`) e o realtime (`App.tsx`) passaram a usar o backend Express + Postgres do Replit, mantendo a separação cliente/servidor exigida pela plataforma.
+
 ### Tabela `ocorrencias`
 | Campo | Tipo | Descrição |
 |---|---|---|
