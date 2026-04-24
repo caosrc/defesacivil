@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { TIPOS_OCORRENCIA, NATUREZAS, AGENTES } from '../types'
 import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
-import { savePending, geocodificarEndereco } from '../offline'
+import { geocodificarEndereco } from '../offline'
 import { formatarCoordenadas, adicionarMarcaDagua, mensagemErroGps } from '../utils'
 
 interface Props {
@@ -144,22 +144,13 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       responsavel_registro: sessionStorage.getItem('defesacivil-agente-sessao') || null,
     }
 
-    if (isOnline) {
-      try {
-        await criarOcorrencia(payload as any)
-        setSalvando(false)
-        onSalvo(false)
-      } catch {
-        // Network failed even though we thought online — save offline
-        await savePending(payload)
-        setSalvando(false)
-        onSalvo(true)
-      }
-    } else {
-      // Offline: save locally
-      await savePending(payload)
+    try {
+      await criarOcorrencia(payload as any)
       setSalvando(false)
-      onSalvo(true)
+      onSalvo(false)
+    } catch (e: any) {
+      setSalvando(false)
+      setErro(`Erro ao salvar no Supabase: ${e?.message ?? 'tente novamente'}`)
     }
   }
 
@@ -425,7 +416,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
 
       <div className="footer-fixo">
         <button className="btn-salvar" onClick={salvar} disabled={salvando}>
-          {salvando ? '⏳ Salvando...' : isOnline ? '💾  Salvar Ocorrência' : '📥  Salvar Offline'}
+          {salvando ? '⏳ Salvando...' : '💾  Salvar Ocorrência'}
         </button>
       </div>
     </div>
