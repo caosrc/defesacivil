@@ -6,6 +6,7 @@ export interface VistoriaAdicional {
   observacao: string
   fotos: string[]
   agente: string | null
+  status?: StatusOc
 }
 
 export interface Ocorrencia {

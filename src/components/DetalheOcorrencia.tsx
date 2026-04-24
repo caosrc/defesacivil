@@ -80,6 +80,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [novaVistoriaAberta, setNovaVistoriaAberta] = useState(false)
   const [novaVistoriaObs, setNovaVistoriaObs] = useState('')
   const [novaVistoriaFotos, setNovaVistoriaFotos] = useState<string[]>([])
+  const [novaVistoriaStatus, setNovaVistoriaStatus] = useState<StatusOc>('ativo')
+  const [novaVistoriaData, setNovaVistoriaData] = useState<string>('')
   const [salvandoVistoria, setSalvandoVistoria] = useState(false)
   const [erroVistoria, setErroVistoria] = useState('')
   const [vistoriaFotoAmpliada, setVistoriaFotoAmpliada] = useState<{ vIdx: number; fIdx: number } | null>(null)
@@ -252,6 +254,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   function abrirNovaVistoria() {
     setNovaVistoriaObs('')
     setNovaVistoriaFotos([])
+    setNovaVistoriaStatus('ativo')
+    setNovaVistoriaData(new Date().toISOString())
     setErroVistoria('')
     setNovaVistoriaAberta(true)
   }
@@ -288,10 +292,11 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setSalvandoVistoria(true)
     try {
       const nova: VistoriaAdicional = {
-        data: new Date().toISOString(),
+        data: novaVistoriaData || new Date().toISOString(),
         observacao: novaVistoriaObs.trim(),
         fotos: novaVistoriaFotos,
         agente: sessionStorage.getItem('defesacivil-agente-sessao') || null,
+        status: novaVistoriaStatus,
       }
       const vistoriasAtualizadas = [...vistoriasSalvas, nova]
       const dadosUpdate = {
@@ -476,6 +481,11 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                             {new Date(v.data).toLocaleString('pt-BR')}
                           </span>
                         </div>
+                        {v.status && (
+                          <div className={`vistoria-status vistoria-status--${v.status}`}>
+                            {v.status === 'resolvido' ? '✅ Resolvido' : '🟠 Ativo'}
+                          </div>
+                        )}
                         {v.agente && (
                           <div className="vistoria-agente">👤 {v.agente}</div>
                         )}
@@ -505,6 +515,37 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                 {ehInterdicaoImovel && novaVistoriaAberta && (
                   <div className="vistoria-nova-card">
                     <div className="detalhe-label-row">➕ Nova Vistoria</div>
+
+                    <div className="campo">
+                      <label className="campo-label">📅 Data e hora da vistoria</label>
+                      <div className="vistoria-data-auto">
+                        {novaVistoriaData
+                          ? new Date(novaVistoriaData).toLocaleString('pt-BR')
+                          : new Date().toLocaleString('pt-BR')}
+                        <span className="vistoria-data-tag">automático</span>
+                      </div>
+                    </div>
+
+                    <div className="campo">
+                      <label className="campo-label">🚦 Status</label>
+                      <div className="vistoria-status-opcoes">
+                        <button
+                          type="button"
+                          className={`vistoria-status-btn ${novaVistoriaStatus === 'ativo' ? 'ativo-sel' : ''}`}
+                          onClick={() => setNovaVistoriaStatus('ativo')}
+                        >
+                          🟠 Ativo
+                        </button>
+                        <button
+                          type="button"
+                          className={`vistoria-status-btn ${novaVistoriaStatus === 'resolvido' ? 'resolvido-sel' : ''}`}
+                          onClick={() => setNovaVistoriaStatus('resolvido')}
+                        >
+                          ✅ Resolvido
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="campo">
                       <label className="campo-label">Fotos da nova vistoria</label>
                       <div className="fotos-area">

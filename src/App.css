@@ -1842,6 +1842,68 @@ input, select, textarea { font-family: inherit; }
 }
 .vistoria-nova-acoes > button { flex: 1; }
 
+/* Data automática (Nova Vistoria) */
+.vistoria-data-auto {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.92rem;
+  color: #1f2937;
+  font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.5rem;
+}
+.vistoria-data-tag {
+  background: #ecfdf5;
+  color: #065f46;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid #a7f3d0;
+}
+
+/* Status badges & seletor */
+.vistoria-status {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.78rem; font-weight: 700;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  width: fit-content;
+}
+.vistoria-status--ativo {
+  background: #fff7ed; color: #9a3412; border: 1px solid #fdba74;
+}
+.vistoria-status--resolvido {
+  background: #ecfdf5; color: #065f46; border: 1px solid #6ee7b7;
+}
+
+.vistoria-status-opcoes {
+  display: flex; gap: 0.5rem;
+}
+.vistoria-status-btn {
+  flex: 1;
+  background: #fff;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.vistoria-status-btn:hover { border-color: #cbd5e1; }
+.vistoria-status-btn.ativo-sel {
+  background: #fff7ed; color: #9a3412; border-color: #f97316;
+}
+.vistoria-status-btn.resolvido-sel {
+  background: #ecfdf5; color: #065f46; border-color: #10b981;
+}
+
 /* Edit icon button in modal header */
 .modal-header-acoes {
   display: flex; align-items: center; gap: 0.4rem;
