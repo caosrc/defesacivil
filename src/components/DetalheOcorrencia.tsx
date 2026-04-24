@@ -299,22 +299,11 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         status: novaVistoriaStatus,
       }
       const vistoriasAtualizadas = [...vistoriasSalvas, nova]
+      // IMPORTANTE: aqui SÓ atualizamos o campo `vistorias`. Não tocamos em
+      // `status_oc`, `nivel_risco` ou qualquer outro campo da ocorrência
+      // original — o status marcado na Nova Vistoria é independente do
+      // status da ocorrência principal.
       const dadosUpdate = {
-        tipo: o.tipo,
-        natureza: o.natureza,
-        subnatureza: o.subnatureza,
-        nivel_risco: o.nivel_risco,
-        status_oc: o.status_oc,
-        fotos: o.fotos,
-        lat: o.lat,
-        lng: o.lng,
-        endereco: o.endereco,
-        proprietario: o.proprietario,
-        situacao: o.situacao,
-        recomendacao: o.recomendacao,
-        conclusao: o.conclusao,
-        data_ocorrencia: o.data_ocorrencia,
-        agentes: o.agentes,
         vistorias: vistoriasAtualizadas,
       }
       let atualizado: Ocorrencia
@@ -322,7 +311,10 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         await updatePending(o._localId, dadosUpdate)
         atualizado = { ...o, vistorias: vistoriasAtualizadas }
       } else {
-        atualizado = await atualizarOcorrencia(o.id, dadosUpdate)
+        const retorno = await atualizarOcorrencia(o.id, dadosUpdate)
+        // Garantia extra: preserva os campos originais da ocorrência (status,
+        // nível, etc.) mesmo que o retorno do banco trouxer algo diferente.
+        atualizado = { ...o, ...retorno, status_oc: o.status_oc, nivel_risco: o.nivel_risco, vistorias: vistoriasAtualizadas }
       }
       setO(atualizado)
       onAtualizado(atualizado)
