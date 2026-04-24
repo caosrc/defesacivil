@@ -27,11 +27,14 @@ function getDispositivoId(): string {
   }
   return id
 }
-function getNomeDispositivo(): string {
-  return localStorage.getItem('defesacivil-device-nome') || `Equipe ${getDispositivoId()}`
-}
-function salvarNomeDispositivo(nome: string) {
-  localStorage.setItem('defesacivil-device-nome', nome.trim() || `Equipe ${getDispositivoId()}`)
+
+// Nome do dispositivo = nome do agente logado na sessão
+function getNomeAgente(): string {
+  return (
+    sessionStorage.getItem('defesacivil-agente-sessao') ||
+    localStorage.getItem('defesacivil-device-nome') ||
+    `Equipe ${getDispositivoId()}`
+  )
 }
 
 // ── Ícones ──────────────────────────────────────────────────────
@@ -199,12 +202,8 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const indicesRef = useRef<Map<string, number>>(new Map())
 
   // Nome e ID do dispositivo local — usa o agente escolhido no login da sessão
-  const [nomeLocal, setNomeLocal] = useState(() => {
-    return sessionStorage.getItem('defesacivil-agente-sessao') || getNomeDispositivo()
-  })
+  const [nomeLocal] = useState(() => getNomeAgente())
   const nomeLocalRef = useRef(nomeLocal)
-  const [editandoNome, setEditandoNome] = useState(false)
-  const [nomeEditando, setNomeEditando] = useState('')
   const dispositivoId = useRef(getDispositivoId())
 
   // Clima INMET
@@ -471,14 +470,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   function toggleGps() {
     if (statusGps === 'ativo' || statusGps === 'aguardando') desativarGps()
     else ativarGps()
-  }
-
-  // ── Nome do dispositivo ────────────────────────────────────────
-  function salvarNome() {
-    const nome = nomeEditando.trim() || getNomeDispositivo()
-    salvarNomeDispositivo(nome)
-    setNomeLocal(getNomeDispositivo())
-    setEditandoNome(false)
   }
 
   // ── Mapa offline ──────────────────────────────────────────────
@@ -852,27 +843,9 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
             <div className="mapa-equipe-item mapa-equipe-item--local">
               <span className="mapa-equipe-icone" style={{ background: '#1a4b8c' }}>🧑</span>
               <div className="mapa-equipe-info">
-                {editandoNome ? (
-                  <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
-                    <input
-                      className="mapa-equipe-nome-input"
-                      value={nomeEditando}
-                      onChange={(e) => setNomeEditando(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') salvarNome() }}
-                      autoFocus
-                      maxLength={20}
-                      placeholder="Nome da equipe"
-                    />
-                    <button className="mapa-equipe-salvar" onClick={salvarNome}>✓</button>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <span className="mapa-equipe-nome">{nomeLocal} <em>(você)</em></span>
-                    <button className="mapa-equipe-editar" onClick={() => { setNomeEditando(nomeLocal); setEditandoNome(true) }}>✏️</button>
-                  </div>
-                )}
+                <span className="mapa-equipe-nome">{nomeLocal} <em>(você)</em></span>
                 <span className="mapa-equipe-status">
-                  {statusGps === 'ativo' ? '🟢 GPS ativo' : statusGps === 'aguardando' ? '🟡 Aguardando GPS…' : '⚫ GPS desligado'}
+                  {statusGps === 'ativo' ? '🟢 Online no mapa para todos' : statusGps === 'aguardando' ? '🟡 Aguardando GPS…' : '⚫ GPS desligado — invisível para os colegas'}
                 </span>
               </div>
             </div>
@@ -880,7 +853,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
             {/* Outros dispositivos */}
             {dispositivosArray.length === 0 && statusGps !== 'ativo' && (
               <div className="mapa-offline-info mapa-offline-info--aviso">
-                Você está conectado para ver outras equipes. Ative o GPS apenas se quiser aparecer no mapa delas.
+                Você já está conectado e vai ver as outras equipes que ativarem o GPS. Para aparecer no mapa dos colegas, ative seu GPS.
               </div>
             )}
             {dispositivosArray.length === 0 && statusGps === 'ativo' && (

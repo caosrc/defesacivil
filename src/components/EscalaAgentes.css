@@ -173,6 +173,130 @@
   min-height: 40px;
 }
 
+/* ── Calendário Unificado (Sobreaviso + Folga) ─────────────── */
+.escala-bloco-unificado {
+  background: #fff;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.escala-bloco-unificado .escala-cal-grid {
+  gap: 4px;
+  background: #f1f5f9;
+  padding: 4px;
+  border-top: none;
+}
+
+.escala-bloco-unificado .escala-cal-diahdr {
+  background: transparent;
+  font-size: 0.7rem;
+  padding: 0.4rem 0;
+}
+
+.escala-bloco-unificado .uni-vazio {
+  background: transparent;
+  min-height: 86px;
+}
+
+.escala-bloco-unificado .uni-dia {
+  background: #fff;
+  min-height: 86px;
+  padding: 0.3rem 0.25rem;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.25rem;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  overflow: hidden;
+}
+
+.escala-bloco-unificado .uni-dia.editavel:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.escala-bloco-unificado .uni-dia .escala-cal-num {
+  font-size: 0.78rem;
+  font-weight: 700;
+  align-self: flex-start;
+  color: #1e293b;
+}
+
+.escala-bloco-unificado .uni-dia.hoje {
+  border-color: #2563eb;
+  background: #eff6ff;
+}
+
+.escala-bloco-unificado .uni-dia.hoje .escala-cal-num {
+  background: #2563eb;
+  color: #fff;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+}
+
+.escala-bloco-unificado .uni-dia.feriado-fixo,
+.escala-bloco-unificado .uni-dia.feriado-custom {
+  background: #fef3c7;
+  border-color: #fbbf24;
+}
+
+.uni-secao {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  width: 100%;
+  text-align: left;
+}
+
+.uni-sobreaviso {
+  background: #ede9fe;
+  border-left: 3px solid #7c3aed;
+}
+
+.uni-folga {
+  background: #dcfce7;
+  border-left: 3px solid #16a34a;
+}
+
+.uni-secao-label {
+  font-size: 0.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+  line-height: 1.1;
+}
+
+.uni-secao-nome {
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+@media (max-width: 480px) {
+  .escala-bloco-unificado .uni-dia,
+  .escala-bloco-unificado .uni-vazio {
+    min-height: 78px;
+  }
+  .uni-secao-nome { font-size: 0.55rem; }
+  .uni-secao-label { font-size: 0.46rem; }
+}
+
 .escala-cal-dots {
   display: flex;
   flex-wrap: wrap;
