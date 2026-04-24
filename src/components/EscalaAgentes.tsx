@@ -19,8 +19,14 @@ const AGENTES_ESCALA = [
   { nome: 'Sócrates',  cor: '#475569', iniciais: 'SÓ' },
 ]
 
-// Quem pode ser escalado para sobreaviso = todos os agentes
-const AGENTES_SOBREAVISO = AGENTES_ESCALA
+// Quem NÃO faz sobreaviso (mas registra horas extras 1:1, sem multiplicador)
+const AGENTES_SEM_SOBREAVISO = new Set(['Talita', 'Cristiane', 'Sócrates'])
+
+// Quem pode ser escalado para sobreaviso = agentes operacionais
+const AGENTES_SOBREAVISO = AGENTES_ESCALA.filter(ag => !AGENTES_SEM_SOBREAVISO.has(ag.nome))
+
+// Quem só registra horas extras simples (sem sobreaviso, sem multiplicador)
+const AGENTES_HORAS_EXTRAS = AGENTES_ESCALA.filter(ag => AGENTES_SEM_SOBREAVISO.has(ag.nome))
 
 const AGENTE_MAP: Record<string, { cor: string; iniciais: string }> = {}
 AGENTES_ESCALA.forEach(ag => { AGENTE_MAP[ag.nome] = { cor: ag.cor, iniciais: ag.iniciais } })
@@ -108,6 +114,7 @@ interface EscalaData {
   percSobreaviso: number             // % de aumento p/ horas acionado no sobreaviso (padrão 50 → ×1,5)
   percSabado: number
   descontosFolgaBanco: Record<string, Record<string, number>>  // legado — descontos manuais antigos
+  horasExtrasSimples: Record<string, Record<string, number>>   // agente → { data: horas } — sem multiplicador
 }
 
 // ── Storage ───────────────────────────────────────────────────────
@@ -141,6 +148,7 @@ function carregarDados(): EscalaData {
         percSobreaviso: p.percSobreaviso ?? 50,
         percSabado: p.percSabado ?? 50,
         descontosFolgaBanco: p.descontosFolgaBanco ?? {},
+        horasExtrasSimples: p.horasExtrasSimples ?? {},
       }
     }
     // Migra v2
@@ -160,10 +168,11 @@ function carregarDados(): EscalaData {
         percSobreaviso: 50,
         percSabado: 50,
         descontosFolgaBanco: {},
+        horasExtrasSimples: {},
       }
     }
   } catch { /* */ }
-  return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, folgas: {}, ferias: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {}, feriadosCustom: [], percDomingoFeriado: 100, percSobreaviso: 50, percSabado: 50, descontosFolgaBanco: {} }
+  return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, folgas: {}, ferias: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {}, feriadosCustom: [], percDomingoFeriado: 100, percSobreaviso: 50, percSabado: 50, descontosFolgaBanco: {}, horasExtrasSimples: {} }
 }
 
 function salvarDados(data: EscalaData) {
@@ -198,6 +207,7 @@ async function carregarDadosRemoto(): Promise<EscalaData | null> {
     percSobreaviso: (p.percSobreaviso as number) ?? 50,
     percSabado: (p.percSabado as number) ?? 50,
     descontosFolgaBanco: (p.descontosFolgaBanco as EscalaData['descontosFolgaBanco']) ?? {},
+    horasExtrasSimples: (p.horasExtrasSimples as EscalaData['horasExtrasSimples']) ?? {},
   }
 }
 
@@ -779,6 +789,112 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
   )
 }
 
+// ── Banco de Horas Extras (sem multiplicador) — Talita/Cristiane/Sócrates ─
+interface BancoHorasExtraSimplesProps {
+  agente: string
+  horasExtrasSimples: Record<string, Record<string, number>>
+  onUpdateHora: (data: string, horas: number) => void
+}
+
+function BancoHorasExtraSimples({ agente, horasExtrasSimples, onUpdateHora }: BancoHorasExtraSimplesProps) {
+  const info = AGENTE_MAP[agente]
+  const horasAgente = horasExtrasSimples[agente] ?? {}
+  const [novaData, setNovaData] = useState<string>(hojeStr())
+  const [novasHoras, setNovasHoras] = useState<string>('')
+  const [erro, setErro] = useState<string>('')
+
+  const total = Object.values(horasAgente).reduce((acc, h) => acc + h, 0)
+  const entradas = Object.entries(horasAgente).sort(([a], [b]) => b.localeCompare(a))
+
+  function adicionar() {
+    const h = parseFloat(novasHoras)
+    if (!novaData || isNaN(h) || h <= 0) {
+      setErro('Informe uma data e uma quantidade de horas válida.')
+      return
+    }
+    setErro('')
+    const atual = horasAgente[novaData] ?? 0
+    onUpdateHora(novaData, Math.min(24, atual + h))
+    setNovasHoras('')
+  }
+
+  return (
+    <div className="bh-agente-wrap">
+      <div className="bh-agente-cabecalho">
+        <span className="bh-card-iniciais" style={{ background: info?.cor ?? '#64748b' }}>
+          {info?.iniciais ?? agente.slice(0, 2).toUpperCase()}
+        </span>
+        <div className="bh-agente-nome-wrap">
+          <span className="bh-card-nome">{agente}</span>
+          <span className="bh-agente-subtitulo">Banco de Horas Extras</span>
+        </div>
+      </div>
+
+      <div className="bh-bloco">
+        <div className="bh-bloco-header">
+          <span className="bh-bloco-icone">⏱️</span>
+          <span className="bh-bloco-titulo">Horas extras (sem multiplicador)</span>
+          <span className="bh-bloco-total">{fmtH(total)}h</span>
+        </div>
+
+        <div className="escala-ferias-form" style={{ padding: '12px 14px' }}>
+          <div className="escala-ferias-datas">
+            <div className="escala-ferias-data-campo">
+              <label>Data</label>
+              <input type="date" value={novaData} onChange={e => { setNovaData(e.target.value); setErro('') }} />
+            </div>
+            <div className="escala-ferias-data-campo">
+              <label>Horas</label>
+              <input
+                type="number"
+                min={0}
+                max={24}
+                step={0.5}
+                value={novasHoras}
+                placeholder="0"
+                onChange={e => { setNovasHoras(e.target.value); setErro('') }}
+              />
+            </div>
+          </div>
+          {erro && <span className="escala-ferias-erro">{erro}</span>}
+          <button className="escala-ferias-add" onClick={adicionar}>+ Adicionar horas</button>
+        </div>
+
+        {entradas.length === 0 ? (
+          <p className="bh-card-vazio">Nenhuma hora extra registrada.</p>
+        ) : (
+          <div className="bh-domfer-lista">
+            {entradas.map(([data, h]) => {
+              const [y, m, d] = data.split('-').map(Number)
+              const dow = new Date(y, m - 1, d).getDay()
+              const nomeDia = DIAS_SEMANA_NOMES[dow]
+              return (
+                <div key={data} className="bh-domfer-row">
+                  <span className="bh-domfer-dia">{nomeDia}</span>
+                  <span className="bh-domfer-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}/{y}</span>
+                  <span className="bh-domfer-input">{fmtH(h)}h</span>
+                  <span className="bh-domfer-mult">×1,0</span>
+                  <span className="bh-domfer-calc">= {fmtH(h)}h</span>
+                  <button
+                    className="escala-ferias-remover"
+                    onClick={() => onUpdateHora(data, 0)}
+                    title="Remover"
+                  >✕</button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="bh-total-geral">
+        <span className="bh-total-label">Total de Horas</span>
+        <span className="bh-total-valor">{fmtH(total)}<span className="bh-total-h">h</span></span>
+      </div>
+    </div>
+  )
+}
+
 // ── Banco de Horas: painel do Moisés ─────────────────────────────
 interface BancoHorasMoisesProps {
   sobreavisoSemanal: Record<string, string[]>
@@ -789,20 +905,28 @@ interface BancoHorasMoisesProps {
   percSobreaviso: number
   percSabado: number
   feriadosCustom: string[]
+  horasExtrasSimples: Record<string, Record<string, number>>
 }
 
-function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom }: BancoHorasMoisesProps) {
+function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples }: BancoHorasMoisesProps) {
   const hoje = hojeStr()
 
   const lista = useMemo(() => {
-    return AGENTES_SOBREAVISO.map(ag => {
+    const sobreaviso = AGENTES_SOBREAVISO.map(ag => {
       const total = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
       const semanas = Object.values(sobreavisoSemanal).filter(lista => lista.includes(ag.nome)).length
       const desobreaviso = (sobreavisoSemanal[hoje] ?? []).includes(ag.nome)
       const temFolga = (folgas[hoje] ?? []).includes(ag.nome)
-      return { ...ag, total, semanas, desobreaviso, temFolga }
-    }).sort((a, b) => b.total - a.total)
-  }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, hoje])
+      return { ...ag, total, semanas, desobreaviso, temFolga, tipo: 'sobreaviso' as const }
+    })
+    const extras = AGENTES_HORAS_EXTRAS.map(ag => {
+      const horas = horasExtrasSimples[ag.nome] ?? {}
+      const total = Object.values(horas).reduce((acc, h) => acc + h, 0)
+      const dias = Object.keys(horas).length
+      return { ...ag, total, semanas: dias, desobreaviso: false, temFolga: false, tipo: 'extras' as const }
+    })
+    return [...sobreaviso, ...extras].sort((a, b) => b.total - a.total)
+  }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, hoje])
 
   const totalGeral = lista.reduce((s, ag) => s + ag.total, 0)
 
@@ -1314,6 +1438,7 @@ export default function EscalaAgentes() {
   const agenteLogado = getAgenteLogado()
   const isMoises = agenteLogado === 'Moisés'
   const isSobreaviso = AGENTES_SOBREAVISO.some(a => a.nome === agenteLogado)
+  const isHorasExtras = AGENTES_SEM_SOBREAVISO.has(agenteLogado)
 
   useEffect(() => {
     // Migrar dados da versão antiga se existir
@@ -1334,6 +1459,7 @@ export default function EscalaAgentes() {
           percSobreaviso: 50,
           percSabado: 50,
           descontosFolgaBanco: {},
+          horasExtrasSimples: {},
         }
         salvarDados(migrado)
         setDados(migrado)
@@ -1419,6 +1545,24 @@ export default function EscalaAgentes() {
     salvarDados(novos)
   }
 
+  function atualizarHoraExtraSimples(data: string, horas: number) {
+    const agenteHoras = { ...(dados.horasExtrasSimples[agenteLogado] ?? {}) }
+    if (horas === 0) {
+      delete agenteHoras[data]
+    } else {
+      agenteHoras[data] = horas
+    }
+    const novos = {
+      ...dados,
+      horasExtrasSimples: {
+        ...dados.horasExtrasSimples,
+        [agenteLogado]: agenteHoras,
+      },
+    }
+    setDados(novos)
+    salvarDados(novos)
+  }
+
   return (
     <div className="escala-wrap">
       <div className="escala-em-desenvolvimento">🚧 Em desenvolvimento...</div>
@@ -1489,6 +1633,15 @@ export default function EscalaAgentes() {
         />
       )}
 
+      {/* Banco de Horas Extras — Talita / Cristiane / Sócrates */}
+      {!isMoises && isHorasExtras && (
+        <BancoHorasExtraSimples
+          agente={agenteLogado}
+          horasExtrasSimples={dados.horasExtrasSimples}
+          onUpdateHora={atualizarHoraExtraSimples}
+        />
+      )}
+
       {/* Banco de Horas — Moisés vê todos */}
       {isMoises && (
         <BancoHorasMoises
@@ -1500,6 +1653,7 @@ export default function EscalaAgentes() {
           percSobreaviso={dados.percSobreaviso}
           percSabado={dados.percSabado}
           feriadosCustom={dados.feriadosCustom}
+          horasExtrasSimples={dados.horasExtrasSimples}
         />
       )}
 

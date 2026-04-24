@@ -99,13 +99,13 @@ Documento JSON único (id=1) com a escala completa, regras de banco de horas, fe
 - Popup no marcador com botão "Ver detalhes"
 - Modal de detalhe com exportação KMZ individual
 - Edição de coordenadas no detalhe da ocorrência feita apenas em graus, minutos e segundos, com direção N/S e L/O; o app converte internamente para latitude/longitude decimal ao salvar.
-- Botão “Salvar relatório” no detalhe da ocorrência, gerando DOCX com dados, coordenadas em graus/minutos/segundos e até 6 fotos
+- Botão “Salvar relatório” no detalhe da ocorrência, gerando DOCX com dados, coordenadas em graus/minutos/segundos e até 6 fotos. A geração roda **dentro do navegador** (`src/relatorioVistoria.ts` + JSZip) usando o modelo `public/relatorio-vistoria-template.docx`, então funciona no Netlify mesmo sem o backend Express.
 - Exportação KMZ global de todas as ocorrências com GPS
 - Exportação Excel de todas as ocorrências
 - Filtros por nível, status e busca de texto
 - Resumo numérico no topo (Alto, Médio, Baixo, Total)
 - Checklists de viatura com fotos por ângulo, avarias, assinatura digital, histórico, exportação Excel geral e PDF individual via impressão do navegador
-- Aba Escala no menu inferior com calendário ADM, sobreaviso diário, férias/folgas prolongadas e banco de horas; no calendário de Sobreaviso o responsável é marcado por dia. No modal do ADM o Moisés escolhe quem está em plantão **e** quem está de folga naquele dia (duas seções independentes). Cada folga marcada no ADM aparece como "Folga:" na célula do dia, e quando essa data passar no calendário (data < hoje) o sistema desconta automaticamente 8h do banco do agente — não há mais a regra antiga de "sobreaviso gera folga no dia seguinte". As regras do banco têm percentuais separados para dias úteis, sábado e domingos/feriados.
+- Aba Escala no menu inferior com calendário ADM, sobreaviso diário, férias/folgas prolongadas e banco de horas; no calendário de Sobreaviso o responsável é marcado por dia. No modal do ADM o Moisés escolhe quem está em plantão **e** quem está de folga naquele dia (duas seções independentes). Cada folga marcada no ADM aparece como "Folga:" na célula do dia, e quando essa data passar no calendário (data < hoje) o sistema desconta automaticamente 8h do banco do agente — não há mais a regra antiga de "sobreaviso gera folga no dia seguinte". As regras do banco têm percentuais separados para dias úteis, sábado e domingos/feriados. **Talita, Cristiane e Sócrates** não fazem sobreaviso (constante `AGENTES_SEM_SOBREAVISO`); eles têm uma seção própria de "Banco de Horas Extras" que registra horas no fator 1:1 (sem multiplicador) — essas horas são somadas no painel geral do Moisés (`horasExtrasSimples` em `EscalaData`).
 - Suporte offline completo via PWA (Service Worker + IndexedDB + manifest)
 - Rastreamento em tempo real no mapa via WebSocket: a aba Mapa conecta ao servidor mesmo com o GPS local desligado, permitindo ver outros agentes online que estejam com GPS ativo.
 

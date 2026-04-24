@@ -332,26 +332,9 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   async function salvarRelatorio() {
     setGerandoRelatorio(true)
     try {
-      const res = await fetch('/api/relatorio-vistoria', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(o),
-      })
-      if (!res.ok) {
-        let msg = 'Erro ao salvar relatório'
-        try {
-          const data = await res.json()
-          msg = data?.error || msg
-        } catch {
-          msg = await res.text() || msg
-        }
-        throw new Error(msg)
-      }
-      const blob = await res.blob()
-      const disposition = res.headers.get('Content-Disposition') || ''
-      const utf8Name = disposition.match(/filename\*=UTF-8''([^;]+)/)?.[1]
-      const normalName = disposition.match(/filename="?([^"]+)"?/)?.[1]
-      const filename = utf8Name ? decodeURIComponent(utf8Name) : (normalName || `RelVist_${o.id}.docx`)
+      const { gerarRelatorioVistoria, relatorioFileName } = await import('../relatorioVistoria')
+      const blob = await gerarRelatorioVistoria(o)
+      const filename = relatorioFileName(o)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
