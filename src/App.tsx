@@ -4,6 +4,7 @@ import Login, { estaLogado, agenteEscolhido } from './components/Login'
 import type { Ocorrencia, NivelRisco } from './types'
 import { NATUREZA_ICONE } from './types'
 import { listarOcorrencias, criarOcorrencia } from './api'
+import { supabase } from './supabaseClient'
 import { cacheOcorrencias, getCachedOcorrencias, getPending, removePending, countPending } from './offline'
 
 const MapaOcorrencias = lazy(() => import('./components/MapaOcorrencias'))
@@ -209,40 +210,17 @@ export default function App() {
     carregar()
   }, [carregar])
 
-  // Realtime: recarrega a lista quando o servidor avisa que houve mudança
+  // Realtime: recarrega a lista quando outro usuário cria/edita/apaga uma ocorrência
   useEffect(() => {
-    let ws: WebSocket | null = null
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-    let cancelado = false
-
-    function conectar() {
-      if (cancelado) return
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const url = `${protocol}//${window.location.host}/ws`
-      try {
-        ws = new WebSocket(url)
-      } catch {
-        reconnectTimer = setTimeout(conectar, 5000)
-        return
-      }
-      ws.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(ev.data)
-          if (msg?.tipo === 'ocorrencias_atualizadas') carregar()
-        } catch { /* ignora mensagens não-JSON */ }
-      }
-      ws.onclose = () => {
-        if (!cancelado) reconnectTimer = setTimeout(conectar, 5000)
-      }
-      ws.onerror = () => { try { ws?.close() } catch { /* */ } }
-    }
-
-    conectar()
-    return () => {
-      cancelado = true
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      try { ws?.close() } catch { /* */ }
-    }
+    const canal = supabase
+      .channel('ocorrencias-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ocorrencias' },
+        () => { carregar() }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(canal) }
   }, [carregar])
 
   useEffect(() => {

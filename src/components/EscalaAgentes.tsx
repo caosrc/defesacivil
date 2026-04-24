@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react'
 import { getAgenteLogado } from './Login'
 import ModalSenha from './ModalSenha'
 import './EscalaAgentes.css'
+import { supabase } from '../supabaseClient'
 
 // ── Constantes ────────────────────────────────────────────────────
 const AGENTES_ESCALA = [
@@ -116,7 +117,7 @@ interface EscalaData {
 
 // ── Storage ───────────────────────────────────────────────────────
 const STORAGE_KEY = 'escala-data-v3'
-const ENDPOINT_ESCALA = '/api/escala'
+const TABELA_ESCALA = 'escala_estado'
 
 function normalizarSemanal(raw: Record<string, string | string[]>): Record<string, string[]> {
   const out: Record<string, string[]> = {}
@@ -171,24 +172,22 @@ function carregarDados(): EscalaData {
 function salvarDados(data: EscalaData) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   // Persistência remota (não bloqueia o salvamento local)
-  fetch(ENDPOINT_ESCALA, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
-    .then((r) => { if (!r.ok) console.warn('Falha ao salvar escala (HTTP ' + r.status + ')') })
-    .catch((err) => console.warn('Falha ao salvar escala:', err?.message || err))
+  supabase
+    .from(TABELA_ESCALA)
+    .upsert({ id: 1, data, updated_at: new Date().toISOString() })
+    .then(({ error }) => {
+      if (error) console.warn('Falha ao salvar escala no Supabase:', error.message)
+    })
 }
 
 async function carregarDadosRemoto(): Promise<EscalaData | null> {
-  let raw: unknown = null
-  try {
-    const resposta = await fetch(ENDPOINT_ESCALA)
-    if (!resposta.ok) return null
-    raw = await resposta.json()
-  } catch { return null }
-  if (!raw || typeof raw !== 'object') return null
-  const p = raw as Partial<EscalaData> & Record<string, unknown>
+  const { data, error } = await supabase
+    .from(TABELA_ESCALA)
+    .select('data')
+    .eq('id', 1)
+    .maybeSingle()
+  if (error || !data?.data) return null
+  const p = data.data as Partial<EscalaData> & Record<string, unknown>
   return {
     adm: (p.adm as EscalaData['adm']) ?? {},
     sobreaviso: (p.sobreaviso as EscalaData['sobreaviso']) ?? {},

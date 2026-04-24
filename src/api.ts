@@ -1,48 +1,45 @@
 import type { Ocorrencia } from './types'
+import { supabase } from './supabaseClient'
 
-const BASE = '/api/ocorrencias'
-
-async function lerJson<T>(resposta: Response, mensagemErro: string): Promise<T> {
-  if (!resposta.ok) {
-    let detalhe = ''
-    try {
-      const corpo = await resposta.json()
-      detalhe = corpo?.error || ''
-    } catch { /* ignora */ }
-    throw new Error(detalhe || `${mensagemErro} (HTTP ${resposta.status})`)
-  }
-  return resposta.json() as Promise<T>
-}
+const TABELA = 'ocorrencias'
 
 export async function listarOcorrencias(): Promise<Ocorrencia[]> {
-  const r = await fetch(BASE)
-  return lerJson<Ocorrencia[]>(r, 'Erro ao listar ocorrências')
+  const { data, error } = await supabase
+    .from(TABELA)
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message || 'Erro ao listar ocorrências')
+  return (data ?? []) as Ocorrencia[]
 }
 
 export async function criarOcorrencia(
   dados: Omit<Ocorrencia, 'id' | 'created_at'>
 ): Promise<Ocorrencia> {
-  const r = await fetch(BASE, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(dados),
-  })
-  return lerJson<Ocorrencia>(r, 'Erro ao criar ocorrência')
+  const { data, error } = await supabase
+    .from(TABELA)
+    .insert(dados)
+    .select()
+    .single()
+  if (error) throw new Error(error.message || 'Erro ao criar ocorrência')
+  return data as Ocorrencia
 }
 
 export async function atualizarOcorrencia(
   id: number,
   dados: Partial<Ocorrencia>
 ): Promise<Ocorrencia> {
-  const r = await fetch(`${BASE}/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(dados),
-  })
-  return lerJson<Ocorrencia>(r, 'Erro ao atualizar ocorrência')
+  const { data, error } = await supabase
+    .from(TABELA)
+    .update(dados)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw new Error(error.message || 'Erro ao atualizar ocorrência')
+  if (!data) throw new Error('Resposta vazia do servidor')
+  return data as Ocorrencia
 }
 
 export async function deletarOcorrencia(id: number): Promise<void> {
-  const r = await fetch(`${BASE}/${id}`, { method: 'DELETE' })
-  if (!r.ok) throw new Error(`Erro ao deletar ocorrência (HTTP ${r.status})`)
+  const { error } = await supabase.from(TABELA).delete().eq('id', id)
+  if (error) throw new Error(error.message || 'Erro ao deletar ocorrência')
 }

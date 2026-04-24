@@ -47,7 +47,9 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 
 Toda a leitura/escrita do frontend passa pelo backend Express (`/api/*`); o cliente nunca acessa o banco diretamente. O realtime de ocorrências é entregue por WebSocket (`/ws`) — o servidor envia `{ tipo: 'ocorrencias_atualizadas' }` em cada criação/edição/exclusão e o app recarrega a lista.
 
-> Migração para Replit (2026): removida a dependência `@supabase/supabase-js`. Todo o acesso a dados (`api.ts`, `EscalaAgentes.tsx`, `ChecklistViatura.tsx`) e o realtime (`App.tsx`) passaram a usar o backend Express + Postgres do Replit, mantendo a separação cliente/servidor exigida pela plataforma.
+> **Deploy no Netlify (2026):** o app é publicado em hospedagem estática (Netlify), portanto o backend Express **não roda em produção**. Para preservar a sincronização entre dispositivos, o cliente usa **Supabase** como banco de dados/realtime: `src/api.ts` (ocorrências), `src/App.tsx` (canal realtime), `src/components/EscalaAgentes.tsx` (escala) e `src/components/ChecklistViatura.tsx` (checklists). O servidor Express + Postgres continua no repositório apenas como utilitário de desenvolvimento (geração de DOCX e proxy de tiles), mas não é usado pelo app publicado.
+>
+> Variáveis de ambiente necessárias no build do Netlify: `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. O mapa usa tiles diretos do OpenStreetMap; o clima é buscado direto pelo navegador no Open-Meteo.
 
 ### Tabela `ocorrencias`
 | Campo | Tipo | Descrição |
