@@ -47,9 +47,11 @@ O servidor valida `DATABASE_URL` na inicialização e cria automaticamente as ta
 
 Toda a leitura/escrita do frontend passa pelo backend Express (`/api/*`); o cliente nunca acessa o banco diretamente. O realtime de ocorrências é entregue por WebSocket (`/ws`) — o servidor envia `{ tipo: 'ocorrencias_atualizadas' }` em cada criação/edição/exclusão e o app recarrega a lista.
 
-> **Deploy no Netlify (2026):** o app é publicado em hospedagem estática (Netlify), portanto o backend Express **não roda em produção**. Para preservar a sincronização entre dispositivos, o cliente usa **Supabase** como banco de dados/realtime: `src/api.ts` (ocorrências), `src/App.tsx` (canal realtime), `src/components/EscalaAgentes.tsx` (escala) e `src/components/ChecklistViatura.tsx` (checklists). O servidor Express + Postgres continua no repositório apenas como utilitário de desenvolvimento (geração de DOCX e proxy de tiles), mas não é usado pelo app publicado.
+> **Deploy no Netlify (2026):** o app é publicado em hospedagem estática (Netlify), portanto o backend Express **não roda em produção**. Para preservar a sincronização entre dispositivos, o cliente usa **Supabase** como banco de dados/realtime: `src/api.ts` (ocorrências), `src/App.tsx` (canal realtime de ocorrências), `src/components/MapaOcorrencias.tsx` (canal Realtime Presence `agentes-gps` para rastreamento ao vivo das equipes), `src/components/EscalaAgentes.tsx` (escala) e `src/components/ChecklistViatura.tsx` (checklists). O servidor Express + Postgres continua no repositório apenas como utilitário de desenvolvimento (geração de DOCX e proxy de tiles), mas não é usado pelo app publicado.
 >
 > Variáveis de ambiente necessárias no build do Netlify: `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. O mapa usa tiles diretos do OpenStreetMap; o clima é buscado direto pelo navegador no Open-Meteo.
+>
+> **PWA + Offline First:** `public/sw.js` é o service worker que cuida do cache do app shell, fallback offline para navegação SPA, cache permanente dos tiles do mapa (até a área de Ouro Branco poder ser baixada inteira) e revalidação em segundo plano dos assets. `public/_headers` garante que o Netlify nunca cache o `sw.js` para que atualizações cheguem aos celulares; `public/_redirects` faz o fallback SPA. Ocorrências criadas offline ficam na fila IndexedDB (`src/offline.ts`) e são enviadas ao Supabase automaticamente quando o navegador volta a ficar online (`window 'online'` → `sincronizar()` em `App.tsx`).
 
 ### Tabela `ocorrencias`
 | Campo | Tipo | Descrição |

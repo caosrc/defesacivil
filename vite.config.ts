@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// PWA: o service worker (public/sw.js) é copiado tal como está para a raiz do build.
+// Ele cuida de cache do app shell, fallback offline e cache dos tiles do mapa.
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -18,5 +20,10 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
+  },
+  build: {
+    // Mantém os assets com hash para invalidar cache automaticamente
+    assetsDir: 'assets',
+    sourcemap: false,
   },
 })
