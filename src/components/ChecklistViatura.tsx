@@ -476,7 +476,9 @@ export default function ChecklistViatura() {
       })
       if (error) throw error
       await carregar(); resetForm(); setModo('lista')
-    } catch { setErro('Erro ao salvar. Tente novamente.') }
+    } catch (e: any) {
+      setErro(`Erro ao salvar no Supabase: ${e?.message ?? 'tente novamente'}`)
+    }
     setSalvando(false)
   }
 
