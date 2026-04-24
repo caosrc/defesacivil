@@ -4,6 +4,7 @@ import Login, { estaLogado, agenteEscolhido } from './components/Login'
 import type { Ocorrencia, NivelRisco } from './types'
 import { NATUREZA_ICONE } from './types'
 import { listarOcorrencias, criarOcorrencia } from './api'
+import { supabase } from './supabaseClient'
 import { cacheOcorrencias, getCachedOcorrencias, getPending, removePending, countPending } from './offline'
 
 const MapaOcorrencias = lazy(() => import('./components/MapaOcorrencias'))
@@ -211,39 +212,15 @@ export default function App() {
 
   // Realtime: recarrega a lista quando outro usuário cria/edita/apaga uma ocorrência
   useEffect(() => {
-    let ws: WebSocket | null = null
-    let fechado = false
-    let tentarReconectar: ReturnType<typeof setTimeout> | null = null
-
-    function conectar() {
-      if (fechado) return
-      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-      try {
-        ws = new WebSocket(`${proto}//${location.host}/ws`)
-      } catch {
-        tentarReconectar = setTimeout(conectar, 5000)
-        return
-      }
-      ws.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(ev.data)
-          if (msg?.tipo === 'ocorrencias_atualizadas') carregar()
-        } catch { /* ignora */ }
-      }
-      ws.onclose = () => {
-        if (!fechado) tentarReconectar = setTimeout(conectar, 5000)
-      }
-      ws.onerror = () => {
-        try { ws?.close() } catch { /* ignora */ }
-      }
-    }
-    conectar()
-
-    return () => {
-      fechado = true
-      if (tentarReconectar) clearTimeout(tentarReconectar)
-      try { ws?.close() } catch { /* ignora */ }
-    }
+    const canal = supabase
+      .channel('ocorrencias-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'ocorrencias' },
+        () => { carregar() }
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(canal) }
   }, [carregar])
 
   useEffect(() => {
