@@ -105,7 +105,7 @@ Documento JSON único (id=1) com a escala completa, regras de banco de horas, fe
 - Filtros por nível, status e busca de texto
 - Resumo numérico no topo (Alto, Médio, Baixo, Total)
 - Checklists de viatura com fotos por ângulo, avarias, assinatura digital, histórico, exportação Excel geral e PDF individual via impressão do navegador
-- Aba Escala no menu inferior com calendário ADM, sobreaviso diário, férias/folgas prolongadas e banco de horas; no calendário de Sobreaviso o responsável é marcado por dia, o ADM mostra automaticamente “Folga:” no dia seguinte, e quando essa folga chega no dia atual o sistema desconta automaticamente até 8h do banco do agente. As regras do banco têm percentuais separados para dias úteis, sábado e domingos/feriados.
+- Aba Escala no menu inferior com calendário ADM, sobreaviso diário, férias/folgas prolongadas e banco de horas; no calendário de Sobreaviso o responsável é marcado por dia. No modal do ADM o Moisés escolhe quem está em plantão **e** quem está de folga naquele dia (duas seções independentes). Cada folga marcada no ADM aparece como "Folga:" na célula do dia, e quando essa data passar no calendário (data < hoje) o sistema desconta automaticamente 8h do banco do agente — não há mais a regra antiga de "sobreaviso gera folga no dia seguinte". As regras do banco têm percentuais separados para dias úteis, sábado e domingos/feriados.
 - Suporte offline completo via PWA (Service Worker + IndexedDB + manifest)
 - Rastreamento em tempo real no mapa via WebSocket: a aba Mapa conecta ao servidor mesmo com o GPS local desligado, permitindo ver outros agentes online que estejam com GPS ativo.
 
