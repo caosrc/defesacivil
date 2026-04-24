@@ -172,6 +172,7 @@ export default function App() {
       conclusao: p.conclusao ?? null,
       data_ocorrencia: p.data_ocorrencia ?? null,
       agentes: Array.isArray(p.agentes) ? p.agentes : [],
+      vistorias: Array.isArray(p.vistorias) ? p.vistorias : [],
       created_at: p._savedAt ?? new Date().toISOString(),
       _offline: true,
       _localId: p.localId,

@@ -1,6 +1,13 @@
 export type NivelRisco = 'baixo' | 'medio' | 'alto'
 export type StatusOc = 'ativo' | 'resolvido'
 
+export interface VistoriaAdicional {
+  data: string
+  observacao: string
+  fotos: string[]
+  agente: string | null
+}
+
 export interface Ocorrencia {
   id: number
   tipo: string
@@ -20,6 +27,7 @@ export interface Ocorrencia {
   created_at: string
   agentes: string[]
   responsavel_registro: string | null
+  vistorias: VistoriaAdicional[] | null
   _offline?: boolean
   _localId?: number
 }
@@ -45,6 +53,8 @@ export const NATUREZAS = [
   'Abelhas/Marimbondo',
   'Vistoria Residencial',
   'Talude em Risco',
+  'Interdição de Imóvel',
+  'Interdição de Via',
 ]
 
 export const NATUREZA_ICONE: Record<string, string> = {
@@ -64,6 +74,8 @@ export const NATUREZA_ICONE: Record<string, string> = {
   'Abelhas/Marimbondo': '🐝',
   'Vistoria Residencial': '🏠',
   'Talude em Risco': '🪨',
+  'Interdição de Imóvel': '🚫',
+  'Interdição de Via': '🚧',
 }
 
 export const NATUREZA_COR: Record<string, string> = {
@@ -83,4 +95,6 @@ export const NATUREZA_COR: Record<string, string> = {
   'Abelhas/Marimbondo': '#ca8a04',
   'Vistoria Residencial': '#0f766e',
   'Talude em Risco': '#854d0e',
+  'Interdição de Imóvel': '#b91c1c',
+  'Interdição de Via': '#c2410c',
 }

@@ -154,6 +154,56 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
     row += 4
   }
 
+  // ── Vistorias adicionais (Interdição de Imóvel) ──
+  const vistoriasAdic = Array.isArray(o.vistorias) ? o.vistorias : []
+  if (vistoriasAdic.length > 0) {
+    row++
+    ws.mergeCells(`A${row}:E${row}`)
+    const vistoriasHeader = ws.getCell(`A${row}`)
+    vistoriasHeader.value = `VISTORIAS ADICIONAIS (${vistoriasAdic.length})`
+    vistoriasHeader.font = { bold: true, size: 10, color: { argb: BRANCO } }
+    vistoriasHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'B91C1C' } }
+    vistoriasHeader.alignment = { horizontal: 'left', indent: 1 }
+    ws.getRow(row).height = 20
+    row++
+
+    vistoriasAdic.forEach((v, vIdx) => {
+      const dataFmt = v.data ? new Date(v.data).toLocaleString('pt-BR') : '—'
+      linha(`Vistoria #${vIdx + 1} — Data`, dataFmt)
+      if (v.agente) linha(`Vistoria #${vIdx + 1} — Agente`, v.agente)
+      const obsCellV = ws.getCell(`A${row}`)
+      ws.mergeCells(`A${row}:B${row + 2}`)
+      obsCellV.value = v.observacao || '—'
+      obsCellV.font = { size: 10 }
+      obsCellV.alignment = { vertical: 'top', wrapText: true, indent: 1 }
+      ws.getRow(row).height = 18
+      row += 3
+
+      if (Array.isArray(v.fotos) && v.fotos.length > 0) {
+        const ROW_H_PT_V = Math.round(FOTO_H / ROW_H_PX_TO_PT)
+        let fRow = row
+        let col = 3
+        for (let i = 0; i < v.fotos.length; i++) {
+          const fb = v.fotos[i]
+          const data = fb.includes(',') ? fb.split(',')[1] : fb
+          const ext = fb.startsWith('data:image/png') ? 'png' : 'jpeg'
+          try {
+            const imageId = wb.addImage({ base64: data, extension: ext })
+            ws.addImage(imageId, {
+              tl: { col, row: fRow - 1 },
+              ext: { width: FOTO_W, height: FOTO_H },
+            })
+            ws.getRow(fRow).height = ROW_H_PT_V
+          } catch { /* ignora */ }
+          col++
+          if (col > 4) { col = 3; fRow++; ws.getRow(fRow).height = ROW_H_PT_V }
+        }
+        row = fRow + 1
+      }
+      row++
+    })
+  }
+
   if (o.fotos && o.fotos.length > 0) {
     row++
     ws.mergeCells(`A${row}:E${row}`)
@@ -412,7 +462,9 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
   const ws = wb.addWorksheet('Ocorrências')
 
   const maxFotos = ocorrencias.reduce((max, o) => Math.max(max, o.fotos?.length ?? 0), 0)
-  const totalCols = 15 + maxFotos
+  // Colunas extras p/ vistorias adicionais (Interdição de Imóvel)
+  const COLS_BASE = 15 + 3 // 15 anteriores + 3 colunas de vistorias adicionais
+  const totalCols = COLS_BASE + maxFotos
 
   // ── Linha 1: título ───────────────────────────────────────────────────────
   ws.mergeCells(1, 1, 1, totalCols)
@@ -428,10 +480,12 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
     'ID', 'Data Ocorrência', 'Registrado em', 'Tipo', 'Natureza', 'Detalhe',
     'Nível de Risco', 'Status', 'Endereço', 'Latitude', 'Longitude',
     'Proprietário', 'Situação', 'Recomendação', 'Conclusão',
+    'Vistorias Adicionais (qtd)', 'Última Vistoria', 'Observações das Vistorias',
     ...Array.from({ length: maxFotos }, (_, i) => `Foto ${i + 1}`),
   ]
 
   const larguras = [6, 16, 20, 14, 26, 20, 14, 12, 32, 12, 12, 26, 40, 40, 40,
+    14, 18, 50,
     ...Array(maxFotos).fill(FOTO_COL_W)]
 
   ws.columns = larguras.map((w) => ({ width: w }))
@@ -441,10 +495,11 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
     const cell = headerRow.getCell(i + 1)
     cell.value = h
     cell.font = { bold: true, size: 10, color: { argb: BRANCO } }
-    cell.fill = {
-      type: 'pattern', pattern: 'solid',
-      fgColor: { argb: i >= 15 ? LARANJA : AZUL },
-    }
+    // Colunas 16, 17, 18 = Vistorias (vermelho); >= 19 = Fotos (laranja); demais = azul
+    let bg = AZUL
+    if (i >= 15 && i < 18) bg = 'B91C1C'
+    else if (i >= 18) bg = LARANJA
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }
     cell.alignment = { horizontal: 'center', vertical: 'middle' }
     cell.border = { bottom: { style: 'thin', color: { argb: BRANCO } } }
   })
@@ -463,6 +518,20 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
     const linhaNum = LINHA_INICIO + idx
     const r = ws.getRow(linhaNum)
 
+    const vAdic = Array.isArray(o.vistorias) ? o.vistorias : []
+    const ultimaV = vAdic.length > 0 ? vAdic[vAdic.length - 1] : null
+    const ultimaVistoriaTxt = ultimaV
+      ? new Date(ultimaV.data).toLocaleDateString('pt-BR')
+      : '—'
+    const obsVistoriasTxt = vAdic.length > 0
+      ? vAdic.map((v, i) => {
+          const d = new Date(v.data).toLocaleDateString('pt-BR')
+          const ag = v.agente ? ` [${v.agente}]` : ''
+          const fc = Array.isArray(v.fotos) && v.fotos.length > 0 ? ` (📷 ${v.fotos.length})` : ''
+          return `#${i + 1} ${d}${ag}${fc}: ${v.observacao || '—'}`
+        }).join('\n')
+      : '—'
+
     const valores = [
       o.id,
       parseDateLocal(o.data_ocorrencia)?.toLocaleDateString('pt-BR') ?? '—',
@@ -479,6 +548,9 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
       o.situacao || '—',
       o.recomendacao || '—',
       o.conclusao || '—',
+      vAdic.length,
+      ultimaVistoriaTxt,
+      obsVistoriasTxt,
     ]
 
     valores.forEach((v, i) => { r.getCell(i + 1).value = v as ExcelCellValue })
@@ -492,6 +564,15 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
       if (isEven) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'f0f4ff' } }
     })
 
+    // Wrap text na coluna de observações das vistorias (col 18)
+    r.getCell(18).alignment = { vertical: 'top', wrapText: true }
+
+    // Destaque para qtd de vistorias se houver
+    if (vAdic.length > 0) {
+      r.getCell(16).font = { bold: true, size: 10, color: { argb: 'B91C1C' } }
+      r.getCell(16).alignment = { horizontal: 'center', vertical: 'middle' }
+    }
+
     // Cor do nível de risco (coluna 7)
     const nivelCell = r.getCell(7)
     if (o.nivel_risco === 'alto') nivelCell.font = { bold: true, size: 10, color: { argb: 'dc2626' } }
@@ -503,7 +584,7 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
       o.fotos!.forEach((fotoBase64, fotoIdx) => {
         const base64Data = fotoBase64.includes(',') ? fotoBase64.split(',')[1] : fotoBase64
         const ext = fotoBase64.startsWith('data:image/png') ? 'png' : 'jpeg'
-        const colIdx = 15 + fotoIdx  // 0-indexed: coluna 16 em diante
+        const colIdx = 18 + fotoIdx  // 0-indexed: coluna 19 em diante (após Vistorias)
 
         try {
           const imageId = wb.addImage({ base64: base64Data, extension: ext })

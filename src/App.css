@@ -1792,6 +1792,56 @@ input, select, textarea { font-family: inherit; }
 }
 .btn-editar:hover { background: #1a6bbf; }
 
+/* ── Botão Nova Vistoria (Interdição de Imóvel) ───────────────── */
+.btn-nova-vistoria {
+  flex: 1 1 100%;
+  background: #b91c1c; color: white;
+  border: none; padding: 0.75rem; border-radius: 8px;
+  font-size: 0.92rem; font-weight: 700;
+  transition: background 0.15s;
+  margin-bottom: 0.4rem;
+}
+.btn-nova-vistoria:hover { background: #991b1b; }
+
+/* ── Histórico de vistorias adicionais ───────────────────────── */
+.vistorias-historico {
+  margin-top: 1rem;
+  display: flex; flex-direction: column; gap: 0.6rem;
+}
+.vistoria-card {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-left: 4px solid #b91c1c;
+  border-radius: 8px;
+  padding: 0.8rem;
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+.vistoria-cabecalho {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 0.92rem; color: #7f1d1d;
+}
+.vistoria-data { font-size: 0.78rem; color: #6b7280; font-weight: 500; }
+.vistoria-agente { font-size: 0.85rem; color: #374151; font-weight: 500; }
+.vistoria-obs {
+  background: white; border: 1px solid #e5e7eb;
+  border-radius: 6px; padding: 0.55rem 0.7rem;
+  font-size: 0.9rem; color: #1f2937; white-space: pre-wrap;
+}
+
+/* ── Formulário inline de Nova Vistoria ──────────────────────── */
+.vistoria-nova-card {
+  margin-top: 1rem;
+  background: #fff7ed;
+  border: 2px dashed #fb923c;
+  border-radius: 10px;
+  padding: 0.9rem;
+  display: flex; flex-direction: column; gap: 0.7rem;
+}
+.vistoria-nova-acoes {
+  display: flex; gap: 0.5rem; margin-top: 0.3rem;
+}
+.vistoria-nova-acoes > button { flex: 1; }
+
 /* Edit icon button in modal header */
 .modal-header-acoes {
   display: flex; align-items: center; gap: 0.4rem;
