@@ -1,6 +1,7 @@
 import type { CellValue as ExcelCellValue, Workbook as ExcelWorkbook } from 'exceljs'
 import type { Ocorrencia } from './types'
 import { parseDateLocal } from './utils'
+import { gerarDashboardImagem } from './exportDashboardImage'
 
 export interface ChecklistExportData {
   id: number
@@ -210,241 +211,160 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
   URL.revokeObjectURL(url)
 }
 
-// ── Dashboard Analytics Sheet ─────────────────────────────────────────────────
-function adicionarAbaDashboard(wb: ExcelWorkbook, ocorrencias: Ocorrencia[]): void {
-  const ws = wb.addWorksheet('📊 Dashboard', { views: [{ showGridLines: false }] })
 
-  // Palette
-  const C_AZUL   = '1a4b8c'
-  const C_LARANJ  = 'c2410c'
-  const C_VERDE   = '14532d'
-  const C_VERM    = '991b1b'
-  const C_AMAR    = '78350f'
-  const C_ROXO    = '4c1d95'
-  const C_CINZA   = '374151'
-  const C_BRANCO  = 'FFFFFF'
-  const C_FUNDO   = 'f0f4ff'
+// ── Dashboard Analytics Sheet (visual, com gráficos) ──────────────────────────
+async function adicionarAbaDashboard(wb: ExcelWorkbook, ocorrencias: Ocorrencia[]): Promise<void> {
+  const ws = wb.addWorksheet('📊 Dashboard', {
+    views: [{ showGridLines: false }],
+    pageSetup: { orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 1 },
+  })
 
-  // Columns: A(spacer) | B(label) | C(count) | D(bar) | E(pct) | F(extra)
-  ws.columns = [
-    { width: 2 },
-    { width: 30 },
-    { width: 9 },
-    { width: 34 },
-    { width: 9 },
-    { width: 18 },
-  ]
-
-  let r = 1
-
-  // ── helpers ───────────────────────────────────────────────────────
-  const fmtPct = (n: number, tot: number) =>
-    tot === 0 ? '0%' : `${((n / tot) * 100).toFixed(1)}%`
-
-  const bar = (n: number, max: number, len = 30): string => {
-    if (max === 0) return '░'.repeat(len)
-    const f = Math.round((n / max) * len)
-    return '█'.repeat(f) + '░'.repeat(len - f)
+  // Renderiza o painel como imagem PNG (mesmo visual do app: KPIs, donuts, barras, sparkline)
+  let imagem: { base64: string; largura: number; altura: number } | null = null
+  try {
+    imagem = await gerarDashboardImagem(ocorrencias)
+  } catch {
+    imagem = null
   }
 
-  function headerPrincipal(text: string) {
-    ws.mergeCells(`A${r}:F${r}`)
+  // Configuração das colunas: 1 grid largo para acomodar a imagem (~1400px)
+  // Excel: 1 unidade de largura ≈ 7px. 1400px ÷ 7 ≈ 200 unidades. Vamos usar 14 colunas de ~14.5.
+  ws.columns = Array.from({ length: 14 }, () => ({ width: 14.5 }))
+
+  if (imagem && imagem.base64) {
+    try {
+      const imageId = wb.addImage({ base64: imagem.base64, extension: 'png' })
+      // Posiciona a imagem ocupando toda a largura útil. Tamanho proporcional ao SVG original (1400×1620).
+      const larguraDestinoPx = 1280
+      const proporcao = imagem.altura / imagem.largura
+      const alturaDestinoPx = Math.round(larguraDestinoPx * proporcao)
+      ws.addImage(imageId, {
+        tl: { col: 0.2, row: 0.2 },
+        ext: { width: larguraDestinoPx, height: alturaDestinoPx },
+      })
+
+      // Reserva linhas embaixo da imagem para que o conteúdo seguinte não sobreponha.
+      // 1 linha padrão ≈ 20px. Para alturaDestinoPx px → ~ alturaDestinoPx/20 linhas.
+      const linhasReservadas = Math.ceil(alturaDestinoPx / 20) + 2
+      for (let i = 1; i <= linhasReservadas; i++) ws.getRow(i).height = 20
+    } catch {
+      // Se falhar a imagem, segue só com o resumo textual abaixo
+    }
+  }
+
+  // ── Tabela compacta complementar (logo abaixo da imagem) ──────────────────
+  // Permite filtrar/ordenar dados que a imagem não permite.
+  const inicioTabela = imagem ? Math.ceil((Math.round(1280 * (imagem.altura / imagem.largura))) / 20) + 4 : 2
+  let r = inicioTabela
+
+  const total = ocorrencias.length
+  const fmtPct = (n: number, t: number) => (t === 0 ? '0%' : `${((n / t) * 100).toFixed(1)}%`)
+
+  function tituloSecao(texto: string, cor: string) {
+    ws.mergeCells(`A${r}:N${r}`)
     const c = ws.getCell(`A${r}`)
-    c.value = text
-    c.font = { bold: true, size: 14, color: { argb: C_BRANCO } }
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_AZUL } }
-    c.alignment = { horizontal: 'center', vertical: 'middle' }
-    ws.getRow(r).height = 40
-    r++
-  }
-
-  function subHeader(text: string) {
-    ws.mergeCells(`A${r}:F${r}`)
-    const c = ws.getCell(`A${r}`)
-    c.value = text
-    c.font = { italic: true, size: 9, color: { argb: '6b7280' } }
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'e8f0fe' } }
-    c.alignment = { horizontal: 'center', vertical: 'middle' }
-    ws.getRow(r).height = 18
-    r++
-  }
-
-  function kpiSection(kpis: { label: string; valor: string | number; sub: string; cor: string }[]) {
-    r++
-    // Title row of KPIs
-    kpis.forEach((k, i) => {
-      const cols = ['B', 'C', 'D', 'E', 'F']
-      const col = cols[i]
-      if (!col) return
-      const c = ws.getCell(`${col}${r}`)
-      c.value = k.label
-      c.font = { size: 8, bold: true, color: { argb: C_BRANCO } }
-      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: k.cor } }
-      c.alignment = { horizontal: 'center', vertical: 'middle' }
-    })
-    ws.getRow(r).height = 16
-    r++
-    // Value row
-    kpis.forEach((k, i) => {
-      const cols = ['B', 'C', 'D', 'E', 'F']
-      const col = cols[i]
-      if (!col) return
-      const c = ws.getCell(`${col}${r}`)
-      c.value = k.valor
-      c.font = { size: 22, bold: true, color: { argb: k.cor } }
-      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: k.cor + '12' } }
-      c.alignment = { horizontal: 'center', vertical: 'middle' }
-      c.border = {
-        bottom: { style: 'medium', color: { argb: k.cor } },
-        left:   { style: 'thin', color: { argb: k.cor + '55' } },
-        right:  { style: 'thin', color: { argb: k.cor + '55' } },
-      }
-    })
-    ws.getRow(r).height = 38
-    r++
-    // Sub row
-    kpis.forEach((k, i) => {
-      const cols = ['B', 'C', 'D', 'E', 'F']
-      const col = cols[i]
-      if (!col) return
-      const c = ws.getCell(`${col}${r}`)
-      c.value = k.sub
-      c.font = { size: 8, italic: true, color: { argb: '6b7280' } }
-      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: k.cor + '10' } }
-      c.alignment = { horizontal: 'center', vertical: 'middle' }
-    })
-    ws.getRow(r).height = 14
-    r++
-  }
-
-  function secaoHeader(titulo: string, cor: string) {
-    r++
-    ws.mergeCells(`A${r}:F${r}`)
-    const c = ws.getCell(`A${r}`)
-    c.value = titulo
-    c.font = { bold: true, size: 10, color: { argb: C_BRANCO } }
+    c.value = texto
+    c.font = { bold: true, size: 11, color: { argb: BRANCO } }
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor } }
     c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 }
     ws.getRow(r).height = 22
     r++
   }
 
-  function colHeader() {
-    const hRow = ws.getRow(r)
-    const titles = ['', 'Categoria', 'Qtd', 'Distribuição Visual', '%', 'Observação']
-    titles.forEach((t, i) => {
-      const c = hRow.getCell(i + 1)
-      c.value = t
-      c.font = { size: 8, bold: true, color: { argb: '6b7280' } }
+  function colunasTabela() {
+    const titulos = ['Categoria', 'Qtd', '%', 'Detalhe']
+    // Categoria: A:G (7 cols), Qtd: H, %: I, Detalhe: J:N (5 cols)
+    ws.mergeCells(`A${r}:G${r}`); ws.getCell(`A${r}`).value = titulos[0]
+    ws.getCell(`H${r}`).value = titulos[1]
+    ws.getCell(`I${r}`).value = titulos[2]
+    ws.mergeCells(`J${r}:N${r}`); ws.getCell(`J${r}`).value = titulos[3]
+    ;['A','H','I','J'].forEach((col) => {
+      const c = ws.getCell(`${col}${r}`)
+      c.font = { bold: true, size: 9, color: { argb: '6b7280' } }
       c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'f3f4f6' } }
-      c.alignment = { horizontal: i <= 1 ? 'left' : 'center', vertical: 'middle' }
+      c.alignment = { horizontal: col === 'A' || col === 'J' ? 'left' : 'center', vertical: 'middle', indent: 1 }
       c.border = { bottom: { style: 'thin', color: { argb: 'd1d5db' } } }
+    })
+    ws.getRow(r).height = 18
+    r++
+  }
+
+  function linhaTabela(label: string, qtd: number, totalDiv: number, detalhe: string, cor: string) {
+    const isEven = (r % 2 === 0)
+    const fundo = isEven ? 'f8fafc' : BRANCO
+    ws.mergeCells(`A${r}:G${r}`)
+    const a = ws.getCell(`A${r}`)
+    a.value = label
+    a.font = { size: 10, color: { argb: '1e293b' } }
+    a.alignment = { vertical: 'middle', indent: 1 }
+    a.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fundo } }
+
+    const h = ws.getCell(`H${r}`)
+    h.value = qtd
+    h.font = { size: 10, bold: true, color: { argb: cor.replace('#', '') } }
+    h.alignment = { horizontal: 'center', vertical: 'middle' }
+    h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fundo } }
+
+    const i = ws.getCell(`I${r}`)
+    i.value = fmtPct(qtd, totalDiv)
+    i.font = { size: 10, italic: true, color: { argb: '6b7280' } }
+    i.alignment = { horizontal: 'center', vertical: 'middle' }
+    i.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fundo } }
+
+    ws.mergeCells(`J${r}:N${r}`)
+    const j = ws.getCell(`J${r}`)
+    j.value = detalhe
+    j.font = { size: 9, color: { argb: '64748b' } }
+    j.alignment = { vertical: 'middle', indent: 1 }
+    j.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fundo } }
+
+    ;['A','H','I','J'].forEach(col => {
+      ws.getCell(`${col}${r}`).border = { bottom: { style: 'hair', color: { argb: 'e5e7eb' } } }
     })
     ws.getRow(r).height = 16
     r++
   }
 
-  function barRow(
-    rank: number | string,
-    label: string,
-    count: number,
-    total: number,
-    maxCount: number,
-    cor: string,
-    extra = '',
-  ) {
-    const isEven = (r % 2 === 0)
-    const bgFill = isEven ? C_FUNDO : C_BRANCO
-
-    const aCell = ws.getCell(`A${r}`)
-    aCell.value = typeof rank === 'number' ? rank : ''
-    aCell.font = { size: 8, color: { argb: 'a0aec0' } }
-    aCell.alignment = { horizontal: 'center', vertical: 'middle' }
-    aCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgFill } }
-
-    const bCell = ws.getCell(`B${r}`)
-    bCell.value = label
-    bCell.font = { size: 9, color: { argb: C_CINZA } }
-    bCell.alignment = { vertical: 'middle', indent: 1 }
-    bCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgFill } }
-
-    const cCell = ws.getCell(`C${r}`)
-    cCell.value = count
-    cCell.font = { size: 10, bold: true, color: { argb: cor } }
-    cCell.alignment = { horizontal: 'center', vertical: 'middle' }
-    cCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgFill } }
-
-    const dCell = ws.getCell(`D${r}`)
-    dCell.value = bar(count, maxCount, 28)
-    dCell.font = { size: 9, color: { argb: cor }, name: 'Consolas' }
-    dCell.alignment = { vertical: 'middle' }
-    dCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: cor + '18' } }
-
-    const eCell = ws.getCell(`E${r}`)
-    eCell.value = fmtPct(count, total)
-    eCell.font = { size: 9, italic: true, color: { argb: '6b7280' } }
-    eCell.alignment = { horizontal: 'center', vertical: 'middle' }
-    eCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgFill } }
-
-    const fCell = ws.getCell(`F${r}`)
-    fCell.value = extra
-    fCell.font = { size: 8, color: { argb: '9ca3af' } }
-    fCell.alignment = { horizontal: 'center', vertical: 'middle' }
-    fCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgFill } }
-
-    ;['A','B','C','D','E','F'].forEach(col => {
-      ws.getCell(`${col}${r}`).border = {
-        bottom: { style: 'hair', color: { argb: 'e5e7eb' } },
-      }
-    })
-
-    ws.getRow(r).height = 17
-    r++
-  }
-
-  function rodape(texto: string) {
-    ws.mergeCells(`A${r}:F${r}`)
-    const c = ws.getCell(`A${r}`)
-    c.value = texto
-    c.font = { size: 8, italic: true, color: { argb: '9ca3af' } }
-    c.alignment = { horizontal: 'center' }
-    ws.getRow(r).height = 14
-    r++
-  }
-
-  // ── Compute analytics ─────────────────────────────────────────────
-  const total = ocorrencias.length
-  const ativas = ocorrencias.filter(o => o.status_oc === 'ativo').length
-  const resolvidas = total - ativas
-  const altoR = ocorrencias.filter(o => o.nivel_risco === 'alto').length
-  const medioR = ocorrencias.filter(o => o.nivel_risco === 'medio').length
-  const baixoR = ocorrencias.filter(o => o.nivel_risco === 'baixo').length
-
-  const freq = <T>(arr: T[]): Map<T, number> => {
+  // — Por tipo
+  const freq = <T,>(arr: T[]): Map<T, number> => {
     const m = new Map<T, number>()
     arr.forEach(v => m.set(v, (m.get(v) ?? 0) + 1))
     return m
   }
-
-  const sorted = <T>(m: Map<T, number>, lim = 999): [T, number][] =>
-    [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, lim)
-
-  // Tipo
   const tipoMap = freq(ocorrencias.map(o => o.tipo || 'Não informado'))
-  // Natureza
-  const naturMap = freq(ocorrencias.map(o => o.natureza || 'Não informado'))
-  // Bairro – extrai parte significativa do endereço
-  const bairroMap = freq(ocorrencias.map(o => {
-    const end = (o.endereco || '').trim()
-    if (!end) return 'Não informado'
-    const partes = end.split(',').map(p => p.trim()).filter(Boolean)
-    if (partes.length >= 3) return partes[partes.length - 2].slice(0, 28)
-    if (partes.length === 2) return partes[1].slice(0, 28)
-    return partes[0].slice(0, 28)
-  }))
-  // Agente registrador
+  const sortedTipo = [...tipoMap.entries()].sort((a, b) => b[1] - a[1])
+
+  const statusPorTipo = new Map<string, { ativo: number; resolvido: number }>()
+  ocorrencias.forEach(o => {
+    const t = o.tipo || 'Não informado'
+    const cur = statusPorTipo.get(t) ?? { ativo: 0, resolvido: 0 }
+    if (o.status_oc === 'ativo') cur.ativo++; else cur.resolvido++
+    statusPorTipo.set(t, cur)
+  })
+
+  tituloSecao('🏷️  Tipos de Ocorrência', AZUL)
+  colunasTabela()
+  sortedTipo.forEach(([tipo, cnt]) => {
+    const { ativo: a, resolvido: res } = statusPorTipo.get(tipo) ?? { ativo: 0, resolvido: 0 }
+    linhaTabela(tipo, cnt, total, `${res} resolvidas · ${a} em aberto`, AZUL)
+  })
+
+  r++
+
+  // — Por agente registrador
   const agenteMap = freq(ocorrencias.map(o => o.responsavel_registro || 'Não informado'))
-  // Mensal
+  const sortedAgente = [...agenteMap.entries()].sort((a, b) => b[1] - a[1])
+
+  tituloSecao('👤  Ocorrências por Agente Registrador', LARANJA)
+  colunasTabela()
+  sortedAgente.forEach(([ag, cnt]) => {
+    const resAg = ocorrencias.filter(o => (o.responsavel_registro || 'Não informado') === ag && o.status_oc === 'resolvido').length
+    linhaTabela(ag, cnt, total, `${fmtPct(resAg, cnt)} resolvidas`, LARANJA)
+  })
+
+  r++
+
+  // — Evolução mensal (últimos 12 meses)
   const mesMap = new Map<string, number>()
   const MESES_PT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
   ocorrencias.forEach(o => {
@@ -456,170 +376,30 @@ function adicionarAbaDashboard(wb: ExcelWorkbook, ocorrencias: Ocorrencia[]): vo
     const key = `${y}-${m.padStart(2,'0')}`
     mesMap.set(key, (mesMap.get(key) ?? 0) + 1)
   })
-  const sortedMes = [...mesMap.entries()].sort((a,b) => a[0].localeCompare(b[0])).slice(-18)
+  const sortedMes = [...mesMap.entries()].sort((a,b) => a[0].localeCompare(b[0])).slice(-12)
+  const totalMes = sortedMes.reduce((s, [, c]) => s + c, 0) || 1
 
-  // Risco ao longo do tempo: top mês com mais alto risco
-  const altoPorMes = new Map<string, number>()
-  ocorrencias.filter(o => o.nivel_risco === 'alto').forEach(o => {
-    const raw = o.data_ocorrencia || o.created_at
-    if (!raw) return
-    const [y, m] = raw.split(/[-T]/)
-    const key = `${y}-${m.padStart(2,'0')}`
-    altoPorMes.set(key, (altoPorMes.get(key) ?? 0) + 1)
-  })
-
-  // Status por tipo
-  const statusPorTipo = new Map<string, { ativo: number; resolvido: number }>()
-  ocorrencias.forEach(o => {
-    const t = o.tipo || 'Não informado'
-    const cur = statusPorTipo.get(t) ?? { ativo: 0, resolvido: 0 }
-    if (o.status_oc === 'ativo') cur.ativo++; else cur.resolvido++
-    statusPorTipo.set(t, cur)
-  })
-
-  // ── Build sheet ────────────────────────────────────────────────────
-  headerPrincipal('📊  DEFESA CIVIL OURO BRANCO — PAINEL ANALÍTICO DE OCORRÊNCIAS')
-  subHeader(`Gerado em ${new Date().toLocaleString('pt-BR')} · Total de ${total} ocorrências analisadas`)
-
-  // ── KPIs ───────────────────────────────────────────────────────────
-  kpiSection([
-    { label: '📋 TOTAL', valor: total, sub: 'ocorrências registradas', cor: C_AZUL },
-    { label: '🔴 ATIVAS', valor: ativas, sub: `${fmtPct(ativas, total)} em aberto`, cor: C_VERM },
-    { label: '✅ RESOLVIDAS', valor: resolvidas, sub: `${fmtPct(resolvidas, total)} concluídas`, cor: C_VERDE },
-    { label: '⚠️ ALTO RISCO', valor: altoR, sub: `${fmtPct(altoR, total)} críticas`, cor: C_LARANJ },
-    { label: '📡 MÉDIO RISCO', valor: medioR, sub: `${fmtPct(medioR, total)} atenção`, cor: C_AMAR },
-  ])
-
-  // ── Gráfico 1: Tipos de Ocorrência ─────────────────────────────────
-  secaoHeader('🏷️   TIPOS DE OCORRÊNCIA', C_AZUL)
-  colHeader()
-  const sortedTipo = sorted(tipoMap)
-  const maxTipo = sortedTipo[0]?.[1] ?? 1
-  const CORES_TIPO: Record<string, string> = {
-    'Diligência': '1d4ed8',
-    'Vistoria de Engenharia': '7c3aed',
-    'Vistoria Ambiental': '059669',
-    'Apoio': 'ea580c',
-    'Outro': '64748b',
-  }
-  sortedTipo.forEach(([tipo, cnt], i) => {
-    const cor = CORES_TIPO[tipo] ?? C_CINZA
-    const { ativo: a, resolvido: res } = statusPorTipo.get(tipo) ?? { ativo: 0, resolvido: 0 }
-    barRow(i + 1, tipo, cnt, total, maxTipo, cor, `✅${res} 🔴${a}`)
-  })
-  rodape('Distribuição por tipo · cores indicam categoria')
-
-  // ── Gráfico 2: Natureza / Causa ─────────────────────────────────────
-  secaoHeader('🌐   NATUREZA / CAUSA DAS OCORRÊNCIAS  (Top 14)', C_ROXO)
-  colHeader()
-  const sortedNatur = sorted(naturMap, 14)
-  const maxNatur = sortedNatur[0]?.[1] ?? 1
-  const CORES_NATUR: Record<string, string> = {
-    'Árvore Gerando Risco (Caída ou Não)': '15803d',
-    'Rompimento de Cabo de Energia': 'ca8a04',
-    'Rompimento de Cabo de Telefonia': '7c3aed',
-    'Queda de Poste (Total ou Parcial)': '64748b',
-    'Óleo na Pista': '92400e',
-    'Incêndio em Área Urbana': 'dc2626',
-    'Incêndio em Área Rural': 'ea580c',
-    'Alagamento': '2563eb',
-    'Inundação': '0284c7',
-    'Queda de Estrutura': '9f1239',
-    'Deslizamento de Massa/Rocha': '92400e',
-    'Processo Erosivo': 'b45309',
-    'Apreensão e Captura de Animal': '7c3aed',
-    'Abelhas/Marimbondo': 'ca8a04',
-    'Vistoria Residencial': '0f766e',
-    'Talude em Risco': '854d0e',
-  }
-  sortedNatur.forEach(([nat, cnt], i) => {
-    const cor = CORES_NATUR[nat] ?? C_CINZA
-    barRow(i + 1, nat, cnt, total, maxNatur, cor)
-  })
-  rodape('Ranking de causas mais frequentes')
-
-  // ── Gráfico 3: Locais / Bairros ────────────────────────────────────
-  secaoHeader('📍   LOCAIS COM MAIS OCORRÊNCIAS  (Top 12)', C_LARANJ)
-  colHeader()
-  const sortedBairro = sorted(bairroMap, 12)
-  const maxBairro = sortedBairro[0]?.[1] ?? 1
-  const PALETTE_LOC = ['e63946','457b9d','2a9d8f','e9c46a','f4a261','264653','6d2b3d','2d6a4f','f3722c','577590','4d908e','277da1']
-  sortedBairro.forEach(([bairro, cnt], i) => {
-    barRow(i + 1, bairro, cnt, total, maxBairro, PALETTE_LOC[i % PALETTE_LOC.length])
-  })
-  rodape('Extrato do endereço · localidades com maior concentração de ocorrências')
-
-  // ── Gráfico 4: Evolução Mensal ──────────────────────────────────────
-  secaoHeader('📅   EVOLUÇÃO MENSAL DE OCORRÊNCIAS', '0f4c75')
-  colHeader()
-  const maxMes = Math.max(...sortedMes.map(([, c]) => c), 1)
-  const totalMesGeral = sortedMes.reduce((s, [, c]) => s + c, 0)
+  tituloSecao('📅  Evolução Mensal (últimos 12 meses)', '0f4c75')
+  colunasTabela()
   sortedMes.forEach(([key, cnt]) => {
     const [y, m] = key.split('-')
     const mi = parseInt(m, 10) - 1
     const label = `${MESES_PT[mi] ?? m}/${y}`
-    const altoMes = altoPorMes.get(key) ?? 0
-    const risco = altoMes > 0 ? `⚠️ ${altoMes} críticas` : '—'
-    const gradPct = cnt / maxMes
-    const cor = gradPct > 0.75 ? C_VERM : gradPct > 0.5 ? C_LARANJ : gradPct > 0.25 ? C_AMAR : '16a34a'
-    barRow('', label, cnt, totalMesGeral, maxMes, cor, risco)
-  })
-  rodape('Série histórica · cor varia por volume: verde→amarelo→laranja→vermelho')
-
-  // ── Gráfico 5: Nível de Risco ──────────────────────────────────────
-  secaoHeader('🎯   DISTRIBUIÇÃO POR NÍVEL DE RISCO', C_VERM)
-  colHeader()
-  const riscos: [string, number, string][] = [
-    ['🔴 Alto Risco — Emergência', altoR, C_VERM],
-    ['🟡 Médio Risco — Atenção', medioR, C_AMAR],
-    ['🟢 Baixo Risco — Normal', baixoR, C_VERDE],
-  ]
-  riscos.forEach(([label, cnt, cor]) => {
-    barRow('', label, cnt, total, altoR > medioR ? altoR : medioR > baixoR ? medioR : baixoR, cor,
-      fmtPct(cnt, total))
+    linhaTabela(label, cnt, totalMes, '', '0f4c75')
   })
 
-  // Indice de resolução por risco
+  // Rodapé
   r++
-  ;['Alto','Médio','Baixo'].forEach((nivel, ni) => {
-    const nKey = ['alto','medio','baixo'][ni] as 'alto' | 'medio' | 'baixo'
-    const sub = ocorrencias.filter(o => o.nivel_risco === nKey)
-    const resS = sub.filter(o => o.status_oc === 'resolvido').length
-    const corHex = [C_VERM, C_AMAR, C_VERDE][ni]
-    ws.mergeCells(`B${r}:F${r}`)
-    const c = ws.getCell(`B${r}`)
-    c.value = `  ${['🔴','🟡','🟢'][ni]}  ${nivel} Risco: ${sub.length} ocorrências · ${resS} resolvidas (${fmtPct(resS, sub.length)}) · ${sub.length - resS} em aberto`
-    c.font = { size: 9, color: { argb: corHex }, bold: ni === 0 }
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: corHex + '14' } }
-    c.alignment = { vertical: 'middle', indent: 1 }
-    c.border = { bottom: { style: 'hair', color: { argb: 'e5e7eb' } } }
-    ws.getRow(r).height = 16
-    r++
-  })
-  rodape('Percentual de resolução por nível de criticidade')
-
-  // ── Gráfico 6: Por Agente Registrador ─────────────────────────────
-  secaoHeader('👤   OCORRÊNCIAS POR AGENTE REGISTRADOR', C_VERDE)
-  colHeader()
-  const sortedAgente = sorted(agenteMap)
-  const maxAgente = sortedAgente[0]?.[1] ?? 1
-  const CORES_AG = ['1d4ed8','7c3aed','059669','ea580c','0891b2','db2777','b45309','475569','dc2626','ca8a04']
-  sortedAgente.forEach(([ag, cnt], i) => {
-    const resAg = ocorrencias.filter(o => (o.responsavel_registro || 'Não informado') === ag && o.status_oc === 'resolvido').length
-    barRow(i + 1, ag, cnt, total, maxAgente, CORES_AG[i % CORES_AG.length],
-      `${fmtPct(resAg, cnt)} resolvidas`)
-  })
-  rodape('Quem mais registrou ocorrências · percentual de resolução por agente')
-
-  // ── Rodapé final ────────────────────────────────────────────────────
-  r++
-  ws.mergeCells(`A${r}:F${r}`)
+  ws.mergeCells(`A${r}:N${r}`)
   const footer = ws.getCell(`A${r}`)
-  footer.value = `🛡️ Defesa Civil de Ouro Branco — MG  ·  Relatório gerado automaticamente  ·  ${new Date().toLocaleDateString('pt-BR')}`
-  footer.font = { size: 8, italic: true, color: { argb: 'a0aec0' } }
-  footer.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: C_AZUL } }
+  footer.value = `🛡️ Defesa Civil de Ouro Branco — MG  ·  Relatório automático  ·  ${new Date().toLocaleDateString('pt-BR')}`
+  footer.font = { size: 9, italic: true, color: { argb: 'BRANCO' === BRANCO ? 'cbd5e1' : 'cbd5e1' } }
+  footer.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL } }
   footer.alignment = { horizontal: 'center', vertical: 'middle' }
   ws.getRow(r).height = 22
+
+  // Imprime cabeçalho da imagem na primeira linha (caso a imagem falhe, fica vazio)
+  ws.getRow(1).height = imagem ? 20 : 22
 }
 
 // ── Export all occurrences (tabular) with embedded photo thumbnails ───────────
@@ -739,7 +519,7 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
   })
 
   // ── Aba de Dashboard Analítico ────────────────────────────────────
-  adicionarAbaDashboard(wb, ocorrencias)
+  await adicionarAbaDashboard(wb, ocorrencias)
 
   // Ativa a aba de dados como padrão ao abrir
   ws.state = 'visible'
