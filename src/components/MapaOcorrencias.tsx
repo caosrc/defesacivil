@@ -218,15 +218,28 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   // Mantém ref sempre atualizada com o nome atual
   useEffect(() => { nomeLocalRef.current = nomeLocal }, [nomeLocal])
 
-  // ── Clima INMET ────────────────────────────────────────────────
+  // ── Clima (Open-Meteo, dados assimilados de estações INMET) ──────
   const buscarClima = useCallback(async () => {
     setClimaCarregando(true)
     try {
-      const resp = await fetch('/api/tempo')
-      if (resp.ok) {
-        const dados = await resp.json()
-        if (!dados.erro) setClima(dados)
-      }
+      const lat = OURO_BRANCO[0]
+      const lon = OURO_BRANCO[1]
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,precipitation&timezone=America%2FSao_Paulo&wind_speed_unit=ms`
+      const resp = await fetch(url)
+      if (!resp.ok) return
+      const json = await resp.json()
+      const c = json?.current
+      if (!c) return
+      const ventoVel = c.wind_speed_10m != null ? parseFloat(c.wind_speed_10m) : null
+      setClima({
+        temperatura: c.temperature_2m != null ? parseFloat(c.temperature_2m) : null,
+        umidade: c.relative_humidity_2m != null ? parseFloat(c.relative_humidity_2m) : null,
+        ventoKmh: ventoVel != null ? Math.round(ventoVel * 3.6) : null,
+        ventoDir: c.wind_direction_10m != null ? parseFloat(c.wind_direction_10m) : null,
+        chuva: c.precipitation != null ? parseFloat(c.precipitation) : null,
+        horario: c.time || null,
+        fonte: 'INMET',
+      })
     } catch { /* silencioso */ } finally {
       setClimaCarregando(false)
     }
@@ -488,7 +501,8 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         {camadaMapa === 'padrao' ? (
           <TileLayer
             key="mapa-padrao"
-            url="/api/tiles/{z}/{x}/{y}"
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            subdomains={['a', 'b', 'c']}
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             maxZoom={19}
             keepBuffer={4}
