@@ -270,22 +270,23 @@
 }
 
 .uni-secao-label {
-  font-size: 0.5rem;
+  font-size: 0.4rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   color: #475569;
-  line-height: 1.1;
+  line-height: 1.05;
 }
 
 .uni-secao-nome {
-  font-size: 0.6rem;
+  font-size: 0.48rem;
   font-weight: 600;
-  line-height: 1.15;
+  line-height: 1.1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  letter-spacing: -0.02em;
 }
 
 @media (max-width: 480px) {
@@ -293,8 +294,8 @@
   .escala-bloco-unificado .uni-vazio {
     min-height: 78px;
   }
-  .uni-secao-nome { font-size: 0.55rem; }
-  .uni-secao-label { font-size: 0.46rem; }
+  .uni-secao-nome { font-size: 0.44rem; }
+  .uni-secao-label { font-size: 0.38rem; }
 }
 
 .escala-cal-dots {

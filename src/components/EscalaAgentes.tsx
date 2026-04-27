@@ -1090,7 +1090,7 @@ function PainelFerias({ ferias, onChange }: PainelFeriasProps) {
 
   return (
     <div className="escala-ferias-painel">
-      <div className="escala-ferias-titulo"><span>🌴</span> Férias / Folga prolongada</div>
+      <div className="escala-ferias-titulo"><span>🌴</span> Férias</div>
       <div className="escala-ferias-form">
         <select className="escala-ferias-select" value={agente} onChange={e => { setAgente(e.target.value); setErro('') }}>
           {AGENTES_ESCALA.map(ag => <option key={ag.nome} value={ag.nome}>{ag.nome}</option>)}

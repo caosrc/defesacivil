@@ -14,7 +14,7 @@
  *  - LIMPAR_CACHE_MAPA               → apaga todos os tiles cacheados
  */
 
-const VERSION = 'v3-2026-04'
+const VERSION = 'v4-2026-04'
 const APP_CACHE = `defesacivil-app-${VERSION}`
 const TILES_CACHE = 'defesacivil-tiles-osm'
 const ASSETS_CACHE = `defesacivil-assets-${VERSION}`

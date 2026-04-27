@@ -4,7 +4,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { Ocorrencia } from '../types'
-import { NATUREZA_ICONE, NATUREZA_COR } from '../types'
+import { NATUREZA_ICONE, NATUREZA_COR, NATUREZAS } from '../types'
 import { baixarMapaOffline, obterInfoCacheMapa, limparCacheMapa, type ProgressoMapa } from '../offline'
 import { mensagemErroGps } from '../utils'
 import { supabase } from '../supabaseClient'
@@ -114,6 +114,18 @@ function criarIconeAgente(nome: string, cor = '#1a4b8c') {
 // Cores para outros dispositivos (índice circular)
 const CORES_EQUIPES = ['#dc2626', '#d97706', '#7c3aed', '#0891b2', '#059669', '#db2777']
 
+// Distância em km entre dois pontos (haversine)
+function distanciaKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(a))
+}
+
 function corParaDispositivo(_id: string, idx: number) {
   return CORES_EQUIPES[idx % CORES_EQUIPES.length]
 }
@@ -136,6 +148,44 @@ function GpsCenter({ position, seguir }: { position: [number, number]; seguir: b
     }
   }, [position, seguir, map])
   return null
+}
+
+// Centraliza no destino quando ele muda — usado pela busca de endereço.
+function FocoDestino({ destino, rota }: {
+  destino: { lat: number; lng: number } | null
+  rota: [number, number][]
+}) {
+  const map = useMap()
+  useEffect(() => {
+    if (!destino) return
+    if (rota.length >= 2) {
+      // Ajusta o zoom para mostrar o trajeto inteiro
+      const bounds = L.latLngBounds(rota.map(p => L.latLng(p[0], p[1])))
+      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 17 })
+    } else {
+      map.flyTo([destino.lat, destino.lng], Math.max(map.getZoom(), 16), { duration: 1 })
+    }
+  }, [destino, rota, map])
+  return null
+}
+
+// Ícone do pino de destino (estilo Google Maps)
+function criarIconeDestino() {
+  return L.divIcon({
+    className: '',
+    html: `<div style="position:relative;">
+      <div style="
+        background:#dc2626;width:42px;height:42px;
+        border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+        border:3px solid white;
+        box-shadow:0 0 0 3px #dc262655, 0 4px 12px rgba(0,0,0,0.5);
+        display:flex;align-items:center;justify-content:center;
+      "><span style="transform:rotate(45deg);font-size:22px;line-height:1;">📍</span></div>
+    </div>`,
+    iconSize: [42, 48],
+    iconAnchor: [21, 48],
+    popupAnchor: [0, -48],
+  })
 }
 
 // ── Tipos ───────────────────────────────────────────────────────
@@ -180,6 +230,17 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const [legendaAberta, setLegendaAberta] = useState(false)
   const [camadaMapa, setCamadaMapa] = useState<CamadaMapa>('padrao')
   const [mostrarOcorrencias, setMostrarOcorrencias] = useState(false)
+  const [submenuFiltroAberto, setSubmenuFiltroAberto] = useState(false)
+  const [naturezasOcultas, setNaturezasOcultas] = useState<Set<string>>(new Set())
+
+  // Busca de endereço + rota (estilo Google Maps)
+  const [enderecoBusca, setEnderecoBusca] = useState('')
+  const [resultadosBusca, setResultadosBusca] = useState<Array<{ display: string; lat: number; lng: number }>>([])
+  const [buscandoEndereco, setBuscandoEndereco] = useState(false)
+  const [destino, setDestino] = useState<{ lat: number; lng: number; nome: string } | null>(null)
+  const [rota, setRota] = useState<[number, number][]>([])
+  const [rotaInfo, setRotaInfo] = useState<{ km: number; min: number } | null>(null)
+  const [calculandoRota, setCalculandoRota] = useState(false)
 
   // GPS local
   const [statusGps, setStatusGps] = useState<StatusGps>('inativo')
@@ -494,9 +555,119 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     setProgressoMapa(null)
   }
 
+  // ── Busca de endereço (Nominatim) + Rota (OSRM) ──────────────
+  const buscarEnderecoNominatim = useCallback(async () => {
+    const q = enderecoBusca.trim()
+    if (q.length < 2) { setResultadosBusca([]); return }
+    if (!navigator.onLine) {
+      setResultadosBusca([])
+      return
+    }
+    setBuscandoEndereco(true)
+    try {
+      // Prioriza Ouro Branco / MG
+      const queryFinal = /ouro branco|mg|minas/i.test(q) ? q : `${q}, Ouro Branco, MG, Brasil`
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryFinal)}&format=json&limit=6&addressdetails=0&countrycodes=br`
+      const resp = await fetch(url, {
+        headers: { 'Accept-Language': 'pt-BR' },
+      })
+      const data = await resp.json()
+      const arr = Array.isArray(data) ? data : []
+      setResultadosBusca(
+        arr.map((d: any) => ({
+          display: d.display_name as string,
+          lat: parseFloat(d.lat),
+          lng: parseFloat(d.lon),
+        }))
+      )
+    } catch {
+      setResultadosBusca([])
+    } finally {
+      setBuscandoEndereco(false)
+    }
+  }, [enderecoBusca])
+
+  // Calcula rota do ponto atual (GPS ou centro de Ouro Branco) até o destino
+  const calcularRota = useCallback(async (origem: [number, number], dest: { lat: number; lng: number }) => {
+    if (!navigator.onLine) {
+      // Sem internet: desenha linha reta como fallback
+      setRota([origem, [dest.lat, dest.lng]])
+      const km = distanciaKm(origem[0], origem[1], dest.lat, dest.lng)
+      setRotaInfo({ km, min: Math.round((km / 30) * 60) })
+      return
+    }
+    setCalculandoRota(true)
+    try {
+      // OSRM público — driving = carro
+      const url = `https://router.project-osrm.org/route/v1/driving/${origem[1]},${origem[0]};${dest.lng},${dest.lat}?overview=full&geometries=geojson`
+      const resp = await fetch(url)
+      const json = await resp.json()
+      const r = json?.routes?.[0]
+      if (r) {
+        const coords: [number, number][] = (r.geometry.coordinates as [number, number][])
+          .map(([lng, lat]) => [lat, lng])
+        setRota(coords)
+        setRotaInfo({
+          km: r.distance / 1000,
+          min: Math.round(r.duration / 60),
+        })
+      } else {
+        // Fallback linha reta
+        setRota([origem, [dest.lat, dest.lng]])
+        const km = distanciaKm(origem[0], origem[1], dest.lat, dest.lng)
+        setRotaInfo({ km, min: Math.round((km / 30) * 60) })
+      }
+    } catch {
+      setRota([origem, [dest.lat, dest.lng]])
+      const km = distanciaKm(origem[0], origem[1], dest.lat, dest.lng)
+      setRotaInfo({ km, min: Math.round((km / 30) * 60) })
+    } finally {
+      setCalculandoRota(false)
+    }
+  }, [])
+
+  function escolherDestino(r: { display: string; lat: number; lng: number }) {
+    const dest = { lat: r.lat, lng: r.lng, nome: r.display }
+    setDestino(dest)
+    setResultadosBusca([])
+    setEnderecoBusca(r.display.split(',')[0])
+    const origem: [number, number] = posicaoAtual ?? OURO_BRANCO
+    calcularRota(origem, dest)
+  }
+
+  function limparBuscaERota() {
+    setDestino(null)
+    setRota([])
+    setRotaInfo(null)
+    setEnderecoBusca('')
+    setResultadosBusca([])
+  }
+
+  // Recalcula a rota se a posição GPS mudar enquanto há um destino ativo
+  useEffect(() => {
+    if (!destino) return
+    if (!posicaoAtual) return
+    // Recalcula a cada movimento significativo (>50m) para evitar flood
+    const ultimoPonto = rota[0]
+    if (ultimoPonto) {
+      const d = distanciaKm(ultimoPonto[0], ultimoPonto[1], posicaoAtual[0], posicaoAtual[1]) * 1000
+      if (d < 50) return
+    }
+    calcularRota(posicaoAtual, destino)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posicaoAtual?.[0], posicaoAtual?.[1], destino])
+
   // ── Misc ──────────────────────────────────────────────────────
   function selecionarOc(o: Ocorrencia) {
     setSelecionada((prev) => (prev?.id === o.id ? null : o))
+  }
+
+  function alternarNatureza(n: string) {
+    setNaturezasOcultas(prev => {
+      const novo = new Set(prev)
+      if (novo.has(n)) novo.delete(n); else novo.add(n)
+      return novo
+    })
   }
 
   function direcaoVento(graus: number | null): string {
@@ -627,8 +798,35 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
           )
         })}
 
+        {/* Rota até o destino buscado */}
+        {rota.length >= 2 && (
+          <Polyline
+            positions={rota}
+            pathOptions={{ color: '#2563eb', weight: 6, opacity: 0.85 }}
+          />
+        )}
+
+        {/* Pino do destino buscado */}
+        {destino && (
+          <Marker position={[destino.lat, destino.lng]} icon={criarIconeDestino()} zIndexOffset={2000}>
+            <Popup>
+              <div style={{ minWidth: 180, fontFamily: 'inherit' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 4 }}>📍 Destino</div>
+                <div style={{ fontSize: '0.78rem', color: '#374151', marginBottom: 6 }}>{destino.nome}</div>
+                {rotaInfo && (
+                  <div style={{ fontSize: '0.78rem', color: '#1e40af', fontWeight: 700 }}>
+                    🚗 {rotaInfo.km.toFixed(1)} km · ⏱ {rotaInfo.min} min
+                  </div>
+                )}
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
+        {destino && <FocoDestino destino={destino} rota={rota} />}
+
         {/* Ocorrências — todas, com ou sem GPS */}
-        {mostrarOcorrencias && ocorrencias.map((o) => {
+        {mostrarOcorrencias && ocorrencias.filter(o => !naturezasOcultas.has(o.natureza)).map((o) => {
           const temGps = !!(o.lat && o.lng)
           const pos: [number, number] = temGps ? [o.lat!, o.lng!] : coordsSemGps(o.id)
           return (
@@ -707,12 +905,132 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         >
           🛰️ Satélite
         </button>
-        <button
-          className={`mapa-camada-btn ${mostrarOcorrencias ? 'ativo' : ''}`}
-          onClick={() => { setMostrarOcorrencias((v) => !v); setSelecionada(null) }}
-        >
-          📋 Ocorrências
-        </button>
+        <div className="mapa-ocorr-wrap">
+          <button
+            className={`mapa-camada-btn ${mostrarOcorrencias ? 'ativo' : ''}`}
+            onClick={() => {
+              if (!mostrarOcorrencias) setMostrarOcorrencias(true)
+              setSubmenuFiltroAberto(v => !v)
+              setSelecionada(null)
+            }}
+          >
+            📋 Ocorrências {mostrarOcorrencias && `▾`}
+          </button>
+
+          {submenuFiltroAberto && (
+            <div className="mapa-ocorr-submenu" onClick={(e) => e.stopPropagation()}>
+              <div className="mapa-ocorr-submenu-header">
+                <span>Filtrar tipos</span>
+                <button onClick={() => setSubmenuFiltroAberto(false)} aria-label="Fechar">✕</button>
+              </div>
+
+              <div className="mapa-ocorr-submenu-acoes">
+                <button onClick={() => { setMostrarOcorrencias(true); setNaturezasOcultas(new Set()) }}>
+                  ✓ Marcar todas
+                </button>
+                <button onClick={() => setNaturezasOcultas(new Set(NATUREZAS))}>
+                  ✕ Desmarcar todas
+                </button>
+                <button
+                  className={mostrarOcorrencias ? 'mapa-ocorr-submenu-toggle on' : 'mapa-ocorr-submenu-toggle off'}
+                  onClick={() => setMostrarOcorrencias(v => !v)}
+                >
+                  {mostrarOcorrencias ? '👁 Ocultar todas' : '👁‍🗨 Mostrar no mapa'}
+                </button>
+              </div>
+
+              <div className="mapa-ocorr-submenu-lista">
+                {NATUREZAS.map(n => {
+                  const visivel = !naturezasOcultas.has(n)
+                  const total = ocorrencias.filter(o => o.natureza === n).length
+                  return (
+                    <label key={n} className={`mapa-ocorr-submenu-item ${visivel ? '' : 'desativado'}`}>
+                      <input
+                        type="checkbox"
+                        checked={visivel}
+                        onChange={() => alternarNatureza(n)}
+                      />
+                      <span
+                        className="mapa-ocorr-submenu-cor"
+                        style={{ background: NATUREZA_COR[n] ?? '#1a4b8c' }}
+                      >
+                        {NATUREZA_ICONE[n] ?? '📋'}
+                      </span>
+                      <span className="mapa-ocorr-submenu-nome">{n}</span>
+                      <span className="mapa-ocorr-submenu-qtd">{total}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Barra de busca de endereço (estilo Google Maps) */}
+      <div className="mapa-busca">
+        <div className="mapa-busca-input-wrap">
+          <span className="mapa-busca-icone">🔍</span>
+          <input
+            type="text"
+            className="mapa-busca-input"
+            placeholder="Buscar endereço — mostra a rota até o local"
+            value={enderecoBusca}
+            onChange={(e) => setEnderecoBusca(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') buscarEnderecoNominatim() }}
+          />
+          {(enderecoBusca || destino) && (
+            <button
+              className="mapa-busca-limpar"
+              onClick={limparBuscaERota}
+              title="Limpar busca e rota"
+            >✕</button>
+          )}
+          <button
+            className="mapa-busca-btn"
+            onClick={buscarEnderecoNominatim}
+            disabled={buscandoEndereco || !navigator.onLine}
+          >
+            {buscandoEndereco ? '⏳' : 'Buscar'}
+          </button>
+        </div>
+
+        {!navigator.onLine && (
+          <div className="mapa-busca-aviso">📵 A busca de endereço precisa de internet.</div>
+        )}
+
+        {resultadosBusca.length > 0 && (
+          <div className="mapa-busca-resultados">
+            {resultadosBusca.map((r, i) => (
+              <button
+                key={i}
+                className="mapa-busca-resultado"
+                onClick={() => escolherDestino(r)}
+              >
+                <span className="mapa-busca-resultado-icone">📍</span>
+                <span className="mapa-busca-resultado-texto">{r.display}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {destino && rotaInfo && (
+          <div className="mapa-rota-info">
+            {calculandoRota ? (
+              <span>⏳ Calculando rota…</span>
+            ) : (
+              <>
+                <span className="mapa-rota-info-titulo">🚗 Rota até o destino</span>
+                <span className="mapa-rota-info-stats">
+                  {rotaInfo.km.toFixed(1)} km · {rotaInfo.min} min
+                </span>
+                <span className="mapa-rota-info-origem">
+                  {posicaoAtual ? 'Saindo da sua posição GPS' : 'Saindo do centro de Ouro Branco — ative o GPS para rota real'}
+                </span>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Widget Clima INMET */}
