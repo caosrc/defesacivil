@@ -909,9 +909,10 @@ interface BancoHorasMoisesProps {
   horasExtrasSimples: Record<string, Record<string, number>>
   ajustesBanco: Record<string, number>
   onAjusteChange: (agente: string, ajuste: number) => void
+  podeEditar: boolean
 }
 
-function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, onAjusteChange }: BancoHorasMoisesProps) {
+function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, onAjusteChange, podeEditar }: BancoHorasMoisesProps) {
   const hoje = hojeStr()
   const [editando, setEditando] = useState<string | null>(null)
   const [valorTemp, setValorTemp] = useState<string>('')
@@ -979,22 +980,36 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
               {ag.temFolga && (
                 <span className="bh-moises-badge-folga" title="De folga hoje">🏠</span>
               )}
-              <button
-                type="button"
-                className="bh-moises-horas-info bh-moises-horas-edit"
-                onClick={() => abrirEdicao(ag)}
-                title="Clique para ajustar as horas deste agente"
-              >
-                <span className="bh-moises-h">
-                  {ag.total % 1 === 0 ? ag.total : ag.total.toFixed(1)}h
-                  {ag.ajuste !== 0 && (
-                    <span className="bh-moises-ajuste-badge" title={`Ajuste manual: ${ag.ajuste > 0 ? '+' : ''}${ag.ajuste}h`}>
-                      {ag.ajuste > 0 ? '+' : ''}{ag.ajuste % 1 === 0 ? ag.ajuste : ag.ajuste.toFixed(1)}
-                    </span>
-                  )}
-                </span>
-                <span className="bh-moises-semanas">{ag.semanas} dia{ag.semanas === 1 ? '' : 's'} ✏️</span>
-              </button>
+              {podeEditar ? (
+                <button
+                  type="button"
+                  className="bh-moises-horas-info bh-moises-horas-edit"
+                  onClick={() => abrirEdicao(ag)}
+                  title="Clique para ajustar as horas deste agente"
+                >
+                  <span className="bh-moises-h">
+                    {ag.total % 1 === 0 ? ag.total : ag.total.toFixed(1)}h
+                    {ag.ajuste !== 0 && (
+                      <span className="bh-moises-ajuste-badge" title={`Ajuste manual: ${ag.ajuste > 0 ? '+' : ''}${ag.ajuste}h`}>
+                        {ag.ajuste > 0 ? '+' : ''}{ag.ajuste % 1 === 0 ? ag.ajuste : ag.ajuste.toFixed(1)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="bh-moises-semanas">{ag.semanas} dia{ag.semanas === 1 ? '' : 's'} ✏️</span>
+                </button>
+              ) : (
+                <div className="bh-moises-horas-info">
+                  <span className="bh-moises-h">
+                    {ag.total % 1 === 0 ? ag.total : ag.total.toFixed(1)}h
+                    {ag.ajuste !== 0 && (
+                      <span className="bh-moises-ajuste-badge" title={`Ajuste manual: ${ag.ajuste > 0 ? '+' : ''}${ag.ajuste}h`}>
+                        {ag.ajuste > 0 ? '+' : ''}{ag.ajuste % 1 === 0 ? ag.ajuste : ag.ajuste.toFixed(1)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="bh-moises-semanas">{ag.semanas} dia{ag.semanas === 1 ? '' : 's'}</span>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -1770,6 +1785,7 @@ export default function EscalaAgentes() {
           horasExtrasSimples={dados.horasExtrasSimples}
           ajustesBanco={dados.ajustesBanco ?? {}}
           onAjusteChange={atualizarAjusteBanco}
+          podeEditar={editando}
         />
       )}
 
