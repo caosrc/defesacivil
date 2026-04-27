@@ -300,12 +300,8 @@ function folgasDoAgente(agente: string, folgas: Record<string, string[]>): strin
     .sort()
 }
 
-// Folgas do agente cuja data já passou (data < hoje) — geram desconto automático de 8h cada
-function folgasJaConsumidas(agente: string, folgas: Record<string, string[]>, hoje: string): string[] {
-  return folgasDoAgente(agente, folgas).filter(data => data < hoje)
-}
-
 // Banco de horas total do agente — só conta dias de sobreaviso que JÁ passaram
+// e desconta toda folga marcada (passada ou futura) imediatamente
 function calcularBancoHoras(
   agente: string,
   sobreavisoDiario: Record<string, string[]>,
@@ -327,7 +323,8 @@ function calcularBancoHoras(
     return acc + (h * multiplicadorDia(data, percDomFer, percSb, percSabado, feriadosCustom))
   }, 0)
   const descontosLegado = Object.values(descontosFolgaBanco[agente] ?? {}).reduce((acc, h) => acc + h, 0)
-  const descontosFolgas = folgasJaConsumidas(agente, folgas, hoje).length * HORAS_POR_FOLGA_BANCO
+  // Toda folga marcada (passada ou futura) já desconta do banco
+  const descontosFolgas = folgasDoAgente(agente, folgas).length * HORAS_POR_FOLGA_BANCO
   return Math.max(0, horasFlat + horasExtras - descontosLegado - descontosFolgas)
 }
 
@@ -515,10 +512,10 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
   const horasAgente = horasTrabalhadasSobreaviso[agente] ?? {}
   const descontosAgente = descontosFolgaBanco[agente] ?? {}
 
-  // Folgas marcadas para o agente
+  // Folgas marcadas para o agente — toda folga marcada já desconta do banco
   const folgasAgente = folgasDoAgente(agente, folgas)
   const proximaFolga = folgasAgente.find(f => f >= hoje) ?? null
-  const folgasConsumidas = folgasAgente.filter(f => f < hoje)
+  const folgasConsumidas = folgasAgente
 
   // Dias de sobreaviso deste agente, ordenados mais recentes primeiro
   const semanasDoAgente = useMemo(() => {
@@ -1003,7 +1000,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
         ))}
       </div>
       <div className="bh-moises-rodape">
-        {HORAS_POR_DIA_SOBREAVISO}h por dia de sobreaviso · Dias úteis ×{(1 + percSobreaviso / 100).toFixed(1)} · Sábado ×{(1 + percSabado / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)} · cada folga marcada desconta {HORAS_POR_FOLGA_BANCO}h ao passar do dia
+        {HORAS_POR_DIA_SOBREAVISO}h por dia de sobreaviso · Dias úteis ×{(1 + percSobreaviso / 100).toFixed(1)} · Sábado ×{(1 + percSabado / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)} · cada folga marcada desconta {HORAS_POR_FOLGA_BANCO}h imediatamente
       </div>
 
       {editando && (() => {
