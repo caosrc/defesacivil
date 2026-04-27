@@ -1368,6 +1368,135 @@
   align-items: flex-end;
 }
 
+.bh-moises-horas-edit {
+  background: none;
+  border: 1px dashed transparent;
+  border-radius: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.bh-moises-horas-edit:hover {
+  background: #faf5ff;
+  border-color: #c4b5fd;
+}
+.bh-moises-horas-edit:active {
+  transform: scale(0.97);
+}
+
+.bh-moises-ajuste-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 1px 6px;
+  border-radius: 8px;
+  vertical-align: middle;
+}
+
+/* ── Modal de edição manual do banco de horas (Moisés) ───────── */
+.bh-edit-modal {
+  max-width: 380px;
+}
+.bh-edit-cor {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.bh-edit-info {
+  background: #f9fafb;
+  border-radius: 10px;
+  padding: 0.6rem 0.85rem;
+  margin: 0.6rem 0 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.bh-edit-info-linha {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #4b5563;
+}
+.bh-edit-info-linha strong { color: #1a202c; font-weight: 700; }
+.bh-edit-info-linha strong.positivo { color: #15803d; }
+.bh-edit-info-linha strong.negativo { color: #b91c1c; }
+
+.bh-edit-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+.bh-edit-input {
+  border: 2px solid #c4b5fd;
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #5b21b6;
+  text-align: center;
+  outline: none;
+  transition: border 0.15s;
+}
+.bh-edit-input:focus { border-color: #7c3aed; }
+
+.bh-edit-dica {
+  font-size: 0.7rem;
+  color: #6b7280;
+  margin: 0 0 0.7rem;
+  line-height: 1.35;
+  font-style: italic;
+}
+
+.bh-edit-acoes {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.bh-edit-acoes-direita {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+.bh-edit-zerar,
+.bh-edit-cancelar,
+.bh-edit-salvar {
+  border: none;
+  border-radius: 10px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+.bh-edit-zerar {
+  background: #fef3c7;
+  color: #92400e;
+}
+.bh-edit-zerar:hover { background: #fde68a; }
+.bh-edit-cancelar {
+  background: #f3f4f6;
+  color: #374151;
+}
+.bh-edit-cancelar:hover { background: #e5e7eb; }
+.bh-edit-salvar {
+  background: #7c3aed;
+  color: white;
+}
+.bh-edit-salvar:hover { background: #6d28d9; }
+
 .bh-moises-h {
   font-size: 0.95rem;
   font-weight: 800;

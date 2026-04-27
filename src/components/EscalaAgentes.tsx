@@ -115,6 +115,7 @@ interface EscalaData {
   percSabado: number
   descontosFolgaBanco: Record<string, Record<string, number>>  // legado — descontos manuais antigos
   horasExtrasSimples: Record<string, Record<string, number>>   // agente → { data: horas } — sem multiplicador
+  ajustesBanco: Record<string, number>                         // agente → horas ajuste manual do Moisés (+/-)
 }
 
 // ── Storage ───────────────────────────────────────────────────────
@@ -149,6 +150,7 @@ function carregarDados(): EscalaData {
         percSabado: p.percSabado ?? 50,
         descontosFolgaBanco: p.descontosFolgaBanco ?? {},
         horasExtrasSimples: p.horasExtrasSimples ?? {},
+        ajustesBanco: p.ajustesBanco ?? {},
       }
     }
     // Migra v2
@@ -169,10 +171,11 @@ function carregarDados(): EscalaData {
         percSabado: 50,
         descontosFolgaBanco: {},
         horasExtrasSimples: {},
+        ajustesBanco: {},
       }
     }
   } catch { /* */ }
-  return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, folgas: {}, ferias: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {}, feriadosCustom: [], percDomingoFeriado: 100, percSobreaviso: 50, percSabado: 50, descontosFolgaBanco: {}, horasExtrasSimples: {} }
+  return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, folgas: {}, ferias: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {}, feriadosCustom: [], percDomingoFeriado: 100, percSobreaviso: 50, percSabado: 50, descontosFolgaBanco: {}, horasExtrasSimples: {}, ajustesBanco: {} }
 }
 
 function salvarDados(data: EscalaData) {
@@ -208,6 +211,7 @@ async function carregarDadosRemoto(): Promise<EscalaData | null> {
     percSabado: (p.percSabado as number) ?? 50,
     descontosFolgaBanco: (p.descontosFolgaBanco as EscalaData['descontosFolgaBanco']) ?? {},
     horasExtrasSimples: (p.horasExtrasSimples as EscalaData['horasExtrasSimples']) ?? {},
+    ajustesBanco: (p.ajustesBanco as EscalaData['ajustesBanco']) ?? {},
   }
 }
 
@@ -906,29 +910,58 @@ interface BancoHorasMoisesProps {
   percSabado: number
   feriadosCustom: string[]
   horasExtrasSimples: Record<string, Record<string, number>>
+  ajustesBanco: Record<string, number>
+  onAjusteChange: (agente: string, ajuste: number) => void
 }
 
-function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples }: BancoHorasMoisesProps) {
+function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, onAjusteChange }: BancoHorasMoisesProps) {
   const hoje = hojeStr()
+  const [editando, setEditando] = useState<string | null>(null)
+  const [valorTemp, setValorTemp] = useState<string>('')
 
   const lista = useMemo(() => {
     const sobreaviso = AGENTES_SOBREAVISO.map(ag => {
-      const total = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
+      const calculado = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
+      const ajuste = ajustesBanco[ag.nome] ?? 0
+      const total = calculado + ajuste
       const semanas = Object.values(sobreavisoSemanal).filter(lista => lista.includes(ag.nome)).length
       const desobreaviso = (sobreavisoSemanal[hoje] ?? []).includes(ag.nome)
       const temFolga = (folgas[hoje] ?? []).includes(ag.nome)
-      return { ...ag, total, semanas, desobreaviso, temFolga, tipo: 'sobreaviso' as const }
+      return { ...ag, total, calculado, ajuste, semanas, desobreaviso, temFolga, tipo: 'sobreaviso' as const }
     })
     const extras = AGENTES_HORAS_EXTRAS.map(ag => {
       const horas = horasExtrasSimples[ag.nome] ?? {}
-      const total = Object.values(horas).reduce((acc, h) => acc + h, 0)
+      const calculado = Object.values(horas).reduce((acc, h) => acc + h, 0)
+      const ajuste = ajustesBanco[ag.nome] ?? 0
+      const total = calculado + ajuste
       const dias = Object.keys(horas).length
-      return { ...ag, total, semanas: dias, desobreaviso: false, temFolga: false, tipo: 'extras' as const }
+      return { ...ag, total, calculado, ajuste, semanas: dias, desobreaviso: false, temFolga: false, tipo: 'extras' as const }
     })
     return [...sobreaviso, ...extras].sort((a, b) => b.total - a.total)
-  }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, hoje])
+  }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, hoje])
 
   const totalGeral = lista.reduce((s, ag) => s + ag.total, 0)
+
+  function abrirEdicao(ag: { nome: string; total: number }) {
+    setEditando(ag.nome)
+    setValorTemp(String(ag.total % 1 === 0 ? ag.total : ag.total.toFixed(2)))
+  }
+
+  function salvarEdicao(ag: { nome: string; calculado: number }) {
+    const novoTotal = parseFloat(valorTemp.replace(',', '.'))
+    if (!Number.isFinite(novoTotal)) {
+      setEditando(null)
+      return
+    }
+    const novoAjuste = +(novoTotal - ag.calculado).toFixed(2)
+    onAjusteChange(ag.nome, novoAjuste)
+    setEditando(null)
+  }
+
+  function zerarAjuste(nome: string) {
+    onAjusteChange(nome, 0)
+    setEditando(null)
+  }
 
   return (
     <div className="bh-moises-painel">
@@ -949,10 +982,22 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
               {ag.temFolga && (
                 <span className="bh-moises-badge-folga" title="De folga hoje">🏠</span>
               )}
-              <div className="bh-moises-horas-info">
-                <span className="bh-moises-h">{ag.total % 1 === 0 ? ag.total : ag.total.toFixed(1)}h</span>
-                <span className="bh-moises-semanas">{ag.semanas} dia{ag.semanas === 1 ? '' : 's'}</span>
-              </div>
+              <button
+                type="button"
+                className="bh-moises-horas-info bh-moises-horas-edit"
+                onClick={() => abrirEdicao(ag)}
+                title="Clique para ajustar as horas deste agente"
+              >
+                <span className="bh-moises-h">
+                  {ag.total % 1 === 0 ? ag.total : ag.total.toFixed(1)}h
+                  {ag.ajuste !== 0 && (
+                    <span className="bh-moises-ajuste-badge" title={`Ajuste manual: ${ag.ajuste > 0 ? '+' : ''}${ag.ajuste}h`}>
+                      {ag.ajuste > 0 ? '+' : ''}{ag.ajuste % 1 === 0 ? ag.ajuste : ag.ajuste.toFixed(1)}
+                    </span>
+                  )}
+                </span>
+                <span className="bh-moises-semanas">{ag.semanas} dia{ag.semanas === 1 ? '' : 's'} ✏️</span>
+              </button>
             </div>
           </div>
         ))}
@@ -960,6 +1005,65 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
       <div className="bh-moises-rodape">
         {HORAS_POR_DIA_SOBREAVISO}h por dia de sobreaviso · Dias úteis ×{(1 + percSobreaviso / 100).toFixed(1)} · Sábado ×{(1 + percSabado / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)} · cada folga marcada desconta {HORAS_POR_FOLGA_BANCO}h ao passar do dia
       </div>
+
+      {editando && (() => {
+        const ag = lista.find(a => a.nome === editando)
+        if (!ag) return null
+        return (
+          <div className="escala-modal-overlay" onClick={() => setEditando(null)}>
+            <div className="escala-modal bh-edit-modal" onClick={e => e.stopPropagation()}>
+              <div className="escala-modal-header">
+                <span className="escala-modal-titulo">
+                  <span className="bh-edit-cor" style={{ background: ag.cor }} />
+                  Banco de horas — {ag.nome}
+                </span>
+                <button className="escala-modal-fechar" onClick={() => setEditando(null)}>✕</button>
+              </div>
+
+              <div className="bh-edit-info">
+                <div className="bh-edit-info-linha">
+                  <span>Calculado pela escala</span>
+                  <strong>{ag.calculado % 1 === 0 ? ag.calculado : ag.calculado.toFixed(2)}h</strong>
+                </div>
+                <div className="bh-edit-info-linha">
+                  <span>Ajuste manual atual</span>
+                  <strong className={ag.ajuste > 0 ? 'positivo' : ag.ajuste < 0 ? 'negativo' : ''}>
+                    {ag.ajuste > 0 ? '+' : ''}{ag.ajuste % 1 === 0 ? ag.ajuste : ag.ajuste.toFixed(2)}h
+                  </strong>
+                </div>
+              </div>
+
+              <label className="bh-edit-label">
+                Total final do banco (em horas)
+                <input
+                  type="number"
+                  step="0.5"
+                  inputMode="decimal"
+                  className="bh-edit-input"
+                  value={valorTemp}
+                  onChange={e => setValorTemp(e.target.value)}
+                  autoFocus
+                  onFocus={e => e.target.select()}
+                />
+              </label>
+
+              <p className="bh-edit-dica">
+                Digite o total final que esse agente deve ter no banco. O sistema vai calcular o ajuste necessário ({ag.calculado.toFixed(1)}h calculado + ajuste).
+              </p>
+
+              <div className="bh-edit-acoes">
+                <button className="bh-edit-zerar" onClick={() => zerarAjuste(ag.nome)}>
+                  Zerar ajuste manual
+                </button>
+                <div className="bh-edit-acoes-direita">
+                  <button className="bh-edit-cancelar" onClick={() => setEditando(null)}>Cancelar</button>
+                  <button className="bh-edit-salvar" onClick={() => salvarEdicao(ag)}>Salvar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -1460,6 +1564,7 @@ export default function EscalaAgentes() {
           percSabado: 50,
           descontosFolgaBanco: {},
           horasExtrasSimples: {},
+          ajustesBanco: {},
         }
         salvarDados(migrado)
         setDados(migrado)
@@ -1541,6 +1646,18 @@ export default function EscalaAgentes() {
         [agenteLogado]: agenteHoras,
       },
     }
+    setDados(novos)
+    salvarDados(novos)
+  }
+
+  function atualizarAjusteBanco(agente: string, ajuste: number) {
+    const novosAjustes = { ...(dados.ajustesBanco ?? {}) }
+    if (ajuste === 0) {
+      delete novosAjustes[agente]
+    } else {
+      novosAjustes[agente] = ajuste
+    }
+    const novos = { ...dados, ajustesBanco: novosAjustes }
     setDados(novos)
     salvarDados(novos)
   }
@@ -1654,6 +1771,8 @@ export default function EscalaAgentes() {
           percSabado={dados.percSabado}
           feriadosCustom={dados.feriadosCustom}
           horasExtrasSimples={dados.horasExtrasSimples}
+          ajustesBanco={dados.ajustesBanco ?? {}}
+          onAjusteChange={atualizarAjusteBanco}
         />
       )}
 
