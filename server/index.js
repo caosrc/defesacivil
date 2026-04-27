@@ -672,6 +672,76 @@ async function buscarDadosOpenMeteo() {
   }
 }
 
+// ── Geocodificação (Nominatim) — proxy para evitar problemas de CORS/User-Agent
+const geocodeCache = new Map() // q -> { ts, data }
+const GEOCODE_TTL_MS = 60 * 60 * 1000 // 1h
+
+app.get('/api/geocode', async (req, res) => {
+  const q = String(req.query.q || '').trim()
+  if (q.length < 2) return res.json([])
+  const chave = q.toLowerCase()
+  const agora = Date.now()
+  const cached = geocodeCache.get(chave)
+  if (cached && (agora - cached.ts) < GEOCODE_TTL_MS) {
+    return res.json(cached.data)
+  }
+  try {
+    const queryFinal = /ouro branco|mg|minas/i.test(q) ? q : `${q}, Ouro Branco, MG, Brasil`
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryFinal)}&format=json&limit=6&addressdetails=0&countrycodes=br&accept-language=pt-BR`
+    const resp = await fetch(url, {
+      headers: {
+        'User-Agent': 'DefesaCivilOuroBranco/1.0 (contato@defesacivil.ouro-branco.mg.gov.br)',
+        'Accept-Language': 'pt-BR',
+      },
+    })
+    if (!resp.ok) {
+      return res.status(502).json({ erro: 'Nominatim retornou ' + resp.status })
+    }
+    const data = await resp.json()
+    const arr = Array.isArray(data) ? data : []
+    const simplificado = arr.map(d => ({
+      display: d.display_name,
+      lat: parseFloat(d.lat),
+      lng: parseFloat(d.lon),
+    })).filter(d => Number.isFinite(d.lat) && Number.isFinite(d.lng))
+    geocodeCache.set(chave, { ts: agora, data: simplificado })
+    res.json(simplificado)
+  } catch (err) {
+    console.error('Erro no geocode:', err.message)
+    res.status(503).json({ erro: 'Geocodificação indisponível' })
+  }
+})
+
+// ── Rota (OSRM) — proxy
+app.get('/api/rota', async (req, res) => {
+  const from = String(req.query.from || '').split(',').map(parseFloat)
+  const to = String(req.query.to || '').split(',').map(parseFloat)
+  if (from.length !== 2 || to.length !== 2 || from.some(n => !Number.isFinite(n)) || to.some(n => !Number.isFinite(n))) {
+    return res.status(400).json({ erro: 'Parâmetros from/to inválidos (use lat,lng)' })
+  }
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=full&geometries=geojson`
+    const resp = await fetch(url, {
+      headers: { 'User-Agent': 'DefesaCivilOuroBranco/1.0' },
+    })
+    if (!resp.ok) {
+      return res.status(502).json({ erro: 'OSRM retornou ' + resp.status })
+    }
+    const json = await resp.json()
+    const r = json?.routes?.[0]
+    if (!r) return res.status(404).json({ erro: 'Sem rota disponível' })
+    const coords = (r.geometry.coordinates || []).map(([lng, lat]) => [lat, lng])
+    res.json({
+      coords,
+      km: r.distance / 1000,
+      min: Math.round(r.duration / 60),
+    })
+  } catch (err) {
+    console.error('Erro na rota:', err.message)
+    res.status(503).json({ erro: 'Roteamento indisponível' })
+  }
+})
+
 app.get('/api/tempo', async (_req, res) => {
   try {
     const agora = Date.now()

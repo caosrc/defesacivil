@@ -1236,7 +1236,7 @@ input, select, textarea { font-family: inherit; }
 /* ── Widget Clima INMET ──────────────────────────────────────── */
 .mapa-clima-widget {
   position: absolute;
-  top: 108px;
+  bottom: 18px;
   left: 14px;
   z-index: 600;
 }
@@ -1262,12 +1262,12 @@ input, select, textarea { font-family: inherit; }
 }
 .mapa-clima-painel {
   position: absolute;
-  top: 42px;
+  bottom: 42px;
   left: 0;
   background: white;
   border-radius: 12px;
   box-shadow: 0 6px 22px rgba(0,0,0,0.22);
-  width: 160px;
+  width: 220px;
   max-width: calc(100vw - 28px);
   overflow: hidden;
 }

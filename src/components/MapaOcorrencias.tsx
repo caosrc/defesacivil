@@ -555,7 +555,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     setProgressoMapa(null)
   }
 
-  // ── Busca de endereço (Nominatim) + Rota (OSRM) ──────────────
+  // ── Busca de endereço (proxy /api/geocode) + Rota (proxy /api/rota) ──
   const buscarEnderecoNominatim = useCallback(async () => {
     const q = enderecoBusca.trim()
     if (q.length < 2) { setResultadosBusca([]); return }
@@ -565,20 +565,22 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     }
     setBuscandoEndereco(true)
     try {
-      // Prioriza Ouro Branco / MG
-      const queryFinal = /ouro branco|mg|minas/i.test(q) ? q : `${q}, Ouro Branco, MG, Brasil`
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryFinal)}&format=json&limit=6&addressdetails=0&countrycodes=br`
-      const resp = await fetch(url, {
-        headers: { 'Accept-Language': 'pt-BR' },
-      })
+      const url = `/api/geocode?q=${encodeURIComponent(q)}`
+      const resp = await fetch(url)
+      if (!resp.ok) {
+        setResultadosBusca([])
+        return
+      }
       const data = await resp.json()
       const arr = Array.isArray(data) ? data : []
       setResultadosBusca(
-        arr.map((d: any) => ({
-          display: d.display_name as string,
-          lat: parseFloat(d.lat),
-          lng: parseFloat(d.lon),
-        }))
+        arr
+          .map((d: any) => ({
+            display: String(d.display ?? ''),
+            lat: typeof d.lat === 'number' ? d.lat : parseFloat(d.lat),
+            lng: typeof d.lng === 'number' ? d.lng : parseFloat(d.lng),
+          }))
+          .filter((d: any) => Number.isFinite(d.lat) && Number.isFinite(d.lng))
       )
     } catch {
       setResultadosBusca([])
@@ -590,7 +592,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   // Calcula rota do ponto atual (GPS ou centro de Ouro Branco) até o destino
   const calcularRota = useCallback(async (origem: [number, number], dest: { lat: number; lng: number }) => {
     if (!navigator.onLine) {
-      // Sem internet: desenha linha reta como fallback
       setRota([origem, [dest.lat, dest.lng]])
       const km = distanciaKm(origem[0], origem[1], dest.lat, dest.lng)
       setRotaInfo({ km, min: Math.round((km / 30) * 60) })
@@ -598,25 +599,19 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     }
     setCalculandoRota(true)
     try {
-      // OSRM público — driving = carro
-      const url = `https://router.project-osrm.org/route/v1/driving/${origem[1]},${origem[0]};${dest.lng},${dest.lat}?overview=full&geometries=geojson`
+      const url = `/api/rota?from=${origem[0]},${origem[1]}&to=${dest.lat},${dest.lng}`
       const resp = await fetch(url)
-      const json = await resp.json()
-      const r = json?.routes?.[0]
-      if (r) {
-        const coords: [number, number][] = (r.geometry.coordinates as [number, number][])
-          .map(([lng, lat]) => [lat, lng])
-        setRota(coords)
-        setRotaInfo({
-          km: r.distance / 1000,
-          min: Math.round(r.duration / 60),
-        })
-      } else {
-        // Fallback linha reta
-        setRota([origem, [dest.lat, dest.lng]])
-        const km = distanciaKm(origem[0], origem[1], dest.lat, dest.lng)
-        setRotaInfo({ km, min: Math.round((km / 30) * 60) })
+      if (resp.ok) {
+        const json = await resp.json()
+        if (Array.isArray(json?.coords) && json.coords.length >= 2) {
+          setRota(json.coords as [number, number][])
+          setRotaInfo({ km: Number(json.km) || 0, min: Number(json.min) || 0 })
+          return
+        }
       }
+      setRota([origem, [dest.lat, dest.lng]])
+      const km = distanciaKm(origem[0], origem[1], dest.lat, dest.lng)
+      setRotaInfo({ km, min: Math.round((km / 30) * 60) })
     } catch {
       setRota([origem, [dest.lat, dest.lng]])
       const km = distanciaKm(origem[0], origem[1], dest.lat, dest.lng)
