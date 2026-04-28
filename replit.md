@@ -112,9 +112,12 @@ Documento JSON único (id=1) com a escala completa, regras de banco de horas, fe
 ## Suporte Offline Completo (PWA)
 - **PWA instalável**: `manifest.json` + meta tags para instalação no celular (Android e iOS)
 - **Convite de instalação**: banner no app para criar ícone na tela inicial do celular; no iPhone orienta usar Compartilhar → Adicionar à Tela de Início.
-- **Service Worker (sw.js)**: cache separado para tiles do mapa e app shell; tiles OSM cacheados automaticamente; placeholder cinza quando offline; recebe mensagens do app para pré-cachear região de Ouro Branco (zoom 12–16)
-- **Botão "📥 Offline" no mapa**: baixa tiles da região (zoom 12–16, ~700–1000 tiles), mostra progresso, e permite apagar cache
-- **GPS offline**: `navigator.geolocation.watchPosition` funciona por hardware do dispositivo, independente de conexão
-- **Geocodificação offline**: fallback com pontos de referência de Ouro Branco (bairros, hospital, escola etc.)
-- **Fila de pendentes**: ocorrências salvas offline sincronizadas automaticamente ao reconectar
-- **IndexedDB**: armazena ocorrências pendentes e cache do servidor
+- **Service Worker (sw.js v5-2026-04)**: caches separados — `MAPA_CACHE` (tiles), `MALHA_CACHE` (malha viária Overpass), app shell. Tiles OSM cacheados automaticamente; placeholder cinza quando offline; recebe mensagens do app (`BAIXAR_MAPA_OURO_BRANCO`, `BAIXAR_MALHA_VIARIA`, `INFO_MAPA`, `INFO_MALHA_VIARIA`).
+- **Mapa offline com 20 km de raio**: o botão "📥 Offline" baixa tiles num raio configurável (padrão 20 km, zooms 11–16, ~6,5 mil tiles ≈ 65 MB), mostra progresso, e permite apagar cache. Cobre cidade + zona rural de Ouro Branco.
+- **Malha viária offline (ruas + roteamento)**: botão separado no painel offline baixa toda a base de ruas/estradas da OpenStreetMap via Overpass API (raio 20 km) e armazena no `MALHA_CACHE`. `src/malhaViaria.ts` constrói grafo (nós + arestas com peso por tipo de via e oneway) e expõe `buscarRuas` (autocomplete normalizado por acentos/tokens) e `roteamentoLocal` (Dijkstra com MinHeap binária).
+- **Busca de endereço com autocomplete offline-first**: a barra de busca do mapa dispara após 280 ms de digitação, consulta primeiro a malha local (instantâneo, offline) e depois mescla resultados do Nominatim direto (sem proxy) restritos ao viewbox de Ouro Branco. Não há mais botão "Buscar" — autocomplete em tempo real.
+- **Roteamento GPS offline**: `calcularRota` usa Dijkstra na malha local quando disponível (offline); cai para OSRM público se houver rede; último fallback é linha reta. Recalcula automaticamente quando o GPS se move >50 m.
+- **GPS offline**: `navigator.geolocation.watchPosition` funciona por hardware do dispositivo, independente de conexão.
+- **Fila de pendentes**: ocorrências salvas offline sincronizadas automaticamente ao reconectar.
+- **IndexedDB**: armazena ocorrências pendentes e cache do servidor.
+- **Sem dependência do backend Express em produção**: todas as chamadas externas (tiles, Nominatim, Overpass, OSRM) são feitas direto pelo navegador, então o app funciona no Netlify sem servidor.

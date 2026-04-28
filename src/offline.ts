@@ -192,10 +192,12 @@ export type ProgressoMapa = {
 }
 
 // Envia mensagem ao SW para pré-cachear tiles de Ouro Branco
-// Chama onProgresso com atualizações até status === 'concluido'
+// Chama onProgresso com atualizações até status === 'concluido'.
+// Por padrão cobre raio de 20 km e zooms 11..16 (~6.5 mil tiles).
 export function baixarMapaOffline(
   onProgresso: (p: ProgressoMapa) => void,
-  zooms = [10, 11, 12, 13, 14, 15]
+  zooms = [11, 12, 13, 14, 15, 16],
+  raioKm = 20
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
@@ -223,7 +225,69 @@ export function baixarMapaOffline(
     navigator.serviceWorker.controller.postMessage({
       tipo: 'CACHEAR_MAPA_OURO_BRANCO',
       zooms,
+      raioKm,
     })
+  })
+}
+
+// ── Malha viária (Overpass) — para autocomplete + rota offline ────
+export type ProgressoMalha = {
+  status: 'iniciando' | 'concluido' | 'erro'
+  bytes?: number
+  mensagem?: string
+}
+
+export function baixarMalhaViariaOffline(
+  onProgresso: (p: ProgressoMalha) => void,
+  raioM = 20000
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+      reject(new Error('Service Worker não disponível'))
+      return
+    }
+    const handler = (event: MessageEvent) => {
+      const msg = event.data
+      if (msg?.tipo === 'PROGRESSO_MALHA') {
+        onProgresso({
+          status: msg.status,
+          bytes: msg.bytes,
+          mensagem: msg.mensagem,
+        })
+        if (msg.status === 'concluido') {
+          navigator.serviceWorker.removeEventListener('message', handler)
+          resolve()
+        } else if (msg.status === 'erro') {
+          navigator.serviceWorker.removeEventListener('message', handler)
+          reject(new Error(msg.mensagem || 'Falha ao baixar malha viária'))
+        }
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', handler)
+    navigator.serviceWorker.controller.postMessage({
+      tipo: 'BAIXAR_MALHA_VIARIA',
+      raioM,
+    })
+  })
+}
+
+export function obterInfoMalhaViaria(): Promise<{ baixada: boolean; bytes: number }> {
+  return new Promise((resolve) => {
+    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+      resolve({ baixada: false, bytes: 0 })
+      return
+    }
+    const handler = (event: MessageEvent) => {
+      if (event.data?.tipo === 'INFO_MALHA_VIARIA_RESP') {
+        navigator.serviceWorker.removeEventListener('message', handler)
+        resolve({
+          baixada: !!event.data.baixada,
+          bytes: Number(event.data.bytes) || 0,
+        })
+      }
+    }
+    navigator.serviceWorker.addEventListener('message', handler)
+    navigator.serviceWorker.controller.postMessage({ tipo: 'INFO_MALHA_VIARIA' })
   })
 }
 

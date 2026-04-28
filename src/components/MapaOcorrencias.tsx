@@ -5,7 +5,22 @@ import 'leaflet/dist/leaflet.css'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { Ocorrencia } from '../types'
 import { NATUREZA_ICONE, NATUREZA_COR, NATUREZAS } from '../types'
-import { baixarMapaOffline, obterInfoCacheMapa, limparCacheMapa, type ProgressoMapa } from '../offline'
+import {
+  baixarMapaOffline,
+  obterInfoCacheMapa,
+  limparCacheMapa,
+  baixarMalhaViariaOffline,
+  obterInfoMalhaViaria,
+  type ProgressoMapa,
+  type ProgressoMalha,
+} from '../offline'
+import {
+  buscarRuas,
+  roteamentoLocal,
+  malhaDisponivel,
+  preAquecerMalha,
+  descartarMalhaEmMemoria,
+} from '../malhaViaria'
 import { mensagemErroGps } from '../utils'
 import { supabase } from '../supabaseClient'
 
@@ -278,6 +293,14 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const [tilesCacheados, setTilesCacheados] = useState<number>(0)
   const [painelOfflineAberto, setPainelOfflineAberto] = useState(false)
 
+  // Malha viária offline (ruas + roteamento local)
+  const [malhaInfo, setMalhaInfo] = useState<{ baixada: boolean; bytes: number }>({
+    baixada: false,
+    bytes: 0,
+  })
+  const [statusMalha, setStatusMalha] = useState<'idle' | 'baixando' | 'concluido' | 'erro'>('idle')
+  const [progressoMalha, setProgressoMalha] = useState<ProgressoMalha | null>(null)
+
   // Mantém ref sempre atualizada com o nome atual
   useEffect(() => { nomeLocalRef.current = nomeLocal }, [nomeLocal])
 
@@ -320,6 +343,16 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   useEffect(() => {
     obterInfoCacheMapa().then(setTilesCacheados).catch(() => {})
   }, [statusOffline])
+
+  // Carrega info da malha viária (e pré-aquece em segundo plano)
+  useEffect(() => {
+    obterInfoMalhaViaria()
+      .then((info) => {
+        setMalhaInfo(info)
+        if (info.baixada) preAquecerMalha()
+      })
+      .catch(() => {})
+  }, [statusMalha])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelecionada(null) }
@@ -539,6 +572,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     setStatusOffline('baixando')
     setProgressoMapa(null)
     try {
+      // Tiles num raio de 20 km, zooms 11..16 (~6,5 mil tiles ≈ 65 MB)
       await baixarMapaOffline((p) => {
         setProgressoMapa(p)
         if (p.status === 'concluido') setStatusOffline('concluido')
@@ -555,64 +589,152 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     setProgressoMapa(null)
   }
 
-  // ── Busca de endereço (proxy /api/geocode) + Rota (proxy /api/rota) ──
-  const buscarEnderecoNominatim = useCallback(async () => {
-    const q = enderecoBusca.trim()
-    if (q.length < 2) { setResultadosBusca([]); return }
-    if (!navigator.onLine) {
-      setResultadosBusca([])
-      return
-    }
-    setBuscandoEndereco(true)
+  // ── Malha viária offline (ruas + roteamento Dijkstra local) ───
+  async function iniciarDownloadMalha() {
+    if (statusMalha === 'baixando') return
+    setStatusMalha('baixando')
+    setProgressoMalha(null)
     try {
-      const url = `/api/geocode?q=${encodeURIComponent(q)}`
-      const resp = await fetch(url)
-      if (!resp.ok) {
-        setResultadosBusca([])
-        return
-      }
-      const data = await resp.json()
-      const arr = Array.isArray(data) ? data : []
-      setResultadosBusca(
-        arr
-          .map((d: any) => ({
-            display: String(d.display ?? ''),
-            lat: typeof d.lat === 'number' ? d.lat : parseFloat(d.lat),
-            lng: typeof d.lng === 'number' ? d.lng : parseFloat(d.lng),
-          }))
-          .filter((d: any) => Number.isFinite(d.lat) && Number.isFinite(d.lng))
-      )
+      await baixarMalhaViariaOffline((p) => {
+        setProgressoMalha(p)
+        if (p.status === 'concluido') setStatusMalha('concluido')
+      })
+      // Recarrega o índice em memória com a nova malha
+      descartarMalhaEmMemoria()
+      preAquecerMalha()
     } catch {
-      setResultadosBusca([])
-    } finally {
-      setBuscandoEndereco(false)
+      setStatusMalha('erro')
     }
-  }, [enderecoBusca])
+  }
 
-  // Calcula rota do ponto atual (GPS ou centro de Ouro Branco) até o destino
-  const calcularRota = useCallback(async (origem: [number, number], dest: { lat: number; lng: number }) => {
-    if (!navigator.onLine) {
-      setRota([origem, [dest.lat, dest.lng]])
-      const km = distanciaKm(origem[0], origem[1], dest.lat, dest.lng)
-      setRotaInfo({ km, min: Math.round((km / 30) * 60) })
+  // ── Busca de endereço (autocomplete offline-first) ──────────────
+  // Estratégia:
+  //   1. Busca local na malha viária baixada (instantâneo, offline)
+  //   2. Em paralelo, se online, consulta o Nominatim direto (sem proxy)
+  //      restringindo o viewbox a 20 km ao redor de Ouro Branco
+  //   3. Mescla resultados (locais primeiro, sem duplicatas)
+  const buscaTokenRef = useRef(0)
+  const buscarEndereco = useCallback(async (texto: string) => {
+    const q = texto.trim()
+    const meuToken = ++buscaTokenRef.current
+    if (q.length < 2) { setResultadosBusca([]); setBuscandoEndereco(false); return }
+    setBuscandoEndereco(true)
+
+    // 1. Local (offline-first)
+    let locais: Array<{ display: string; lat: number; lng: number }> = []
+    try {
+      const ruas = await buscarRuas(q, 8)
+      locais = ruas.map((r) => ({ display: r.display, lat: r.lat, lng: r.lng }))
+    } catch { /* ignora */ }
+
+    if (meuToken !== buscaTokenRef.current) return
+
+    // Se já tem resultados locais bons, mostra imediatamente enquanto a rede
+    // ainda está completando — UX mais responsiva.
+    if (locais.length > 0) setResultadosBusca(locais)
+
+    // 2. Nominatim direto (chama de fora porque em produção não há proxy)
+    if (navigator.onLine) {
+      try {
+        // Viewbox: 20 km ao redor de Ouro Branco (-20.5195, -43.6983)
+        // Formato Nominatim: lonMin,latMax,lonMax,latMin (canto NW e SE)
+        const viewbox = '-43.89,-20.34,-43.50,-20.70'
+        const queryFinal = /ouro branco|mg|minas/i.test(q) ? q : `${q}, Ouro Branco, MG, Brasil`
+        const url =
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryFinal)}` +
+          `&format=json&limit=8&countrycodes=br&accept-language=pt-BR` +
+          `&viewbox=${viewbox}&bounded=0&addressdetails=0`
+        const resp = await fetch(url, { headers: { 'Accept': 'application/json' } })
+        if (meuToken !== buscaTokenRef.current) return
+        if (resp.ok) {
+          const data = await resp.json()
+          const remotos: Array<{ display: string; lat: number; lng: number }> = (Array.isArray(data) ? data : [])
+            .map((d: any) => ({
+              display: String(d.display_name ?? ''),
+              lat: parseFloat(d.lat),
+              lng: parseFloat(d.lon),
+            }))
+            .filter((d) => Number.isFinite(d.lat) && Number.isFinite(d.lng))
+
+          // Mescla: locais primeiro, depois remotos não duplicados (≥30 m)
+          const out = [...locais]
+          for (const r of remotos) {
+            const existe = out.some(
+              (o) => Math.abs(o.lat - r.lat) < 3e-4 && Math.abs(o.lng - r.lng) < 3e-4
+            )
+            if (!existe) out.push(r)
+            if (out.length >= 10) break
+          }
+          if (meuToken === buscaTokenRef.current) setResultadosBusca(out)
+        }
+      } catch { /* offline ou bloqueado, mantém os locais */ }
+    }
+
+    if (meuToken === buscaTokenRef.current) setBuscandoEndereco(false)
+  }, [])
+
+  // Quando um destino é escolhido, o input passa a refletir o nome dele;
+  // suprimimos o autocomplete enquanto o texto bater com o destino atual.
+  const ignorarBuscaRef = useRef(false)
+  // Debounce: dispara a busca 280 ms depois da última digitação
+  useEffect(() => {
+    const q = enderecoBusca.trim()
+    if (q.length < 2) {
+      setResultadosBusca([])
+      setBuscandoEndereco(false)
       return
     }
+    if (ignorarBuscaRef.current) {
+      ignorarBuscaRef.current = false
+      return
+    }
+    const t = setTimeout(() => buscarEndereco(q), 280)
+    return () => clearTimeout(t)
+  }, [enderecoBusca, buscarEndereco])
+
+  // Calcula rota do ponto atual (GPS ou centro de Ouro Branco) até o destino.
+  // Estratégia: tenta roteamento local (Dijkstra na malha baixada) primeiro
+  // — funciona offline e é instantâneo. Se não houver malha, cai para
+  // OSRM público; se também falhar, desenha linha reta como último recurso.
+  const calcularRota = useCallback(async (origem: [number, number], dest: { lat: number; lng: number }) => {
     setCalculandoRota(true)
     try {
-      const url = `/api/rota?from=${origem[0]},${origem[1]}&to=${dest.lat},${dest.lng}`
-      const resp = await fetch(url)
-      if (resp.ok) {
-        const json = await resp.json()
-        if (Array.isArray(json?.coords) && json.coords.length >= 2) {
-          setRota(json.coords as [number, number][])
-          setRotaInfo({ km: Number(json.km) || 0, min: Number(json.min) || 0 })
+      // 1. Roteamento local (offline)
+      if (await malhaDisponivel()) {
+        const rotaLoc = await roteamentoLocal(
+          { lat: origem[0], lng: origem[1] },
+          { lat: dest.lat, lng: dest.lng }
+        )
+        if (rotaLoc && rotaLoc.coords.length >= 2) {
+          setRota(rotaLoc.coords)
+          setRotaInfo({ km: rotaLoc.km, min: rotaLoc.min })
           return
         }
       }
-      setRota([origem, [dest.lat, dest.lng]])
-      const km = distanciaKm(origem[0], origem[1], dest.lat, dest.lng)
-      setRotaInfo({ km, min: Math.round((km / 30) * 60) })
-    } catch {
+
+      // 2. OSRM público (online) — não exige nosso backend
+      if (navigator.onLine) {
+        try {
+          const url = `https://router.project-osrm.org/route/v1/driving/${origem[1]},${origem[0]};${dest.lng},${dest.lat}?overview=full&geometries=geojson`
+          const resp = await fetch(url)
+          if (resp.ok) {
+            const json = await resp.json()
+            const r = json?.routes?.[0]
+            if (r) {
+              const coords = (r.geometry?.coordinates || []).map(
+                ([lng, lat]: [number, number]) => [lat, lng] as [number, number]
+              )
+              if (coords.length >= 2) {
+                setRota(coords)
+                setRotaInfo({ km: r.distance / 1000, min: Math.round(r.duration / 60) })
+                return
+              }
+            }
+          }
+        } catch { /* segue p/ fallback */ }
+      }
+
+      // 3. Linha reta (último recurso)
       setRota([origem, [dest.lat, dest.lng]])
       const km = distanciaKm(origem[0], origem[1], dest.lat, dest.lng)
       setRotaInfo({ km, min: Math.round((km / 30) * 60) })
@@ -625,6 +747,11 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     const dest = { lat: r.lat, lng: r.lng, nome: r.display }
     setDestino(dest)
     setResultadosBusca([])
+    // Invalida buscas pendentes e suprime a próxima execução do debounce
+    // para que o autocomplete não reabra a lista ao trocar o texto do input
+    // para o nome do destino selecionado.
+    buscaTokenRef.current++
+    ignorarBuscaRef.current = true
     setEnderecoBusca(r.display.split(',')[0])
     const origem: [number, number] = posicaoAtual ?? OURO_BRANCO
     calcularRota(origem, dest)
@@ -962,17 +1089,17 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         </div>
       </div>
 
-      {/* Barra de busca de endereço (estilo Google Maps) */}
+      {/* Barra de busca de endereço (estilo Google Maps, com autocomplete) */}
       <div className="mapa-busca">
         <div className="mapa-busca-input-wrap">
-          <span className="mapa-busca-icone">🔍</span>
+          <span className="mapa-busca-icone">{buscandoEndereco ? '⏳' : '🔍'}</span>
           <input
             type="text"
             className="mapa-busca-input"
-            placeholder="Buscar endereço — mostra a rota até o local"
+            placeholder="Digite a rua — Ouro Branco e região"
             value={enderecoBusca}
             onChange={(e) => setEnderecoBusca(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') buscarEnderecoNominatim() }}
+            autoComplete="off"
           />
           {(enderecoBusca || destino) && (
             <button
@@ -981,17 +1108,17 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
               title="Limpar busca e rota"
             >✕</button>
           )}
-          <button
-            className="mapa-busca-btn"
-            onClick={buscarEnderecoNominatim}
-            disabled={buscandoEndereco || !navigator.onLine}
-          >
-            {buscandoEndereco ? '⏳' : 'Buscar'}
-          </button>
         </div>
 
-        {!navigator.onLine && (
-          <div className="mapa-busca-aviso">📵 A busca de endereço precisa de internet.</div>
+        {!navigator.onLine && !malhaInfo.baixada && (
+          <div className="mapa-busca-aviso">
+            📵 Sem internet e sem mapa de ruas salvo. Conecte ou baixe o mapa offline.
+          </div>
+        )}
+        {!navigator.onLine && malhaInfo.baixada && (
+          <div className="mapa-busca-aviso" style={{ background: '#dcfce7', borderColor: '#86efac', color: '#166534' }}>
+            📵 Sem internet — buscando nas ruas salvas offline.
+          </div>
         )}
 
         {resultadosBusca.length > 0 && (
@@ -1247,7 +1374,63 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
               </button>
             )}
             <div className="mapa-offline-aviso">
-              Cobre apenas a área urbana de Ouro Branco — MG. O GPS funciona offline por hardware do aparelho.
+              Cobre raio de 20 km ao redor de Ouro Branco — MG (cidade + zona rural). O GPS funciona offline pelo hardware do aparelho.
+            </div>
+
+            {/* ── Malha viária offline (ruas + roteamento) ── */}
+            <div style={{ height: 1, background: '#e5e7eb', margin: '12px 0' }} />
+            <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#1a4b8c', marginBottom: 6 }}>
+              🛣️ Ruas e roteamento offline
+            </div>
+
+            {malhaInfo.baixada && (
+              <div className="mapa-offline-info">
+                ✅ Malha viária salva ({(malhaInfo.bytes / (1024 * 1024)).toFixed(1)} MB) — busca de endereços e rota funcionam offline
+              </div>
+            )}
+            {!malhaInfo.baixada && statusMalha !== 'baixando' && (
+              <div className="mapa-offline-info mapa-offline-info--aviso">
+                📵 Ruas não salvas. Sem internet, a busca de endereço não vai funcionar.
+              </div>
+            )}
+            {statusMalha === 'baixando' && (
+              <div className="mapa-offline-progresso">
+                <div className="mapa-offline-barra-wrap">
+                  <div
+                    className="mapa-offline-barra"
+                    style={{
+                      width: progressoMalha?.status === 'concluido' ? '100%' : '60%',
+                      transition: 'width 0.6s ease',
+                    }}
+                  />
+                </div>
+                <div className="mapa-offline-pct">
+                  {progressoMalha?.status === 'iniciando' && 'Baixando ruas da Overpass…'}
+                  {progressoMalha?.status === 'concluido' &&
+                    `Concluído (${((progressoMalha.bytes ?? 0) / (1024 * 1024)).toFixed(1)} MB)`}
+                </div>
+              </div>
+            )}
+            {statusMalha === 'erro' && (
+              <div className="mapa-offline-info mapa-offline-info--aviso">
+                ⚠️ {progressoMalha?.mensagem || 'Falha ao baixar a malha viária. Tente novamente.'}
+              </div>
+            )}
+            {statusMalha !== 'baixando' && (
+              <button
+                className="mapa-offline-btn-acao"
+                onClick={iniciarDownloadMalha}
+                disabled={!navigator.onLine}
+                style={{ marginTop: 6 }}
+              >
+                {navigator.onLine
+                  ? malhaInfo.baixada ? '🔄 Atualizar ruas offline' : '📥 Baixar ruas e endereços'
+                  : '📵 Sem conexão para baixar'}
+              </button>
+            )}
+            <div className="mapa-offline-aviso">
+              Baixa a base de ruas/estradas (raio 20 km) da OpenStreetMap.
+              Permite buscar endereços e calcular rotas sem internet.
             </div>
           </div>
         </div>

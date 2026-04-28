@@ -14,10 +14,11 @@
  *  - LIMPAR_CACHE_MAPA               → apaga todos os tiles cacheados
  */
 
-const VERSION = 'v4-2026-04'
+const VERSION = 'v5-2026-04'
 const APP_CACHE = `defesacivil-app-${VERSION}`
 const TILES_CACHE = 'defesacivil-tiles-osm'
 const ASSETS_CACHE = `defesacivil-assets-${VERSION}`
+const MALHA_CACHE = 'defesacivil-malha-viaria'
 
 // Recursos essenciais para abrir o app offline (app shell)
 const APP_SHELL = [
@@ -54,8 +55,8 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       const keys = await caches.keys()
-      // Mantém apenas as caches da versão atual + tiles (que persistem entre versões)
-      const validas = new Set([APP_CACHE, ASSETS_CACHE, TILES_CACHE])
+      // Mantém apenas as caches da versão atual + tiles + malha (que persistem entre versões)
+      const validas = new Set([APP_CACHE, ASSETS_CACHE, TILES_CACHE, MALHA_CACHE])
       await Promise.all(
         keys
           .filter((k) => !validas.has(k) && k.startsWith('defesacivil-'))
@@ -96,15 +97,30 @@ self.addEventListener('fetch', (event) => {
 
   // 3. Mesma origem
   if (url.origin === self.location.origin) {
-    // 3a. Navegação (SPA) → network-first, cai para index.html cacheado
+    // 3a. Malha viária cacheada (Overpass) → cache-only
+    if (url.pathname === '/__malha-viaria__') {
+      event.respondWith(servirMalha())
+      return
+    }
+    // 3b. Navegação (SPA) → network-first, cai para index.html cacheado
     if (req.mode === 'navigate') {
       event.respondWith(servirNavegacao(req))
       return
     }
-    // 3b. Assets estáticos (JS/CSS/imagens) → stale-while-revalidate
+    // 3c. Assets estáticos (JS/CSS/imagens) → stale-while-revalidate
     event.respondWith(servirAsset(req))
   }
 })
+
+async function servirMalha() {
+  const cache = await caches.open(MALHA_CACHE)
+  const cached = await cache.match('/__malha-viaria__')
+  if (cached) return cached
+  return new Response(JSON.stringify({ erro: 'malha_nao_baixada' }), {
+    status: 404,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
 
 // ── Estratégia: tile (cache-first, persistente) ────────────────────
 async function servirTile(req) {
@@ -185,8 +201,42 @@ self.addEventListener('message', (event) => {
   if (msg.tipo === 'CACHEAR_MAPA_OURO_BRANCO') {
     const zooms = Array.isArray(msg.zooms) && msg.zooms.length > 0
       ? msg.zooms
-      : [12, 13, 14, 15]
-    event.waitUntil(cachearMapaOuroBranco(zooms, event.source))
+      : [11, 12, 13, 14, 15, 16]
+    const raioKm = Number(msg.raioKm) > 0 ? Number(msg.raioKm) : 20
+    event.waitUntil(cachearMapaOuroBranco(zooms, raioKm, event.source))
+    return
+  }
+
+  if (msg.tipo === 'BAIXAR_MALHA_VIARIA') {
+    const raioM = Number(msg.raioM) > 0 ? Number(msg.raioM) : 20000
+    event.waitUntil(baixarMalhaViaria(raioM, event.source))
+    return
+  }
+
+  if (msg.tipo === 'INFO_MALHA_VIARIA') {
+    event.waitUntil((async () => {
+      try {
+        const cache = await caches.open(MALHA_CACHE)
+        const resp = await cache.match('/__malha-viaria__')
+        const tem = !!resp
+        let bytes = 0
+        if (resp) {
+          const blob = await resp.clone().blob()
+          bytes = blob.size
+        }
+        event.source && event.source.postMessage({
+          tipo: 'INFO_MALHA_VIARIA_RESP',
+          baixada: tem,
+          bytes,
+        })
+      } catch {
+        event.source && event.source.postMessage({
+          tipo: 'INFO_MALHA_VIARIA_RESP',
+          baixada: false,
+          bytes: 0,
+        })
+      }
+    })())
     return
   }
 
@@ -232,15 +282,17 @@ function lat2tile(lat, zoom) {
   )
 }
 
-async function cachearMapaOuroBranco(zooms, source) {
+async function cachearMapaOuroBranco(zooms, raioKm, source) {
   // Bounding box ao redor de Ouro Branco — MG (centro: -20.5195, -43.6983)
   const lat = -20.5195
   const lng = -43.6983
-  const margem = 0.045 // ~5 km
-  const latMin = lat - margem
-  const latMax = lat + margem
-  const lngMin = lng - margem
-  const lngMax = lng + margem
+  // 1 grau de latitude ≈ 111 km. Longitude ajusta pela cossecante da latitude.
+  const margemLat = raioKm / 111
+  const margemLng = raioKm / (111 * Math.cos((lat * Math.PI) / 180))
+  const latMin = lat - margemLat
+  const latMax = lat + margemLat
+  const lngMin = lng - margemLng
+  const lngMax = lng + margemLng
 
   const tiles = []
   for (const z of zooms) {
@@ -292,4 +344,67 @@ async function cachearMapaOuroBranco(zooms, source) {
   }
 
   notificar('concluido')
+}
+
+// ── Pré-cache de malha viária (Overpass) ──────────────────────────
+// Baixa todas as ruas/estradas dentro do raio configurado e armazena
+// como Response no cache para o app indexar e usar offline.
+async function baixarMalhaViaria(raioM, source) {
+  const lat = -20.5195
+  const lng = -43.6983
+
+  function notificar(status, extra = {}) {
+    if (source) source.postMessage({ tipo: 'PROGRESSO_MALHA', status, ...extra })
+  }
+
+  notificar('iniciando')
+
+  // Query Overpass: todas as ways do tipo highway dentro do raio + nodes referenciados.
+  const query = `[out:json][timeout:120];
+(
+  way["highway"](around:${raioM},${lat},${lng});
+);
+(._;>;);
+out body;`
+
+  const endpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+  ]
+
+  let resposta = null
+  let erroFinal = null
+  for (const ep of endpoints) {
+    try {
+      const r = await fetch(ep, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query),
+      })
+      if (r.ok) { resposta = r; break }
+      erroFinal = `Overpass ${ep} retornou ${r.status}`
+    } catch (e) {
+      erroFinal = e && e.message ? e.message : 'erro de rede'
+    }
+  }
+
+  if (!resposta) {
+    notificar('erro', { mensagem: erroFinal || 'Falha ao baixar malha viária' })
+    return
+  }
+
+  try {
+    const cache = await caches.open(MALHA_CACHE)
+    // Clonamos antes de consumir para conseguir guardar no cache.
+    const blob = await resposta.clone().blob()
+    const respCache = new Response(blob, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+    await cache.put('/__malha-viaria__', respCache)
+    notificar('concluido', { bytes: blob.size })
+  } catch (e) {
+    notificar('erro', { mensagem: e && e.message ? e.message : 'erro ao salvar' })
+  }
 }
