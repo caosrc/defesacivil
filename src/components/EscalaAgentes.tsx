@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { getAgenteLogado } from './Login'
 import ModalSenha from './ModalSenha'
 import './EscalaAgentes.css'
@@ -922,18 +922,19 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
       const calculado = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
       const ajuste = ajustesBanco[ag.nome] ?? 0
       const total = calculado + ajuste
-      const semanas = Object.values(sobreavisoSemanal).filter(lista => lista.includes(ag.nome)).length
+      // Dias de folga disponíveis = total de horas no banco / 8h por folga
+      const diasFolga = Math.max(0, total) / HORAS_POR_FOLGA_BANCO
       const desobreaviso = (sobreavisoSemanal[hoje] ?? []).includes(ag.nome)
       const temFolga = (folgas[hoje] ?? []).includes(ag.nome)
-      return { ...ag, total, calculado, ajuste, semanas, desobreaviso, temFolga, tipo: 'sobreaviso' as const }
+      return { ...ag, total, calculado, ajuste, diasFolga, desobreaviso, temFolga, tipo: 'sobreaviso' as const }
     })
     const extras = AGENTES_HORAS_EXTRAS.map(ag => {
       const horas = horasExtrasSimples[ag.nome] ?? {}
       const calculado = Object.values(horas).reduce((acc, h) => acc + h, 0)
       const ajuste = ajustesBanco[ag.nome] ?? 0
       const total = calculado + ajuste
-      const dias = Object.keys(horas).length
-      return { ...ag, total, calculado, ajuste, semanas: dias, desobreaviso: false, temFolga: false, tipo: 'extras' as const }
+      const diasFolga = Math.max(0, total) / HORAS_POR_FOLGA_BANCO
+      return { ...ag, total, calculado, ajuste, diasFolga, desobreaviso: false, temFolga: false, tipo: 'extras' as const }
     })
     return [...sobreaviso, ...extras].sort((a, b) => b.total - a.total)
   }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, hoje])
@@ -995,7 +996,9 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
                       </span>
                     )}
                   </span>
-                  <span className="bh-moises-semanas">{ag.semanas} dia{ag.semanas === 1 ? '' : 's'} ✏️</span>
+                  <span className="bh-moises-semanas" title={`${ag.total.toFixed(2)}h ÷ ${HORAS_POR_FOLGA_BANCO}h = ${ag.diasFolga.toFixed(2)} dias de folga`}>
+                    {ag.diasFolga % 1 === 0 ? ag.diasFolga : ag.diasFolga.toFixed(1)} dia{ag.diasFolga === 1 ? '' : 's'} de folga ✏️
+                  </span>
                 </button>
               ) : (
                 <div className="bh-moises-horas-info">
@@ -1007,7 +1010,9 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
                       </span>
                     )}
                   </span>
-                  <span className="bh-moises-semanas">{ag.semanas} dia{ag.semanas === 1 ? '' : 's'}</span>
+                  <span className="bh-moises-semanas" title={`${ag.total.toFixed(2)}h ÷ ${HORAS_POR_FOLGA_BANCO}h = ${ag.diasFolga.toFixed(2)} dias de folga`}>
+                    {ag.diasFolga % 1 === 0 ? ag.diasFolga : ag.diasFolga.toFixed(1)} dia{ag.diasFolga === 1 ? '' : 's'} de folga
+                  </span>
                 </div>
               )}
             </div>
@@ -1015,7 +1020,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
         ))}
       </div>
       <div className="bh-moises-rodape">
-        {HORAS_POR_DIA_SOBREAVISO}h por dia de sobreaviso · Dias úteis ×{(1 + percSobreaviso / 100).toFixed(1)} · Sábado ×{(1 + percSabado / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)} · cada folga marcada desconta {HORAS_POR_FOLGA_BANCO}h imediatamente
+        {HORAS_POR_DIA_SOBREAVISO}h por dia de sobreaviso · Dias úteis ×{(1 + percSobreaviso / 100).toFixed(1)} · Sábado ×{(1 + percSabado / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)} · cada folga marcada desconta {HORAS_POR_FOLGA_BANCO}h · "dias de folga" = total ÷ {HORAS_POR_FOLGA_BANCO}h
       </div>
 
       {editando && (() => {
@@ -1346,7 +1351,15 @@ function CalendarioUnificado({ ano, mes, sobreavisoDiario, folgas, ferias, hoje,
 }
 
 // ── Legenda ───────────────────────────────────────────────────────
-function Legenda({ ferias, mes, ano }: { ferias: Ferias[]; mes: number; ano: number }) {
+interface LegendaProps {
+  ferias: Ferias[]
+  mes: number
+  ano: number
+  editavel?: boolean
+  onAgenteClick?: (nome: string) => void
+}
+
+function Legenda({ ferias, mes, ano, editavel = false, onAgenteClick }: LegendaProps) {
   const mesStr = String(mes + 1).padStart(2, '0')
   const anoStr = String(ano)
 
@@ -1367,14 +1380,31 @@ function Legenda({ ferias, mes, ano }: { ferias: Ferias[]; mes: number; ano: num
 
   return (
     <div className="escala-legenda">
-      <span className="escala-legenda-titulo">Legenda</span>
+      <span className="escala-legenda-titulo">
+        Legenda
+        {editavel && <span className="escala-legenda-dica"> — toque num agente para escalar os dias dele</span>}
+      </span>
       <div className="escala-legenda-lista">
-        {ativos.map(ag => (
-          <div key={ag.nome} className="escala-legenda-item">
-            <span className="escala-legenda-cor" style={{ background: ag.cor }} />
-            <span className="escala-legenda-nome">{ag.nome}</span>
-          </div>
-        ))}
+        {ativos.map(ag =>
+          editavel ? (
+            <button
+              type="button"
+              key={ag.nome}
+              className="escala-legenda-item escala-legenda-item--clicavel"
+              onClick={() => onAgenteClick?.(ag.nome)}
+              title={`Escalar dias de ${ag.nome}`}
+            >
+              <span className="escala-legenda-cor" style={{ background: ag.cor }} />
+              <span className="escala-legenda-nome">{ag.nome}</span>
+              <span className="escala-legenda-edit-icone">✏️</span>
+            </button>
+          ) : (
+            <div key={ag.nome} className="escala-legenda-item">
+              <span className="escala-legenda-cor" style={{ background: ag.cor }} />
+              <span className="escala-legenda-nome">{ag.nome}</span>
+            </div>
+          )
+        )}
       </div>
       {deFerias.length > 0 && (
         <div className="escala-legenda-ferias-bloco">
@@ -1540,6 +1570,222 @@ function PainelFeriadosCustom({ feriados, onChange }: PainelFeriadosCustomProps)
   )
 }
 
+// ── Modal: calendário de um único agente (clique na legenda) ──────
+// Permite ao Moisés marcar, dentro de um mês, todos os dias em que o agente
+// estará de sobreaviso ou de folga.
+//   • Para agentes que fazem sobreaviso: cada toque no dia cicla
+//       nada → 📟 sobreaviso → 🏠 folga → nada
+//   • Para Talita / Cristiane / Sócrates (sem sobreaviso): toggle só de folga.
+interface ModalAgenteCalendarioProps {
+  agente: { nome: string; cor: string; iniciais: string }
+  podeSobreaviso: boolean
+  sobreaviso: Record<string, string[]>
+  folgas: Record<string, string[]>
+  ferias: Ferias[]
+  feriadosCustom: string[]
+  anoInicial: number
+  mesInicial: number
+  onSalvar: (
+    novoSobreaviso: Record<string, string[]>,
+    novasFolgas: Record<string, string[]>
+  ) => void
+  onFechar: () => void
+}
+
+function ModalAgenteCalendario({
+  agente, podeSobreaviso, sobreaviso, folgas, ferias, feriadosCustom,
+  anoInicial, mesInicial, onSalvar, onFechar,
+}: ModalAgenteCalendarioProps) {
+  const [mes, setMes] = useState(mesInicial)
+  const [ano, setAno] = useState(anoInicial)
+  const hoje = hojeStr()
+
+  // Sets locais com TODAS as datas (qualquer mês) onde este agente já tem marcação
+  const [localSb, setLocalSb] = useState<Set<string>>(() => {
+    const s = new Set<string>()
+    for (const [data, ags] of Object.entries(sobreaviso)) {
+      if (ags.includes(agente.nome)) s.add(data)
+    }
+    return s
+  })
+  const [localFolga, setLocalFolga] = useState<Set<string>>(() => {
+    const s = new Set<string>()
+    for (const [data, ags] of Object.entries(folgas)) {
+      if (ags.includes(agente.nome)) s.add(data)
+    }
+    return s
+  })
+
+  function mesAnt() {
+    if (mes === 0) { setAno(a => a - 1); setMes(11) }
+    else setMes(m => m - 1)
+  }
+  function mesProx() {
+    if (mes === 11) { setAno(a => a + 1); setMes(0) }
+    else setMes(m => m + 1)
+  }
+
+  function clickDia(chave: string) {
+    if (agenteEmFerias(agente.nome, chave, ferias)) return
+    const ehSb = localSb.has(chave)
+    const ehFolga = localFolga.has(chave)
+    if (podeSobreaviso) {
+      if (!ehSb && !ehFolga) {
+        const next = new Set(localSb); next.add(chave); setLocalSb(next)
+      } else if (ehSb) {
+        const a = new Set(localSb); a.delete(chave); setLocalSb(a)
+        const b = new Set(localFolga); b.add(chave); setLocalFolga(b)
+      } else {
+        const b = new Set(localFolga); b.delete(chave); setLocalFolga(b)
+      }
+    } else {
+      const b = new Set(localFolga)
+      if (ehFolga) b.delete(chave); else b.add(chave)
+      setLocalFolga(b)
+    }
+  }
+
+  function limparMes() {
+    const total = diasNoMes(ano, mes)
+    const nSb = new Set(localSb)
+    const nFolga = new Set(localFolga)
+    for (let d = 1; d <= total; d++) {
+      const k = chaveData(ano, mes, d)
+      nSb.delete(k); nFolga.delete(k)
+    }
+    setLocalSb(nSb); setLocalFolga(nFolga)
+  }
+
+  function salvar() {
+    // Reconstrói os mapas globais: tira o agente de todas as datas e re-adiciona
+    // nas datas locais. Outros agentes em cada data ficam intactos.
+    const novoSb: Record<string, string[]> = {}
+    for (const [data, ags] of Object.entries(sobreaviso)) {
+      const sem = ags.filter(a => a !== agente.nome)
+      if (sem.length > 0) novoSb[data] = sem
+    }
+    for (const data of localSb) {
+      novoSb[data] = [...(novoSb[data] ?? []), agente.nome]
+    }
+    const novasFolgas: Record<string, string[]> = {}
+    for (const [data, ags] of Object.entries(folgas)) {
+      const sem = ags.filter(a => a !== agente.nome)
+      if (sem.length > 0) novasFolgas[data] = sem
+    }
+    for (const data of localFolga) {
+      novasFolgas[data] = [...(novasFolgas[data] ?? []), agente.nome]
+    }
+    onSalvar(novoSb, novasFolgas)
+  }
+
+  const total = diasNoMes(ano, mes)
+  const inicio = primeiroDiaSemana(ano, mes)
+  const trailingCount = (7 - ((inicio + total) % 7)) % 7
+
+  // Conta marcações só do mês visível (resumo do topo)
+  let sbMes = 0
+  let folgaMes = 0
+  for (let d = 1; d <= total; d++) {
+    const k = chaveData(ano, mes, d)
+    if (localSb.has(k)) sbMes++
+    if (localFolga.has(k)) folgaMes++
+  }
+
+  return (
+    <div className="escala-modal-overlay" onClick={onFechar}>
+      <div className="escala-modal modal-agente-calendario" onClick={e => e.stopPropagation()}>
+        <div className="escala-modal-header">
+          <span className="escala-modal-titulo">
+            <span className="bh-edit-cor" style={{ background: agente.cor }} />
+            Escalar {agente.nome}
+          </span>
+          <button className="escala-modal-fechar" onClick={onFechar}>✕</button>
+        </div>
+
+        <p className="escala-modal-sub mac-instrucoes">
+          {podeSobreaviso
+            ? <>Toque num dia para alternar: <b>nada → 📟 Sobreaviso → 🏠 Folga → nada</b>.</>
+            : <>Toque num dia para marcar/desmarcar 🏠 <b>Folga</b>.</>}
+        </p>
+
+        <div className="mac-nav-mes">
+          <button className="mac-nav-btn" onClick={mesAnt}>‹</button>
+          <span className="mac-nav-label">{MESES[mes]} {ano}</span>
+          <button className="mac-nav-btn" onClick={mesProx}>›</button>
+        </div>
+
+        <div className="mac-resumo">
+          {podeSobreaviso && (
+            <span className="mac-chip mac-chip-sb">📟 {sbMes} dia{sbMes === 1 ? '' : 's'} de sobreaviso no mês</span>
+          )}
+          <span className="mac-chip mac-chip-folga">🏠 {folgaMes} dia{folgaMes === 1 ? '' : 's'} de folga no mês</span>
+        </div>
+
+        <div className="mac-cal-grid">
+          {DIAS_SEMANA_HDR.map((d, i) => (
+            <div key={`h-${i}`} className="escala-cal-diahdr">{d}</div>
+          ))}
+          {Array.from({ length: inicio }).map((_, i) => (
+            <div key={`l-${i}`} className="escala-cal-vazio" />
+          ))}
+          {Array.from({ length: total }, (_, i) => i + 1).map(dia => {
+            const chave = chaveData(ano, mes, dia)
+            const isSb = localSb.has(chave)
+            const isFolga = localFolga.has(chave)
+            const isFerias = agenteEmFerias(agente.nome, chave, ferias)
+            const isHoje = chave === hoje
+            const isFerCustom = feriadosCustom.includes(chave)
+            const [y, m, dd] = chave.split('-').map(Number)
+            const mmdd = `${String(m).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
+            const isFerFixo = new Date(y, m - 1, dd).getDay() === 0 || FERIADOS_FIXOS.has(mmdd)
+            const cls = ['mac-dia']
+            if (isHoje) cls.push('hoje')
+            if (isSb) cls.push('mac-sb')
+            if (isFolga) cls.push('mac-folga')
+            if (isFerias) cls.push('mac-ferias')
+            if (isFerCustom) cls.push('feriado-custom')
+            if (isFerFixo && !isFerCustom) cls.push('feriado-fixo')
+            return (
+              <button
+                key={chave}
+                type="button"
+                className={cls.join(' ')}
+                style={isSb ? { background: agente.cor, borderColor: agente.cor, color: '#fff' } : undefined}
+                onClick={() => clickDia(chave)}
+                disabled={isFerias}
+                title={
+                  isFerias ? 'Em férias' :
+                  isSb ? 'Sobreaviso — toque para mudar para folga' :
+                  isFolga ? 'Folga — toque para limpar' :
+                  podeSobreaviso ? 'Toque para marcar como sobreaviso' : 'Toque para marcar como folga'
+                }
+              >
+                <span className="mac-dia-num">{dia}</span>
+                <span className="mac-dia-tag">
+                  {isFerias ? '🌴' : isSb ? '📟' : isFolga ? '🏠' : ''}
+                </span>
+              </button>
+            )
+          })}
+          {Array.from({ length: trailingCount }).map((_, i) => (
+            <div key={`t-${i}`} className="escala-cal-vazio" />
+          ))}
+        </div>
+
+        <div className="escala-modal-acoes">
+          <button className="escala-modal-limpar" onClick={limparMes}>
+            Limpar este mês
+          </button>
+          <div className="bh-edit-acoes-direita">
+            <button className="bh-edit-cancelar" onClick={onFechar}>Cancelar</button>
+            <button className="escala-modal-salvar" onClick={salvar}>Salvar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Componente principal ──────────────────────────────────────────
 export default function EscalaAgentes() {
   const agora = new Date()
@@ -1549,6 +1795,9 @@ export default function EscalaAgentes() {
   const [editando, setEditando] = useState(false)
   const [pedirSenha, setPedirSenha] = useState(false)
   const [modalDia, setModalDia] = useState<string | null>(null)
+  // Modal por agente (clique na legenda) — substitui o clique-na-data
+  const [agenteAberto, setAgenteAberto] = useState<string | null>(null)
+  const valteirZeradoRef = useRef(false)
 
   const hoje = hojeStr()
   const agenteLogado = getAgenteLogado()
@@ -1594,6 +1843,28 @@ export default function EscalaAgentes() {
     })
     return () => { cancelado = true }
   }, [])
+
+  // Reset único do banco do Valteir (pedido em abr/2026: zerar 4,5h)
+  useEffect(() => {
+    if (valteirZeradoRef.current) return
+    const FLAG = 'banco-valteir-zerado-2026-04'
+    if (localStorage.getItem(FLAG)) { valteirZeradoRef.current = true; return }
+    const calc = calcularBancoHoras(
+      'Valteir', dados.sobreaviso, dados.horasTrabalhadasSobreaviso,
+      dados.percDomingoFeriado, dados.percSobreaviso, dados.percSabado,
+      dados.feriadosCustom, dados.descontosFolgaBanco, dados.folgas, hojeStr(),
+    )
+    const ajusteAtual = dados.ajustesBanco?.['Valteir'] ?? 0
+    const totalAtual = calc + ajusteAtual
+    if (totalAtual !== 0) {
+      const novosAjustes = { ...(dados.ajustesBanco ?? {}), Valteir: -calc }
+      const novos = { ...dados, ajustesBanco: novosAjustes }
+      setDados(novos)
+      salvarDados(novos)
+    }
+    localStorage.setItem(FLAG, '1')
+    valteirZeradoRef.current = true
+  }, [dados])
 
   function mesAnterior() {
     if (mes === 0) { setAno(a => a - 1); setMes(11) }
@@ -1728,23 +1999,29 @@ export default function EscalaAgentes() {
 
       {editando && isMoises && (
         <div className="escala-edit-aviso">
-          Toque em um dia do calendário para escalar quem fica de sobreaviso (gera {HORAS_POR_DIA_SOBREAVISO}h/dia) e quem está de folga (desconta {HORAS_POR_FOLGA_BANCO}h ao passar do dia).
+          👆 Toque no <strong>nome do agente na legenda abaixo</strong> para escolher os dias dele de sobreaviso (gera {HORAS_POR_DIA_SOBREAVISO}h/dia) e de folga (desconta {HORAS_POR_FOLGA_BANCO}h ao passar do dia).
         </div>
       )}
 
-      {/* Calendário único: Sobreaviso + Folga */}
+      {/* Calendário único: Sobreaviso + Folga (visualização — edição é feita pela legenda) */}
       <CalendarioUnificado
         ano={ano} mes={mes}
         sobreavisoDiario={dados.sobreaviso}
         folgas={dados.folgas}
         ferias={dados.ferias}
         hoje={hoje}
-        editando={editando && isMoises}
+        editando={false}
         feriadosCustom={dados.feriadosCustom}
         onDiaClick={onDiaClick}
       />
 
-      <Legenda ferias={dados.ferias} mes={mes} ano={ano} />
+      <Legenda
+        ferias={dados.ferias}
+        mes={mes}
+        ano={ano}
+        editavel={editando && isMoises}
+        onAgenteClick={(nome) => setAgenteAberto(nome)}
+      />
 
       {/* Banco de Horas — agente individual (sobreaviso) */}
       {!isMoises && isSobreaviso && (
@@ -1806,7 +2083,7 @@ export default function EscalaAgentes() {
         </>
       )}
 
-      {/* Modal único do dia: Sobreaviso + Folga */}
+      {/* Modal único do dia: Sobreaviso + Folga (legado, não aberto pelo fluxo atual) */}
       {modalDia && (
         <ModalDia
           data={modalDia}
@@ -1817,9 +2094,36 @@ export default function EscalaAgentes() {
           onFechar={() => setModalDia(null)}
         />
       )}
+
+      {/* Modal por agente: clique na legenda → calendário do agente */}
+      {agenteAberto && editando && isMoises && (() => {
+        const ag = AGENTES_ESCALA.find(a => a.nome === agenteAberto)
+        if (!ag) return null
+        const podeSb = !AGENTES_SEM_SOBREAVISO.has(ag.nome)
+        return (
+          <ModalAgenteCalendario
+            agente={ag}
+            podeSobreaviso={podeSb}
+            sobreaviso={dados.sobreaviso}
+            folgas={dados.folgas}
+            ferias={dados.ferias}
+            feriadosCustom={dados.feriadosCustom}
+            anoInicial={ano}
+            mesInicial={mes}
+            onSalvar={(novoSb, novasFolgas) => {
+              const novos = { ...dados, sobreaviso: novoSb, folgas: novasFolgas }
+              setDados(novos)
+              salvarDados(novos)
+              setAgenteAberto(null)
+            }}
+            onFechar={() => setAgenteAberto(null)}
+          />
+        )
+      })()}
     </div>
   )
 }
 
 void _diasDaSemana;
 void _PainelEscalasSemanas;
+void ModalEscalarSemana;

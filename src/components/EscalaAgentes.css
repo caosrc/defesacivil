@@ -1938,3 +1938,150 @@
   opacity: 0.85;
   margin-left: 2px;
 }
+
+/* ── Legenda clicável (Moisés em modo edição) ──────────────────────── */
+.escala-legenda-dica {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #1a4b8c;
+  margin-left: 4px;
+}
+
+.escala-legenda-item--clicavel {
+  background: #f8faff;
+  border: 1px solid #cfe0f5;
+  border-radius: 999px;
+  padding: 4px 10px 4px 8px;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+  font-family: inherit;
+}
+.escala-legenda-item--clicavel:hover {
+  background: #e6efff;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.08);
+}
+.escala-legenda-item--clicavel:active {
+  transform: scale(0.97);
+}
+.escala-legenda-edit-icone {
+  font-size: 0.7rem;
+  margin-left: 2px;
+  opacity: 0.75;
+}
+
+/* ── Modal por agente: calendário do mês ──────────────────────────── */
+.modal-agente-calendario {
+  max-width: 480px;
+  width: 95%;
+}
+.mac-instrucoes {
+  background: #fefce8;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  color: #713f12;
+  margin: 0 0 10px 0;
+  line-height: 1.4;
+}
+.mac-nav-mes {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 8px 0 10px;
+}
+.mac-nav-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #cfe0f5;
+  background: #f8faff;
+  cursor: pointer;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a4b8c;
+}
+.mac-nav-btn:hover { background: #e6efff; }
+.mac-nav-label {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #0f172a;
+  min-width: 130px;
+  text-align: center;
+}
+.mac-resumo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  justify-content: center;
+}
+.mac-chip {
+  font-size: 0.72rem;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.mac-chip-sb   { background: #dbeafe; color: #1e3a8a; border: 1px solid #93c5fd; }
+.mac-chip-folga{ background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+.mac-chip strong { font-size: 0.8rem; margin: 0 2px; }
+
+.mac-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 14px;
+}
+.mac-dia {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  position: relative;
+  transition: transform 0.08s ease, background 0.12s ease;
+}
+.mac-dia:hover { background: #f3f4f6; }
+.mac-dia:active { transform: scale(0.94); }
+.mac-dia:disabled { cursor: not-allowed; opacity: 0.45; }
+.mac-dia.hoje {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+.mac-dia.mac-folga {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #fff;
+}
+.mac-dia.mac-folga:hover { background: #15803d; }
+.mac-dia.mac-ferias {
+  background: #fef3c7;
+  border-color: #fcd34d;
+  color: #78350f;
+}
+.mac-dia.feriado-fixo:not(.mac-sb):not(.mac-folga):not(.mac-ferias) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+.mac-dia.feriado-custom:not(.mac-sb):not(.mac-folga):not(.mac-ferias) {
+  background: #fef9c3;
+  border-color: #facc15;
+}
+.mac-dia-num {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.mac-dia-tag {
+  font-size: 0.85rem;
+  line-height: 1;
+  min-height: 0.85rem;
+}
