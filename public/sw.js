@@ -14,7 +14,7 @@
  *  - LIMPAR_CACHE_MAPA               → apaga todos os tiles cacheados
  */
 
-const VERSION = 'v5-2026-04'
+const VERSION = 'v6-2026-04'
 const APP_CACHE = `defesacivil-app-${VERSION}`
 const TILES_CACHE = 'defesacivil-tiles-osm'
 const ASSETS_CACHE = `defesacivil-assets-${VERSION}`
@@ -202,13 +202,13 @@ self.addEventListener('message', (event) => {
     const zooms = Array.isArray(msg.zooms) && msg.zooms.length > 0
       ? msg.zooms
       : [11, 12, 13, 14, 15, 16]
-    const raioKm = Number(msg.raioKm) > 0 ? Number(msg.raioKm) : 20
+    const raioKm = Number(msg.raioKm) > 0 ? Number(msg.raioKm) : 10
     event.waitUntil(cachearMapaOuroBranco(zooms, raioKm, event.source))
     return
   }
 
   if (msg.tipo === 'BAIXAR_MALHA_VIARIA') {
-    const raioM = Number(msg.raioM) > 0 ? Number(msg.raioM) : 20000
+    const raioM = Number(msg.raioM) > 0 ? Number(msg.raioM) : 10000
     event.waitUntil(baixarMalhaViaria(raioM, event.source))
     return
   }

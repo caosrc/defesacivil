@@ -493,6 +493,10 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   }, [])
 
   // ── GPS ───────────────────────────────────────────────────────
+  // Funciona offline: o GPS é hardware do aparelho e independe de internet.
+  // O canal Realtime (Supabase) só é tentado se houver conexão; se falhar,
+  // o GPS continua funcionando localmente (mostra posição, traça rota com
+  // a malha viária baixada, etc.).
   function ativarGps() {
     if (!navigator.geolocation) {
       setErroGps('GPS não suportado neste dispositivo.')
@@ -505,11 +509,15 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     }
     setStatusGps('aguardando')
     setErroGps(null)
-    conectarWs()
+    // Tenta conectar ao canal Realtime; se offline, falha silenciosa
+    // (não bloqueia o GPS local).
+    if (navigator.onLine) conectarWs()
 
     // IMPORTANTE: no iOS o watchPosition deve ser chamado de forma
     // síncrona dentro do handler do gesto do usuário. Qualquer await
     // antes desta chamada faz o iOS bloquear a permissão.
+    // Timeout maior (30s) para dar tempo do GPS pegar sinal offline,
+    // especialmente em ambientes urbanos densos ou na zona rural.
     watchIdRef.current = navigator.geolocation.watchPosition(
       (pos) => {
         const coords: [number, number] = [pos.coords.latitude, pos.coords.longitude]
@@ -524,13 +532,14 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         })
         setErroGps(null)
         setStatusGps('ativo')
+        // enviarPosicao só faz broadcast se online; offline armazena na ref
         enviarPosicao(coords[0], coords[1], prec, vel)
       },
       (err) => {
         setErroGps(mensagemErroGps(err))
         setStatusGps('erro')
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
+      { enableHighAccuracy: true, timeout: 30000, maximumAge: 5000 }
     )
   }
 
@@ -572,7 +581,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     setStatusOffline('baixando')
     setProgressoMapa(null)
     try {
-      // Tiles num raio de 20 km, zooms 11..16 (~6,5 mil tiles ≈ 65 MB)
+      // Tiles num raio de 10 km do centro de Ouro Branco, zooms 11..17
       await baixarMapaOffline((p) => {
         setProgressoMapa(p)
         if (p.status === 'concluido') setStatusOffline('concluido')
@@ -611,7 +620,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   // Estratégia:
   //   1. Busca local na malha viária baixada (instantâneo, offline)
   //   2. Em paralelo, se online, consulta o Nominatim direto (sem proxy)
-  //      restringindo o viewbox a 20 km ao redor de Ouro Branco
+  //      restringindo o viewbox a ~12 km ao redor de Ouro Branco
   //   3. Mescla resultados (locais primeiro, sem duplicatas)
   const buscaTokenRef = useRef(0)
   const buscarEndereco = useCallback(async (texto: string) => {
@@ -636,14 +645,17 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     // 2. Nominatim direto (chama de fora porque em produção não há proxy)
     if (navigator.onLine) {
       try {
-        // Viewbox: 20 km ao redor de Ouro Branco (-20.5195, -43.6983)
+        // Viewbox: ~12 km ao redor de Ouro Branco (-20.5195, -43.6983)
         // Formato Nominatim: lonMin,latMax,lonMax,latMin (canto NW e SE)
-        const viewbox = '-43.89,-20.34,-43.50,-20.70'
+        const viewbox = '-43.81,-20.41,-43.58,-20.63'
         const queryFinal = /ouro branco|mg|minas/i.test(q) ? q : `${q}, Ouro Branco, MG, Brasil`
+        // Detecta se a query parece "rua + número" (ex.: "Rua das Flores, 123" ou "Av X 45")
+        // Se sim, pede `addressdetails=1` para o Nominatim devolver o número do imóvel
+        const temNumero = /\b\d{1,5}\b/.test(q)
         const url =
           `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryFinal)}` +
-          `&format=json&limit=8&countrycodes=br&accept-language=pt-BR` +
-          `&viewbox=${viewbox}&bounded=0&addressdetails=0`
+          `&format=json&limit=10&countrycodes=br&accept-language=pt-BR` +
+          `&viewbox=${viewbox}&bounded=0&addressdetails=${temNumero ? 1 : 0}`
         const resp = await fetch(url, { headers: { 'Accept': 'application/json' } })
         if (meuToken !== buscaTokenRef.current) return
         if (resp.ok) {
@@ -1096,7 +1108,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
           <input
             type="text"
             className="mapa-busca-input"
-            placeholder="Digite a rua — Ouro Branco e região"
+            placeholder="Digite a rua e o número (ex.: Rua das Flores, 123)"
             value={enderecoBusca}
             onChange={(e) => setEnderecoBusca(e.target.value)}
             autoComplete="off"
@@ -1374,7 +1386,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
               </button>
             )}
             <div className="mapa-offline-aviso">
-              Cobre raio de 20 km ao redor de Ouro Branco — MG (cidade + zona rural). O GPS funciona offline pelo hardware do aparelho.
+              Cobre raio de 10 km ao redor do centro de Ouro Branco — MG (cidade + entorno imediato). O GPS funciona offline pelo hardware do aparelho.
             </div>
 
             {/* ── Malha viária offline (ruas + roteamento) ── */}
@@ -1429,7 +1441,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
               </button>
             )}
             <div className="mapa-offline-aviso">
-              Baixa a base de ruas/estradas (raio 20 km) da OpenStreetMap.
+              Baixa a base de ruas/estradas (raio 10 km) da OpenStreetMap.
               Permite buscar endereços e calcular rotas sem internet.
             </div>
           </div>

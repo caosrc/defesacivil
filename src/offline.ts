@@ -193,11 +193,11 @@ export type ProgressoMapa = {
 
 // Envia mensagem ao SW para pré-cachear tiles de Ouro Branco
 // Chama onProgresso com atualizações até status === 'concluido'.
-// Por padrão cobre raio de 20 km e zooms 11..16 (~6.5 mil tiles).
+// Por padrão cobre raio de 10 km e zooms 11..17 (cidade + entorno imediato).
 export function baixarMapaOffline(
   onProgresso: (p: ProgressoMapa) => void,
-  zooms = [11, 12, 13, 14, 15, 16],
-  raioKm = 20
+  zooms = [11, 12, 13, 14, 15, 16, 17],
+  raioKm = 10
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
@@ -239,7 +239,7 @@ export type ProgressoMalha = {
 
 export function baixarMalhaViariaOffline(
   onProgresso: (p: ProgressoMalha) => void,
-  raioM = 20000
+  raioM = 10000
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {

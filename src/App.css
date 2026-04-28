@@ -1234,9 +1234,10 @@ input, select, textarea { font-family: inherit; }
 }
 
 /* ── Widget Clima INMET ──────────────────────────────────────── */
+/* Posicionado acima do botão "Salvar offline" para não sobrepor */
 .mapa-clima-widget {
   position: absolute;
-  bottom: 18px;
+  bottom: 70px;
   left: 14px;
   z-index: 600;
 }
@@ -1264,6 +1265,9 @@ input, select, textarea { font-family: inherit; }
   position: absolute;
   bottom: 42px;
   left: 0;
+  /* Limita altura para não estourar a tela em celulares pequenos */
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
   background: white;
   border-radius: 12px;
   box-shadow: 0 6px 22px rgba(0,0,0,0.22);
