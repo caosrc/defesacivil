@@ -2,6 +2,7 @@ modules = ["nodejs-20", "web", "postgresql-16"]
 [agent]
 expertMode = true
 stack = "BEST_EFFORT_FALLBACK"
+integrations = ["javascript_database:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
@@ -62,5 +63,3 @@ build = ["npx", "vite", "build"]
 [userenv]
 
 [userenv.shared]
-VITE_SUPABASE_URL = "https://sjdpsplbcrlkekdfnnlj.supabase.co"
-VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqZHBzcGxiY3Jsa2VrZGZubmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5ODExOTcsImV4cCI6MjA5MjU1NzE5N30.Y5-_Z6Yg99i0hHQBZjTMxBFo0TONMCiicHnjkyj_AH8"
