@@ -565,7 +565,7 @@ input, select, textarea { font-family: inherit; }
   top: 58px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 500;
+  z-index: 700;
   background: white;
   border-radius: 22px;
   box-shadow: 0 2px 12px rgba(0,0,0,0.2);

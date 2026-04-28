@@ -63,6 +63,31 @@
 }
 .escala-btn-editar:active { opacity: 0.85; }
 
+.escala-acoes-moises {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.escala-btn-exportar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border-radius: 12px;
+  border: 2px solid #047857;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.escala-btn-exportar:hover { background: #d1fae5; }
+.escala-btn-exportar:active { opacity: 0.85; }
+
 .escala-edit-aviso {
   background: #fef9c3;
   border: 1px solid #fde047;

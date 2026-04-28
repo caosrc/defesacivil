@@ -178,7 +178,16 @@ function carregarDados(): EscalaData {
   return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, folgas: {}, ferias: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {}, feriadosCustom: [], percDomingoFeriado: 100, percSobreaviso: 50, percSabado: 50, descontosFolgaBanco: {}, horasExtrasSimples: {}, ajustesBanco: {} }
 }
 
+// Marca o instante da última edição local — usado para evitar que o snapshot remoto
+// (carregado em segundo plano após a montagem) sobrescreva edições recentes do Moisés.
+let _ultimaEdicaoLocalTs = 0
+function marcarEdicaoLocal() { _ultimaEdicaoLocalTs = Date.now() }
+function teveEdicaoLocalRecente(janelaMs = 60_000) {
+  return _ultimaEdicaoLocalTs > 0 && (Date.now() - _ultimaEdicaoLocalTs) < janelaMs
+}
+
 function salvarDados(data: EscalaData) {
+  marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   // Persistência remota (não bloqueia o salvamento local)
   supabase
@@ -1786,6 +1795,155 @@ function ModalAgenteCalendario({
   )
 }
 
+// ── Exportação Excel da escala mensal ─────────────────────────────
+async function exportarEscalaMensalExcel(dados: EscalaData, ano: number, mes: number) {
+  const { default: ExcelJS } = await import('exceljs')
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Defesa Civil de Ouro Branco'
+  wb.created = new Date()
+
+  const nomeMes = MESES[mes]
+  const diasNoMes = new Date(ano, mes + 1, 0).getDate()
+
+  // ── Aba 1: Calendário do mês ────────────────────────────────────
+  const wsCal = wb.addWorksheet(`Escala ${nomeMes}`, {
+    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1 },
+  })
+
+  wsCal.mergeCells('A1:E1')
+  const tit = wsCal.getCell('A1')
+  tit.value = `Escala — ${nomeMes} de ${ano} — Defesa Civil de Ouro Branco`
+  tit.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } }
+  tit.alignment = { vertical: 'middle', horizontal: 'center' }
+  tit.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F4C81' } }
+  wsCal.getRow(1).height = 28
+
+  const headerRow = wsCal.addRow(['Data', 'Dia', 'Tipo', 'Sobreaviso (📟)', 'Folga (🏠)'])
+  headerRow.eachCell(c => {
+    c.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A4B8C' } }
+    c.alignment = { vertical: 'middle', horizontal: 'center' }
+    c.border = { bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } } }
+  })
+  headerRow.height = 22
+
+  for (let d = 1; d <= diasNoMes; d++) {
+    const chave = chaveData(ano, mes, d)
+    const dt = new Date(ano, mes, d)
+    const dow = dt.getDay()
+    const nomeDia = DIAS_SEMANA_NOMES[dow]
+    let tipo = 'Útil'
+    if (ehFeriadoOuDomingo(chave, dados.feriadosCustom)) tipo = dow === 0 ? 'Domingo' : 'Feriado'
+    else if (ehSabadoComum(chave, dados.feriadosCustom)) tipo = 'Sábado'
+
+    const sobre = (dados.sobreaviso[chave] ?? []).join(', ')
+    const folga = (dados.folgas[chave] ?? []).join(', ')
+
+    const r = wsCal.addRow([
+      `${String(d).padStart(2, '0')}/${String(mes + 1).padStart(2, '0')}/${ano}`,
+      nomeDia,
+      tipo,
+      sobre || '—',
+      folga || '—',
+    ])
+    let bg: string | null = null
+    if (tipo === 'Domingo' || tipo === 'Feriado') bg = 'FFFFE4E6'
+    else if (tipo === 'Sábado') bg = 'FFFFF7E0'
+    r.eachCell((c, colNumber) => {
+      const centro = colNumber <= 3
+      c.alignment = { vertical: 'middle', horizontal: centro ? 'center' : 'left', wrapText: true }
+      c.border = { bottom: { style: 'hair', color: { argb: 'FFE5E7EB' } } }
+      if (bg) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }
+    })
+  }
+
+  wsCal.getColumn(1).width = 14
+  wsCal.getColumn(2).width = 8
+  wsCal.getColumn(3).width = 12
+  wsCal.getColumn(4).width = 38
+  wsCal.getColumn(5).width = 38
+
+  // ── Aba 2: Banco de Horas ───────────────────────────────────────
+  const wsBanco = wb.addWorksheet('Banco de Horas')
+  wsBanco.mergeCells('A1:F1')
+  const tb = wsBanco.getCell('A1')
+  tb.value = `Banco de Horas — ${nomeMes} de ${ano}`
+  tb.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } }
+  tb.alignment = { vertical: 'middle', horizontal: 'center' }
+  tb.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F4C81' } }
+  wsBanco.getRow(1).height = 28
+
+  const hRow = wsBanco.addRow(['Agente', 'Tipo', 'Calculado (h)', 'Ajuste manual (h)', 'Total (h)', 'Dias de folga'])
+  hRow.eachCell(c => {
+    c.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A4B8C' } }
+    c.alignment = { vertical: 'middle', horizontal: 'center' }
+  })
+  hRow.height = 22
+
+  const hoje = hojeStr()
+  const linhas: { nome: string; tipo: string; calc: number; ajuste: number; total: number; dias: number }[] = []
+  for (const ag of AGENTES_ESCALA) {
+    const ehExtra = AGENTES_SEM_SOBREAVISO.has(ag.nome)
+    let calc = 0
+    if (ehExtra) {
+      const horas = dados.horasExtrasSimples[ag.nome] ?? {}
+      calc = Object.values(horas).reduce((a, h) => a + h, 0)
+    } else {
+      calc = calcularBancoHoras(
+        ag.nome, dados.sobreaviso, dados.horasTrabalhadasSobreaviso,
+        dados.percDomingoFeriado, dados.percSobreaviso, dados.percSabado,
+        dados.feriadosCustom, dados.descontosFolgaBanco, dados.folgas, hoje,
+      )
+    }
+    const ajuste = dados.ajustesBanco?.[ag.nome] ?? 0
+    const total = calc + ajuste
+    const dias = Math.max(0, total) / HORAS_POR_FOLGA_BANCO
+    linhas.push({ nome: ag.nome, tipo: ehExtra ? 'Horas extras' : 'Sobreaviso', calc, ajuste, total, dias })
+  }
+  linhas.sort((a, b) => b.total - a.total)
+  let totalGeral = 0
+  for (const l of linhas) {
+    totalGeral += l.total
+    const r = wsBanco.addRow([
+      l.nome,
+      l.tipo,
+      Number(l.calc.toFixed(2)),
+      Number(l.ajuste.toFixed(2)),
+      Number(l.total.toFixed(2)),
+      Number(l.dias.toFixed(2)),
+    ])
+    r.eachCell((c, col) => {
+      c.alignment = { vertical: 'middle', horizontal: col === 1 || col === 2 ? 'left' : 'center' }
+      c.border = { bottom: { style: 'hair', color: { argb: 'FFE5E7EB' } } }
+    })
+  }
+  const totRow = wsBanco.addRow(['TOTAL', '', '', '', Number(totalGeral.toFixed(2)), Number((Math.max(0, totalGeral) / HORAS_POR_FOLGA_BANCO).toFixed(2))])
+  totRow.eachCell(c => {
+    c.font = { bold: true }
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E7EF' } }
+  })
+
+  wsBanco.getColumn(1).width = 16
+  wsBanco.getColumn(2).width = 14
+  wsBanco.getColumn(3).width = 16
+  wsBanco.getColumn(4).width = 18
+  wsBanco.getColumn(5).width = 14
+  wsBanco.getColumn(6).width = 16
+
+  // ── Download ────────────────────────────────────────────────────
+  const buffer = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `escala_${String(mes + 1).padStart(2, '0')}-${ano}_defesacivil_ourobranco.xlsx`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
 // ── Componente principal ──────────────────────────────────────────
 export default function EscalaAgentes() {
   const agora = new Date()
@@ -1838,6 +1996,9 @@ export default function EscalaAgentes() {
     let cancelado = false
     carregarDadosRemoto().then(remoto => {
       if (cancelado || !remoto) return
+      // Não sobrescreve se o usuário já fez uma edição local recente
+      // (proteção contra race condition: edição rápida antes do supabase responder).
+      if (teveEdicaoLocalRecente()) return
       setDados(remoto)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(remoto))
     })
@@ -1973,19 +2134,33 @@ export default function EscalaAgentes() {
       </div>
 
       {isMoises && (
-        <button
-          className={`escala-btn-editar ${editando ? 'ativo' : ''}`}
-          onClick={() => {
-            if (editando) {
-              setEditando(false)
-              setModalDia(null)
-            } else {
-              setPedirSenha(true)
-            }
-          }}
-        >
-          {editando ? '✅ Concluir edição' : '✏️ Editar escala'}
-        </button>
+        <div className="escala-acoes-moises">
+          <button
+            className={`escala-btn-editar ${editando ? 'ativo' : ''}`}
+            onClick={() => {
+              if (editando) {
+                setEditando(false)
+                setModalDia(null)
+              } else {
+                setPedirSenha(true)
+              }
+            }}
+          >
+            {editando ? '✅ Concluir edição' : '✏️ Editar escala'}
+          </button>
+          <button
+            className="escala-btn-exportar"
+            onClick={() => {
+              exportarEscalaMensalExcel(dados, ano, mes).catch(err => {
+                console.error('Falha ao exportar Excel:', err)
+                alert('Não foi possível gerar o arquivo Excel. Tente novamente.')
+              })
+            }}
+            title={`Baixar a escala de ${MESES[mes]}/${ano} em Excel`}
+          >
+            📊 Exportar mês em Excel
+          </button>
+        </div>
       )}
 
       {pedirSenha && (
