@@ -1,9 +1,10 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { getAgenteLogado } from './Login'
 import ModalSenha from './ModalSenha'
+import { API_BASE } from '../config'
 import './EscalaAgentes.css'
 
-const BASE = '/api'
+const BASE = `${API_BASE}/api`
 
 // ── Constantes ────────────────────────────────────────────────────
 // Todos os agentes — incluindo Moisés — participam da escala/banco de horas

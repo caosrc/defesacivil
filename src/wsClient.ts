@@ -1,3 +1,5 @@
+import { getWsUrl } from './config'
+
 type WsHandler = (msg: Record<string, unknown>) => void
 type OpenHandler = () => void
 
@@ -9,11 +11,6 @@ let manuallyClosed = false
 
 // Fila de mensagens enviadas antes do WS estar aberto
 const sendQueue: string[] = []
-
-function getWsUrl(): string {
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${location.host}/ws`
-}
 
 function flushQueue() {
   while (sendQueue.length > 0 && ws && ws.readyState === WebSocket.OPEN) {

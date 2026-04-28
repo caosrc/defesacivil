@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { adicionarMarcaDagua } from '../utils'
 import { exportarChecklistExcel, type ChecklistExportData } from '../exportExcel'
 import ModalSenha from './ModalSenha'
+import { API_BASE } from '../config'
 
-const BASE = '/api'
+const BASE = `${API_BASE}/api`
 
 const MOTORISTAS = ['Moisés', 'Arthur', 'Gustavo', 'Valteir', 'Dyonathan']
 

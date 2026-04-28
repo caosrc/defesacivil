@@ -1,7 +1,8 @@
 import type { Ocorrencia } from './types'
 import { savePending, getCachedOcorrencias } from './offline'
+import { API_BASE } from './config'
 
-const BASE = '/api'
+const BASE = `${API_BASE}/api`
 
 export async function listarOcorrencias(): Promise<Ocorrencia[]> {
   if (!navigator.onLine) {
