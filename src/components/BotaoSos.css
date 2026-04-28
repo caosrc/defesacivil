@@ -1,0 +1,130 @@
+.sos-fab {
+  position: fixed;
+  right: 14px;
+  bottom: 88px;
+  z-index: 9000;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: #fff;
+  font-size: 1.7rem;
+  font-weight: 800;
+  box-shadow: 0 8px 22px rgba(185, 28, 28, 0.5), 0 0 0 0 rgba(239, 68, 68, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: sos-fab-pulso 2s ease-out infinite;
+}
+@keyframes sos-fab-pulso {
+  0%   { box-shadow: 0 8px 22px rgba(185, 28, 28, 0.5), 0 0 0 0 rgba(239, 68, 68, 0.6); }
+  70%  { box-shadow: 0 8px 22px rgba(185, 28, 28, 0.5), 0 0 0 12px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 8px 22px rgba(185, 28, 28, 0.5), 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+.sos-fab:active { transform: scale(0.95); }
+
+.sos-fab-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 9500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.sos-fab-painel {
+  width: 100%;
+  max-width: 360px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+  animation: sos-fab-pop 0.18s ease-out;
+}
+@keyframes sos-fab-pop {
+  from { transform: scale(0.9); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+.sos-fab-tit {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #b91c1c;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+.sos-fab-sub {
+  font-size: 0.9rem;
+  color: #475569;
+  text-align: center;
+  margin: 8px 0 14px;
+  line-height: 1.4;
+}
+.sos-fab-disparar {
+  position: relative;
+  width: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  border: none;
+  background: #fee2e2;
+  color: #7f1d1d;
+  font-size: 1rem;
+  font-weight: 800;
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+.sos-fab-disparar:disabled { opacity: 0.7; }
+.sos-fab-disparar-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #dc2626, #991b1b);
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 0.06s linear;
+  z-index: 0;
+}
+.sos-fab-disparar-txt {
+  position: relative;
+  z-index: 1;
+  mix-blend-mode: difference;
+  color: #fff;
+}
+.sos-fab-cancelar {
+  width: 100%;
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sos-fab-cancelar:disabled { opacity: 0.6; }
+.sos-fab-erro {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #fef2f2;
+  color: #991b1b;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+}
+.sos-fab-ok {
+  padding: 16px;
+  background: #dcfce7;
+  color: #14532d;
+  border-radius: 12px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  text-align: center;
+  border: 1px solid #86efac;
+}

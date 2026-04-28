@@ -818,6 +818,44 @@
 }
 .escala-ferias-add:active { background: #1d4ed8; }
 
+.bh-salvar-btn {
+  background: linear-gradient(135deg, #16a34a, #15803d) !important;
+  font-size: 0.95rem !important;
+  padding: 0.85rem !important;
+  letter-spacing: 0.01em;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
+}
+.bh-salvar-btn:active { background: #15803d !important; transform: scale(0.98); }
+.bh-salvar-btn:disabled {
+  background: #94a3b8 !important;
+  opacity: 0.85;
+  box-shadow: none;
+}
+
+.bh-salvar-feedback {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: center;
+  animation: bh-feedback-in 0.25s ease-out;
+}
+.bh-salvar-feedback--ok {
+  background: #dcfce7;
+  color: #14532d;
+  border: 1px solid #86efac;
+}
+.bh-salvar-feedback--erro {
+  background: #fef3c7;
+  color: #78350f;
+  border: 1px solid #fcd34d;
+}
+@keyframes bh-feedback-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .escala-ferias-lista {
   display: flex;
   flex-direction: column;

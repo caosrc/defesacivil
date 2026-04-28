@@ -13,6 +13,8 @@ const DetalheOcorrencia = lazy(() => import('./components/DetalheOcorrencia'))
 const ChecklistViatura = lazy(() => import('./components/ChecklistViatura'))
 const EscalaAgentes = lazy(() => import('./components/EscalaAgentes'))
 const Dashboard = lazy(() => import('./components/Dashboard'))
+const SosOverlay = lazy(() => import('./components/SosOverlay'))
+const BotaoSos = lazy(() => import('./components/BotaoSos'))
 
 type Aba = 'lista' | 'mapa' | 'nova' | 'viatura' | 'escala'
 
@@ -565,6 +567,14 @@ export default function App() {
           />
         </Suspense>
       )}
+
+      {/* SOS Crítico — botão flutuante + recebimento de alertas em tempo real */}
+      <Suspense fallback={null}>
+        <BotaoSos />
+      </Suspense>
+      <Suspense fallback={null}>
+        <SosOverlay />
+      </Suspense>
     </div>
   )
 }

@@ -39,6 +39,16 @@ const MESES = [
 
 const HORAS_POR_SEMANA_SOBREAVISO = 16
 const HORAS_POR_DIA_SOBREAVISO = 4.62
+// Quantas horas cada folga marcada desconta do banco — varia por agente
+// Talita e Cristiane → 4h por folga
+// Sócrates           → 6h por folga
+// Demais             → 8h por folga (jornada padrão)
+function horasPorFolga(agente: string): number {
+  if (agente === 'Talita' || agente === 'Cristiane') return 4
+  if (agente === 'Sócrates') return 6
+  return 8
+}
+// Usado só em textos legados/genéricos quando não há agente em contexto
 const HORAS_POR_FOLGA_BANCO = 8
 
 // Feriados nacionais fixos (MM-DD)
@@ -198,6 +208,22 @@ function salvarDados(data: EscalaData) {
     })
 }
 
+// Versão que aguarda a confirmação do Supabase — usada quando precisamos
+// dar feedback visual ao agente (ex.: botão "Salvar horas extras").
+async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensagem?: string }> {
+  marcarEdicaoLocal()
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  try {
+    const { error } = await supabase
+      .from(TABELA_ESCALA)
+      .upsert({ id: 1, data, updated_at: new Date().toISOString() })
+    if (error) return { ok: false, mensagem: error.message }
+    return { ok: true }
+  } catch (e: any) {
+    return { ok: false, mensagem: e?.message || 'Falha ao enviar para o servidor' }
+  }
+}
+
 async function carregarDadosRemoto(): Promise<EscalaData | null> {
   const { data, error } = await supabase
     .from(TABELA_ESCALA)
@@ -332,8 +358,10 @@ function calcularBancoHoras(
     return acc + (h * multiplicadorDia(data, percDomFer, percSb, percSabado, feriadosCustom))
   }, 0)
   const descontosLegado = Object.values(descontosFolgaBanco[agente] ?? {}).reduce((acc, h) => acc + h, 0)
-  // Toda folga marcada (passada ou futura) já desconta do banco
-  const descontosFolgas = folgasDoAgente(agente, folgas).length * HORAS_POR_FOLGA_BANCO
+  // Toda folga marcada (passada ou futura) já desconta do banco —
+  // quantidade de horas por folga depende do agente (4h Talita/Cristiane,
+  // 6h Sócrates, 8h demais).
+  const descontosFolgas = folgasDoAgente(agente, folgas).length * horasPorFolga(agente)
   return Math.max(0, horasFlat + horasExtras - descontosLegado - descontosFolgas)
 }
 
@@ -562,7 +590,7 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
     }
 
     const descontos = Object.values(descontosAgente).reduce((acc, h) => acc + h, 0)
-    const descontosAuto = folgasConsumidas.length * HORAS_POR_FOLGA_BANCO
+    const descontosAuto = folgasConsumidas.length * horasPorFolga(agente)
     return { horasSobreaviso: base + extSb, horasSabado: extSab, horasDomFer: extDF, descontosFolga: descontos, descontosAuto }
   }, [semanasDoAgente, horasAgente, descontosAgente, folgasConsumidas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, hoje])
 
@@ -775,7 +803,7 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
                 <div key={`auto-${data}`} className="bh-domfer-row desconto">
                   <span className="bh-domfer-dia">Folga</span>
                   <span className="bh-domfer-data">{fmtDataLonga(data)}</span>
-                  <span className="bh-domfer-calc">- {fmtH(HORAS_POR_FOLGA_BANCO)}h</span>
+                  <span className="bh-domfer-calc">- {fmtH(horasPorFolga(agente))}h</span>
                 </div>
               ))}
             {Object.entries(descontosAgente)
@@ -803,29 +831,49 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
 interface BancoHorasExtraSimplesProps {
   agente: string
   horasExtrasSimples: Record<string, Record<string, number>>
-  onUpdateHora: (data: string, horas: number) => void
+  onSalvarHora: (data: string, horas: number) => Promise<{ ok: boolean; mensagem?: string }>
 }
 
-function BancoHorasExtraSimples({ agente, horasExtrasSimples, onUpdateHora }: BancoHorasExtraSimplesProps) {
+function BancoHorasExtraSimples({ agente, horasExtrasSimples, onSalvarHora }: BancoHorasExtraSimplesProps) {
   const info = AGENTE_MAP[agente]
   const horasAgente = horasExtrasSimples[agente] ?? {}
   const [novaData, setNovaData] = useState<string>(hojeStr())
   const [novasHoras, setNovasHoras] = useState<string>('')
   const [erro, setErro] = useState<string>('')
+  const [salvando, setSalvando] = useState(false)
+  const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
 
   const total = Object.values(horasAgente).reduce((acc, h) => acc + h, 0)
   const entradas = Object.entries(horasAgente).sort(([a], [b]) => b.localeCompare(a))
 
-  function adicionar() {
+  function mostrarFeedback(tipo: 'ok' | 'erro', texto: string) {
+    setFeedback({ tipo, texto })
+    setTimeout(() => setFeedback(null), 4000)
+  }
+
+  async function salvar() {
     const h = parseFloat(novasHoras)
     if (!novaData || isNaN(h) || h <= 0) {
       setErro('Informe uma data e uma quantidade de horas válida.')
       return
     }
     setErro('')
+    setSalvando(true)
     const atual = horasAgente[novaData] ?? 0
-    onUpdateHora(novaData, Math.min(24, atual + h))
-    setNovasHoras('')
+    const resultado = await onSalvarHora(novaData, Math.min(24, atual + h))
+    setSalvando(false)
+    if (resultado.ok) {
+      setNovasHoras('')
+      mostrarFeedback('ok', `✅ ${fmtH(h)}h salvas no banco de dados (${fmtDataLonga(novaData)})`)
+    } else {
+      mostrarFeedback('erro', `⚠️ Salvo localmente. Falha ao enviar ao servidor: ${resultado.mensagem ?? 'erro desconhecido'}`)
+    }
+  }
+
+  async function removerLinha(data: string) {
+    setSalvando(true)
+    await onSalvarHora(data, 0)
+    setSalvando(false)
   }
 
   return (
@@ -867,7 +915,14 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, onUpdateHora }: Ba
             </div>
           </div>
           {erro && <span className="escala-ferias-erro">{erro}</span>}
-          <button className="escala-ferias-add" onClick={adicionar}>+ Adicionar horas</button>
+          <button className="escala-ferias-add bh-salvar-btn" onClick={salvar} disabled={salvando}>
+            {salvando ? '⏳ Salvando no banco de dados…' : '💾 Salvar horas no banco de dados'}
+          </button>
+          {feedback && (
+            <div className={`bh-salvar-feedback bh-salvar-feedback--${feedback.tipo}`}>
+              {feedback.texto}
+            </div>
+          )}
         </div>
 
         {entradas.length === 0 ? (
@@ -887,7 +942,8 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, onUpdateHora }: Ba
                   <span className="bh-domfer-calc">= {fmtH(h)}h</span>
                   <button
                     className="escala-ferias-remover"
-                    onClick={() => onUpdateHora(data, 0)}
+                    onClick={() => removerLinha(data)}
+                    disabled={salvando}
                     title="Remover"
                   >✕</button>
                 </div>
@@ -931,19 +987,21 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
       const calculado = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
       const ajuste = ajustesBanco[ag.nome] ?? 0
       const total = calculado + ajuste
-      // Dias de folga disponíveis = total de horas no banco / 8h por folga
-      const diasFolga = Math.max(0, total) / HORAS_POR_FOLGA_BANCO
+      // Dias de folga disponíveis = total de horas no banco ÷ horas por folga do agente
+      const horasFolga = horasPorFolga(ag.nome)
+      const diasFolga = Math.max(0, total) / horasFolga
       const desobreaviso = (sobreavisoSemanal[hoje] ?? []).includes(ag.nome)
       const temFolga = (folgas[hoje] ?? []).includes(ag.nome)
-      return { ...ag, total, calculado, ajuste, diasFolga, desobreaviso, temFolga, tipo: 'sobreaviso' as const }
+      return { ...ag, total, calculado, ajuste, diasFolga, horasFolga, desobreaviso, temFolga, tipo: 'sobreaviso' as const }
     })
     const extras = AGENTES_HORAS_EXTRAS.map(ag => {
       const horas = horasExtrasSimples[ag.nome] ?? {}
       const calculado = Object.values(horas).reduce((acc, h) => acc + h, 0)
       const ajuste = ajustesBanco[ag.nome] ?? 0
       const total = calculado + ajuste
-      const diasFolga = Math.max(0, total) / HORAS_POR_FOLGA_BANCO
-      return { ...ag, total, calculado, ajuste, diasFolga, desobreaviso: false, temFolga: false, tipo: 'extras' as const }
+      const horasFolga = horasPorFolga(ag.nome)
+      const diasFolga = Math.max(0, total) / horasFolga
+      return { ...ag, total, calculado, ajuste, diasFolga, horasFolga, desobreaviso: false, temFolga: false, tipo: 'extras' as const }
     })
     return [...sobreaviso, ...extras].sort((a, b) => b.total - a.total)
   }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, hoje])
@@ -1005,7 +1063,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
                       </span>
                     )}
                   </span>
-                  <span className="bh-moises-semanas" title={`${ag.total.toFixed(2)}h ÷ ${HORAS_POR_FOLGA_BANCO}h = ${ag.diasFolga.toFixed(2)} dias de folga`}>
+                  <span className="bh-moises-semanas" title={`${ag.total.toFixed(2)}h ÷ ${ag.horasFolga}h = ${ag.diasFolga.toFixed(2)} dias de folga`}>
                     {ag.diasFolga % 1 === 0 ? ag.diasFolga : ag.diasFolga.toFixed(1)} dia{ag.diasFolga === 1 ? '' : 's'} de folga ✏️
                   </span>
                 </button>
@@ -1019,7 +1077,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
                       </span>
                     )}
                   </span>
-                  <span className="bh-moises-semanas" title={`${ag.total.toFixed(2)}h ÷ ${HORAS_POR_FOLGA_BANCO}h = ${ag.diasFolga.toFixed(2)} dias de folga`}>
+                  <span className="bh-moises-semanas" title={`${ag.total.toFixed(2)}h ÷ ${ag.horasFolga}h = ${ag.diasFolga.toFixed(2)} dias de folga`}>
                     {ag.diasFolga % 1 === 0 ? ag.diasFolga : ag.diasFolga.toFixed(1)} dia{ag.diasFolga === 1 ? '' : 's'} de folga
                   </span>
                 </div>
@@ -1029,7 +1087,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
         ))}
       </div>
       <div className="bh-moises-rodape">
-        {HORAS_POR_DIA_SOBREAVISO}h por dia de sobreaviso · Dias úteis ×{(1 + percSobreaviso / 100).toFixed(1)} · Sábado ×{(1 + percSabado / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)} · cada folga marcada desconta {HORAS_POR_FOLGA_BANCO}h · "dias de folga" = total ÷ {HORAS_POR_FOLGA_BANCO}h
+        {HORAS_POR_DIA_SOBREAVISO}h por dia de sobreaviso · Dias úteis ×{(1 + percSobreaviso / 100).toFixed(1)} · Sábado ×{(1 + percSabado / 100).toFixed(1)} · Dom/Feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)} · folga: -8h padrão · -4h Talita/Cristiane · -6h Sócrates
       </div>
 
       {editando && (() => {
@@ -1157,7 +1215,7 @@ function ModalDia({ data, selecionados, folgasSelecionadas, ferias, onSalvar, on
           })}
         </div>
 
-        <p className="escala-modal-sub" style={{ marginTop: 16 }}>🏠 Folga (desconta {HORAS_POR_FOLGA_BANCO}h do banco ao passar do dia):</p>
+        <p className="escala-modal-sub" style={{ marginTop: 16 }}>🏠 Folga (desconta horas do banco ao passar do dia — varia por agente: 8h padrão, 4h Talita/Cristiane, 6h Sócrates):</p>
         <div className="escala-modal-lista">
           {AGENTES_ESCALA.map(ag => {
             const emFerias = agenteEmFerias(ag.nome, data, ferias)
@@ -1898,7 +1956,8 @@ async function exportarEscalaMensalExcel(dados: EscalaData, ano: number, mes: nu
     }
     const ajuste = dados.ajustesBanco?.[ag.nome] ?? 0
     const total = calc + ajuste
-    const dias = Math.max(0, total) / HORAS_POR_FOLGA_BANCO
+    // Cada agente pode ter horas/folga diferentes (Talita/Cristiane = 4h, Sócrates = 6h, demais = 8h)
+    const dias = Math.max(0, total) / horasPorFolga(ag.nome)
     linhas.push({ nome: ag.nome, tipo: ehExtra ? 'Horas extras' : 'Sobreaviso', calc, ajuste, total, dias })
   }
   linhas.sort((a, b) => b.total - a.total)
@@ -2106,7 +2165,7 @@ export default function EscalaAgentes() {
     salvarDados(novos)
   }
 
-  function atualizarHoraExtraSimples(data: string, horas: number) {
+  async function salvarHoraExtraSimples(data: string, horas: number): Promise<{ ok: boolean; mensagem?: string }> {
     const agenteHoras = { ...(dados.horasExtrasSimples[agenteLogado] ?? {}) }
     if (horas === 0) {
       delete agenteHoras[data]
@@ -2121,7 +2180,7 @@ export default function EscalaAgentes() {
       },
     }
     setDados(novos)
-    salvarDados(novos)
+    return await salvarDadosAsync(novos)
   }
 
   return (
@@ -2174,7 +2233,7 @@ export default function EscalaAgentes() {
 
       {editando && isMoises && (
         <div className="escala-edit-aviso">
-          👆 Toque no <strong>nome do agente na legenda abaixo</strong> para escolher os dias dele de sobreaviso (gera {HORAS_POR_DIA_SOBREAVISO}h/dia) e de folga (desconta {HORAS_POR_FOLGA_BANCO}h ao passar do dia).
+          👆 Toque no <strong>nome do agente na legenda abaixo</strong> para escolher os dias dele de sobreaviso (gera {HORAS_POR_DIA_SOBREAVISO}h/dia) e de folga (desconta 8h padrão · 4h Talita/Cristiane · 6h Sócrates ao passar do dia).
         </div>
       )}
 
@@ -2219,7 +2278,7 @@ export default function EscalaAgentes() {
         <BancoHorasExtraSimples
           agente={agenteLogado}
           horasExtrasSimples={dados.horasExtrasSimples}
-          onUpdateHora={atualizarHoraExtraSimples}
+          onSalvarHora={salvarHoraExtraSimples}
         />
       )}
 
