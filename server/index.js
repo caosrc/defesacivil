@@ -42,7 +42,7 @@ function broadcastParaTodos(payload, excluirWs = null) {
 
 // Mapa de alertas SOS ativos (persiste para agentes que conectam depois)
 const sosAtivos = new Map()
-const SOS_TTL_MS = 60 * 60 * 1000 // 1 hora
+const SOS_TTL_MS = 10 * 60 * 1000 // 10 minutos
 
 wss.on('connection', (ws) => {
   todosConectados.add(ws)

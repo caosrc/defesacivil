@@ -168,9 +168,6 @@ export default function BotaoSos({ modo = 'fab' }: Props) {
         >
           <div className={modo === 'botao' ? 'sos-fab-painel sos-fab-painel--mapa' : 'sos-fab-painel'} onClick={(e) => e.stopPropagation()}>
             <div className="sos-fab-tit">🆘 SOS CRÍTICO</div>
-            <div className="sos-fab-sub">
-              Vai disparar alerta para <strong>todos os agentes</strong>, com sua localização, bateria e gravação de 10s de áudio.
-            </div>
 
             {enviado ? (
               <>

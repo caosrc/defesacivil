@@ -128,11 +128,8 @@ function SosCard({
           <button className="sos-btn sos-btn-secundario" onClick={onDispensar}>
             ✅ Dispensar alerta
           </button>
-          <button className="sos-btn sos-btn-falso" onClick={onDispensar}>
-            🚫 Falso alarme — cancelar para todos
-          </button>
         </div>
-        <div className="sos-rodape">Auto-encerra em até 1h se não for dispensado</div>
+        <div className="sos-rodape">Auto-encerra em até 10 min se não for dispensado</div>
       </div>
     </div>
   )

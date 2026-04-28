@@ -11,7 +11,7 @@ export interface SosAlerta {
   timestamp: number
 }
 
-const TTL_MS = 60 * 60 * 1000
+const TTL_MS = 10 * 60 * 1000
 
 async function lerBateria(): Promise<number | null> {
   try {
@@ -150,11 +150,11 @@ export function useSosListener() {
     setAlertas(prev => prev.filter(x => x.id !== id))
   }
 
-  async function dispensar(id: string) {
+  // Dispensar é LOCAL: só some para o agente que clicou. Não cancela para os outros.
+  // Apenas o agente que disparou o SOS (via BotaoSos.cancelarSosEnviado) pode
+  // cancelar para todos enviando "sos-cancelar".
+  function dispensar(id: string) {
     removerLocal(id)
-    try {
-      wsSend({ tipo: 'sos-cancelar', id })
-    } catch {}
   }
 
   return { alertas, dispensar }
