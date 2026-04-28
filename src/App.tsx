@@ -561,10 +561,12 @@ export default function App() {
         </Suspense>
       )}
 
-      {/* SOS Crítico — botão flutuante + recebimento de alertas em tempo real */}
-      <Suspense fallback={null}>
-        <BotaoSos />
-      </Suspense>
+      {/* SOS Crítico — FAB oculto na aba mapa (botão fica no topbar do mapa) */}
+      {aba !== 'mapa' && (
+        <Suspense fallback={null}>
+          <BotaoSos />
+        </Suspense>
+      )}
       <Suspense fallback={null}>
         <SosOverlay />
       </Suspense>

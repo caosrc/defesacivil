@@ -135,6 +135,12 @@
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.4);
 }
+.sos-btn-falso {
+  background: rgba(0, 0, 0, 0.45);
+  color: #fca5a5;
+  border: 1px solid rgba(252, 165, 165, 0.5);
+  font-size: 0.9rem;
+}
 
 .sos-rodape {
   text-align: center;

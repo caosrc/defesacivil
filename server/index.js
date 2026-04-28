@@ -40,6 +40,10 @@ function broadcastParaTodos(payload, excluirWs = null) {
   }
 }
 
+// Mapa de alertas SOS ativos (persiste para agentes que conectam depois)
+const sosAtivos = new Map()
+const SOS_TTL_MS = 60 * 60 * 1000 // 1 hora
+
 wss.on('connection', (ws) => {
   todosConectados.add(ws)
   let dispositivoId = null
@@ -53,6 +57,16 @@ wss.on('connection', (ws) => {
   }
   if (posicoeAtuais.length > 0) {
     ws.send(JSON.stringify({ tipo: 'posicoes_iniciais', posicoes: posicoeAtuais }))
+  }
+
+  // Envia alertas SOS ativos para quem acabou de conectar
+  const agora = Date.now()
+  const sosValidos = []
+  for (const [, alerta] of sosAtivos) {
+    if (agora - alerta.timestamp < SOS_TTL_MS) sosValidos.push(alerta)
+  }
+  if (sosValidos.length > 0) {
+    ws.send(JSON.stringify({ tipo: 'sos_persistidos', alertas: sosValidos }))
   }
 
   ws.on('message', (data) => {
@@ -94,8 +108,18 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ tipo: 'pong' }))
       }
 
-      // SOS broadcast — retransmite para todos exceto o remetente
-      if (msg.tipo === 'sos' || msg.tipo === 'sos-audio' || msg.tipo === 'sos-cancelar') {
+      // SOS broadcast — retransmite para todos e persiste para novos agentes
+      if (msg.tipo === 'sos') {
+        sosAtivos.set(msg.id, { ...msg })
+        broadcastParaTodos(msg, ws)
+      }
+      if (msg.tipo === 'sos-audio') {
+        const existente = sosAtivos.get(msg.id)
+        if (existente) sosAtivos.set(msg.id, { ...existente, audio: msg.audio })
+        broadcastParaTodos(msg, ws)
+      }
+      if (msg.tipo === 'sos-cancelar') {
+        sosAtivos.delete(msg.id)
         broadcastParaTodos(msg, ws)
       }
     } catch { /* ignora mensagens malformadas */ }

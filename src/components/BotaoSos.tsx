@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { dispararSos } from '../sos'
+import { wsSend } from '../wsClient'
 import './BotaoSos.css'
 
 function getNomeAgente(): string {
@@ -11,32 +12,52 @@ function getNomeAgente(): string {
 }
 
 const SEGURAR_MS = 1500
+const VOLUME_HOLD_MS = 3000
 
-export default function BotaoSos() {
+interface Props {
+  modo?: 'fab' | 'botao'
+}
+
+export default function BotaoSos({ modo = 'fab' }: Props) {
   const [aberto, setAberto] = useState(false)
   const [confirmando, setConfirmando] = useState(false)
   const [progresso, setProgresso] = useState(0)
   const [enviando, setEnviando] = useState(false)
   const [enviado, setEnviado] = useState(false)
+  const [idEnviado, setIdEnviado] = useState<string | null>(null)
   const [erro, setErro] = useState('')
+  const [volumeProgresso, setVolumeProgresso] = useState(0)
   const seguraRef = useRef<{ start: number; raf: number; timer: number } | null>(null)
+  const volumeRef = useRef<{ start: number; raf: number; timer: number } | null>(null)
 
   async function disparar() {
     setEnviando(true)
     setErro('')
     try {
-      await dispararSos(getNomeAgente())
+      const alerta = await dispararSos(getNomeAgente())
+      setIdEnviado(alerta.id)
       setEnviado(true)
-      setTimeout(() => {
-        setEnviado(false)
-        setConfirmando(false)
-        setAberto(false)
-      }, 2500)
     } catch (e: any) {
       setErro(e?.message || 'Falha ao enviar SOS')
     } finally {
       setEnviando(false)
     }
+  }
+
+  function fechar() {
+    setAberto(false)
+    setConfirmando(false)
+    limparSegurar()
+    setEnviado(false)
+    setIdEnviado(null)
+    setErro('')
+  }
+
+  function cancelarSosEnviado() {
+    if (idEnviado) {
+      try { wsSend({ tipo: 'sos-cancelar', id: idEnviado }) } catch {}
+    }
+    fechar()
   }
 
   function limparSegurar() {
@@ -65,34 +86,83 @@ export default function BotaoSos() {
     seguraRef.current = { start, raf, timer }
   }
 
-  // Atalho: tecla volume +/- aciona o painel de confirmação
+  // Volume menos — segurar 3 segundos dispara SOS direto (sem abrir painel)
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'AudioVolumeUp' || e.key === 'AudioVolumeDown') {
-        e.preventDefault()
-        if (!aberto && !confirmando) {
-          setAberto(true)
-          setConfirmando(true)
+    function limparVolume() {
+      if (!volumeRef.current) return
+      cancelAnimationFrame(volumeRef.current.raf)
+      clearTimeout(volumeRef.current.timer)
+      volumeRef.current = null
+      setVolumeProgresso(0)
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'AudioVolumeDown') return
+      e.preventDefault()
+      if (e.repeat || volumeRef.current) return
+      const start = performance.now()
+      const tick = () => {
+        const pct = Math.min(1, (performance.now() - start) / VOLUME_HOLD_MS)
+        setVolumeProgresso(pct)
+        if (pct < 1 && volumeRef.current) {
+          volumeRef.current.raf = requestAnimationFrame(tick)
+        }
+      }
+      const raf = requestAnimationFrame(tick)
+      const timer = window.setTimeout(() => {
+        limparVolume()
+        disparar()
+      }, VOLUME_HOLD_MS)
+      volumeRef.current = { start, raf, timer }
+    }
+
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key === 'AudioVolumeDown') {
+        if (volumeRef.current) {
+          cancelAnimationFrame(volumeRef.current.raf)
+          clearTimeout(volumeRef.current.timer)
+          volumeRef.current = null
+          setVolumeProgresso(0)
         }
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [aberto, confirmando])
+
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('keyup', onKeyUp)
+      if (volumeRef.current) {
+        cancelAnimationFrame(volumeRef.current.raf)
+        clearTimeout(volumeRef.current.timer)
+        volumeRef.current = null
+      }
+    }
+  }, [])
 
   return (
     <>
+      {/* Indicador visual quando volume menos está sendo segurado */}
+      {volumeProgresso > 0 && (
+        <div className="sos-volume-indicator">
+          <div className="sos-volume-fill" style={{ width: `${volumeProgresso * 100}%` }} />
+          <span className="sos-volume-txt">
+            🆘 Segure… {Math.round(volumeProgresso * 100)}%
+          </span>
+        </div>
+      )}
+
       <button
-        className="sos-fab"
+        className={modo === 'fab' ? 'sos-fab' : 'sos-botao-inline'}
         title="SOS Crítico — toque para abrir"
         onClick={() => { setAberto(true); setConfirmando(true) }}
         aria-label="SOS Crítico"
       >
-        🆘
+        🆘{modo === 'botao' && <span className="sos-botao-inline-txt"> SOS</span>}
       </button>
 
       {aberto && (
-        <div className="sos-fab-modal" onClick={() => { if (!enviando) { setAberto(false); setConfirmando(false); limparSegurar() } }}>
+        <div className="sos-fab-modal" onClick={() => { if (!enviando) fechar() }}>
           <div className="sos-fab-painel" onClick={(e) => e.stopPropagation()}>
             <div className="sos-fab-tit">🆘 SOS CRÍTICO</div>
             <div className="sos-fab-sub">
@@ -100,7 +170,16 @@ export default function BotaoSos() {
             </div>
 
             {enviado ? (
-              <div className="sos-fab-ok">✅ Alerta enviado a todos os agentes</div>
+              <>
+                <div className="sos-fab-ok">✅ Alerta enviado a todos os agentes</div>
+                <button
+                  className="sos-fab-cancelar sos-fab-cancelar--falso"
+                  onClick={cancelarSosEnviado}
+                  style={{ marginTop: 10 }}
+                >
+                  🚫 Falso alarme — cancelar para todos
+                </button>
+              </>
             ) : (
               <>
                 <button
@@ -118,7 +197,7 @@ export default function BotaoSos() {
                     {enviando ? '⏳ Enviando…' : progresso > 0 ? `Segure… ${Math.round(progresso * 100)}%` : '👆 Segure 1,5s para disparar'}
                   </span>
                 </button>
-                <button className="sos-fab-cancelar" onClick={() => { setAberto(false); setConfirmando(false); limparSegurar() }} disabled={enviando}>
+                <button className="sos-fab-cancelar" onClick={fechar} disabled={enviando}>
                   Cancelar
                 </button>
                 {erro && <div className="sos-fab-erro">⚠️ {erro}</div>}

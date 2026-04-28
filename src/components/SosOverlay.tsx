@@ -44,14 +44,31 @@ export default function SosOverlay() {
   return (
     <div className="sos-overlay">
       {alertas.map((a) => (
-        <SosCard key={a.id} alerta={a} agora={agora} onDispensar={() => dispensar(a.id)} />
+        <SosCard
+          key={a.id}
+          alerta={a}
+          agora={agora}
+          onDispensar={() => dispensar(a.id)}
+          onSilenciar={() => { pararSirene(); tocandoRef.current = false }}
+        />
       ))}
     </div>
   )
 }
 
-function SosCard({ alerta, agora, onDispensar }: { alerta: SosAlerta; agora: number; onDispensar: () => void }) {
+function SosCard({
+  alerta,
+  agora,
+  onDispensar,
+  onSilenciar,
+}: {
+  alerta: SosAlerta
+  agora: number
+  onDispensar: () => void
+  onSilenciar: () => void
+}) {
   const temGps = alerta.lat != null && alerta.lng != null
+
   return (
     <div className="sos-card">
       <div className="sos-card-pisca" />
@@ -85,7 +102,12 @@ function SosCard({ alerta, agora, onDispensar }: { alerta: SosAlerta; agora: num
           {alerta.audio ? (
             <div className="sos-info-audio">
               <span>🎙️ Áudio capturado (10s):</span>
-              <audio controls src={alerta.audio} preload="auto" />
+              <audio
+                controls
+                src={alerta.audio}
+                preload="auto"
+                onPlay={onSilenciar}
+              />
             </div>
           ) : (
             <div className="sos-info-linha sos-info-aguarde">
@@ -104,7 +126,10 @@ function SosCard({ alerta, agora, onDispensar }: { alerta: SosAlerta; agora: num
             </button>
           )}
           <button className="sos-btn sos-btn-secundario" onClick={onDispensar}>
-            Dispensar alerta
+            ✅ Dispensar alerta
+          </button>
+          <button className="sos-btn sos-btn-falso" onClick={onDispensar}>
+            🚫 Falso alarme — cancelar para todos
           </button>
         </div>
         <div className="sos-rodape">Auto-encerra em até 1h se não for dispensado</div>

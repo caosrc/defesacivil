@@ -92,16 +92,25 @@ export function useSosListener() {
   const [alertas, setAlertas] = useState<SosAlerta[]>([])
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
+  function adicionarAlerta(a: SosAlerta) {
+    if (!a?.id) return
+    setAlertas((prev) => {
+      if (prev.find(x => x.id === a.id)) return prev
+      return [...prev, a]
+    })
+    const t = setTimeout(() => removerLocal(a.id), TTL_MS)
+    timersRef.current.set(a.id, t)
+  }
+
   useEffect(() => {
     const offSos = wsOn('sos', (msg) => {
-      const a = msg as unknown as SosAlerta
-      if (!a?.id) return
-      setAlertas((prev) => {
-        if (prev.find(x => x.id === a.id)) return prev
-        return [...prev, a]
-      })
-      const t = setTimeout(() => removerLocal(a.id), TTL_MS)
-      timersRef.current.set(a.id, t)
+      adicionarAlerta(msg as unknown as SosAlerta)
+    })
+
+    const offPersistidos = wsOn('sos_persistidos', (msg) => {
+      const lista = (msg as any).alertas as SosAlerta[]
+      if (!Array.isArray(lista)) return
+      lista.forEach(a => adicionarAlerta(a))
     })
 
     const offAudio = wsOn('sos-audio', (msg) => {
@@ -117,6 +126,7 @@ export function useSosListener() {
 
     return () => {
       offSos()
+      offPersistidos()
       offAudio()
       offCancelar()
       timersRef.current.forEach(t => clearTimeout(t))

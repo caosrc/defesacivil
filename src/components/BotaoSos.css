@@ -128,3 +128,61 @@
   text-align: center;
   border: 1px solid #86efac;
 }
+.sos-fab-cancelar--falso {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1.5px solid #fca5a5;
+  font-size: 0.93rem;
+}
+.sos-fab-cancelar--falso:hover { background: #fecaca; }
+
+/* Botão inline (dentro do mapa ao lado de Legenda) */
+.sos-botao-inline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 2px solid #ef4444;
+  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(185, 28, 28, 0.35);
+  animation: sos-fab-pulso 2s ease-out infinite;
+  white-space: nowrap;
+}
+.sos-botao-inline:active { transform: scale(0.95); }
+.sos-botao-inline-txt { font-size: 0.82rem; letter-spacing: 0.04em; }
+
+/* Indicador visual de progresso volume menos */
+.sos-volume-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 99998;
+  height: 36px;
+  background: #7f1d1d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.sos-volume-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, #dc2626, #ef4444);
+  transition: width 0.1s linear;
+}
+.sos-volume-txt {
+  position: relative;
+  z-index: 1;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}

@@ -22,6 +22,7 @@ import {
 } from '../malhaViaria'
 import { mensagemErroGps } from '../utils'
 import { wsOn, wsSend } from '../wsClient'
+import BotaoSos from './BotaoSos'
 
 // Fix leaflet default marker icons
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -975,6 +976,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
         <button className="mapa-legenda-btn" onClick={() => setLegendaAberta((v) => !v)}>
           🗂 Legenda
         </button>
+        <BotaoSos modo="botao" />
       </div>
 
       <div className="mapa-camadas" aria-label="Escolher visualização do mapa">
