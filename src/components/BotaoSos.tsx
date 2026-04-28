@@ -13,6 +13,10 @@ function getNomeAgente(): string {
 
 const SEGURAR_MS = 1500
 const VOLUME_HOLD_MS = 3000
+const COOLDOWN_MS = 30000
+const SHAKE_THRESHOLD = 22
+const SHAKE_WINDOW_MS = 1500
+const SHAKE_REQUIRED = 4
 
 interface Props {
   modo?: 'fab' | 'botao'
@@ -27,8 +31,10 @@ export default function BotaoSos({ modo = 'fab' }: Props) {
   const [idEnviado, setIdEnviado] = useState<string | null>(null)
   const [erro, setErro] = useState('')
   const [volumeProgresso, setVolumeProgresso] = useState(0)
+  const [avisoRapido, setAvisoRapido] = useState<string | null>(null)
   const seguraRef = useRef<{ start: number; raf: number; timer: number } | null>(null)
   const volumeRef = useRef<{ start: number; raf: number; timer: number } | null>(null)
+  const ultimoDisparoRef = useRef<number>(0)
 
   async function disparar() {
     setEnviando(true)
@@ -41,6 +47,25 @@ export default function BotaoSos({ modo = 'fab' }: Props) {
       setErro(e?.message || 'Falha ao enviar SOS')
     } finally {
       setEnviando(false)
+    }
+  }
+
+  // Disparo automático (volume / chacoalhar) — abre painel já no estado "enviado"
+  // e respeita cooldown de 30s para não disparar duas vezes seguidas.
+  async function dispararAutomatico(origem: 'volume' | 'chacoalhar') {
+    const agora = Date.now()
+    if (agora - ultimoDisparoRef.current < COOLDOWN_MS) return
+    ultimoDisparoRef.current = agora
+    setAvisoRapido(origem === 'volume' ? '🆘 SOS pelo volume…' : '🆘 SOS por chacoalhar…')
+    setTimeout(() => setAvisoRapido(null), 3500)
+    setAberto(true)
+    setConfirmando(false)
+    try {
+      const alerta = await dispararSos(getNomeAgente())
+      setIdEnviado(alerta.id)
+      setEnviado(true)
+    } catch (e: any) {
+      setErro(e?.message || 'Falha ao enviar SOS')
     }
   }
 
@@ -86,9 +111,9 @@ export default function BotaoSos({ modo = 'fab' }: Props) {
     seguraRef.current = { start, raf, timer }
   }
 
-  // Volume menos — segurar 3 segundos dispara SOS direto (sem abrir painel).
-  // Aviso: a maioria dos navegadores em celular NÃO recebe esse evento porque
-  // o sistema operacional intercepta os botões físicos antes de chegar no app.
+  // Volume menos — segurar 3 segundos dispara SOS direto.
+  // Aviso: a maioria dos navegadores em celular NÃO recebe esse evento
+  // porque o sistema operacional intercepta os botões físicos.
   useEffect(() => {
     function limparVolume() {
       if (!volumeRef.current) return
@@ -113,7 +138,7 @@ export default function BotaoSos({ modo = 'fab' }: Props) {
       const raf = requestAnimationFrame(tick)
       const timer = window.setTimeout(() => {
         limparVolume()
-        disparar()
+        dispararAutomatico('volume')
       }, VOLUME_HOLD_MS)
       volumeRef.current = { start, raf, timer }
     }
@@ -142,10 +167,79 @@ export default function BotaoSos({ modo = 'fab' }: Props) {
     }
   }, [])
 
+  // Chacoalhar o celular — atalho que funciona em iPhone e Android.
+  // Requer 4 chacoalhadas fortes em até 1,5s para evitar disparo acidental.
+  useEffect(() => {
+    let attached = false
+    let chacoalhadas = 0
+    let janelaInicio = 0
+
+    function onMotion(e: DeviceMotionEvent) {
+      const a = e.accelerationIncludingGravity
+      if (!a) return
+      const x = a.x ?? 0, y = a.y ?? 0, z = a.z ?? 0
+      const total = Math.sqrt(x * x + y * y + z * z)
+      if (total < SHAKE_THRESHOLD) return
+      const agora = performance.now()
+      if (agora - janelaInicio > SHAKE_WINDOW_MS) {
+        janelaInicio = agora
+        chacoalhadas = 1
+      } else {
+        chacoalhadas += 1
+        if (chacoalhadas >= SHAKE_REQUIRED) {
+          chacoalhadas = 0
+          janelaInicio = 0
+          dispararAutomatico('chacoalhar')
+        }
+      }
+    }
+
+    function ativar() {
+      if (attached) return
+      attached = true
+      window.addEventListener('devicemotion', onMotion)
+    }
+
+    async function pedirPermissaoESeguir() {
+      const DM: any = (window as any).DeviceMotionEvent
+      if (DM && typeof DM.requestPermission === 'function') {
+        try {
+          const r = await DM.requestPermission()
+          if (r === 'granted') ativar()
+        } catch { /* ignore */ }
+      } else {
+        ativar()
+      }
+    }
+
+    function onPrimeiroToque() {
+      document.removeEventListener('click', onPrimeiroToque)
+      document.removeEventListener('touchstart', onPrimeiroToque)
+      pedirPermissaoESeguir()
+    }
+
+    document.addEventListener('click', onPrimeiroToque, { once: true })
+    document.addEventListener('touchstart', onPrimeiroToque, { once: true })
+
+    return () => {
+      document.removeEventListener('click', onPrimeiroToque)
+      document.removeEventListener('touchstart', onPrimeiroToque)
+      if (attached) window.removeEventListener('devicemotion', onMotion)
+    }
+  }, [])
+
   return (
     <>
+      {/* Aviso rápido quando SOS dispara por volume ou chacoalhar */}
+      {avisoRapido && (
+        <div className="sos-volume-indicator">
+          <div className="sos-volume-fill" style={{ width: '100%' }} />
+          <span className="sos-volume-txt">{avisoRapido}</span>
+        </div>
+      )}
+
       {/* Indicador visual quando volume menos está sendo segurado */}
-      {volumeProgresso > 0 && (
+      {volumeProgresso > 0 && !avisoRapido && (
         <div className="sos-volume-indicator">
           <div className="sos-volume-fill" style={{ width: `${volumeProgresso * 100}%` }} />
           <span className="sos-volume-txt">
