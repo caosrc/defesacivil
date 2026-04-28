@@ -136,7 +136,7 @@
 }
 .sos-fab-cancelar--falso:hover { background: #fecaca; }
 
-/* Botão inline (dentro do mapa ao lado de Legenda) */
+/* Botão inline (dentro do mapa ao lado de Legenda) — sem animação de piscar */
 .sos-botao-inline {
   display: flex;
   align-items: center;
@@ -150,11 +150,43 @@
   font-weight: 800;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(185, 28, 28, 0.35);
-  animation: sos-fab-pulso 2s ease-out infinite;
   white-space: nowrap;
 }
 .sos-botao-inline:active { transform: scale(0.95); }
 .sos-botao-inline-txt { font-size: 0.82rem; letter-spacing: 0.04em; }
+
+/* Modal no mapa: aparece abaixo do campo de busca, sem fundo escuro bloqueando */
+.sos-fab-modal--mapa {
+  align-items: flex-start;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  padding-top: 162px;
+}
+/* Painel menor no mapa */
+.sos-fab-painel--mapa {
+  max-width: 320px;
+}
+.sos-fab-painel--mapa .sos-fab-tit {
+  font-size: 1.05rem;
+}
+.sos-fab-painel--mapa .sos-fab-sub {
+  font-size: 0.78rem;
+  margin: 5px 0 10px;
+}
+.sos-fab-painel--mapa .sos-fab-disparar {
+  padding: 12px;
+  font-size: 0.88rem;
+}
+.sos-fab-painel--mapa .sos-fab-cancelar {
+  padding: 9px;
+  font-size: 0.85rem;
+}
+.sos-fab-painel--mapa .sos-fab-ok {
+  font-size: 0.9rem;
+  padding: 12px;
+}
 
 /* Indicador visual de progresso volume menos */
 .sos-volume-indicator {
