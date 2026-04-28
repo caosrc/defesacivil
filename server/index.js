@@ -93,6 +93,11 @@ wss.on('connection', (ws) => {
       if (msg.tipo === 'ping') {
         ws.send(JSON.stringify({ tipo: 'pong' }))
       }
+
+      // SOS broadcast — retransmite para todos exceto o remetente
+      if (msg.tipo === 'sos' || msg.tipo === 'sos-audio' || msg.tipo === 'sos-cancelar') {
+        broadcastParaTodos(msg, ws)
+      }
     } catch { /* ignora mensagens malformadas */ }
   })
 

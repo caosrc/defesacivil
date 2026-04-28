@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { Ocorrencia } from '../types'
 import { NATUREZA_ICONE, NATUREZA_COR, NATUREZAS } from '../types'
 import {
@@ -22,7 +21,7 @@ import {
   descartarMalhaEmMemoria,
 } from '../malhaViaria'
 import { mensagemErroGps } from '../utils'
-import { supabase } from '../supabaseClient'
+import { wsOn, wsSend } from '../wsClient'
 
 // Fix leaflet default marker icons
 delete (L.Icon.Default.prototype as any)._getIconUrl
@@ -271,8 +270,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
   const [dispositivos, setDispositivos] = useState<Map<string, DispositivoRemoto>>(new Map())
   const [statusWs, setStatusWs] = useState<StatusWs>('desconectado')
   const [painelEquipesAberto, setPainelEquipesAberto] = useState(false)
-  const canalRef = useRef<RealtimeChannel | null>(null)
-  const canalProntoRef = useRef(false)
+  const wsConectadoRef = useRef(false) // tracks if WS has connected at least once
   const ultimaPosicaoRef = useRef<{ lat: number; lng: number; precisao: number; velocidade: number | null } | null>(null)
   const proxIndiceRef = useRef(0)
   const indicesRef = useRef<Map<string, number>>(new Map())
@@ -360,9 +358,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
-  // ── Supabase Realtime (Presença de Equipes em Campo) ─────────
-  // Substitui o antigo WebSocket por canal Realtime do Supabase, que
-  // funciona em hospedagem estática (Netlify) sem precisar de servidor.
+  // ── WebSocket — Rastreamento em tempo real ───────────────────────
   const getIndice = useCallback((id: string) => {
     if (!indicesRef.current.has(id)) {
       indicesRef.current.set(id, proxIndiceRef.current++)
@@ -370,125 +366,93 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     return indicesRef.current.get(id)!
   }, [])
 
-  const sincronizarPresenca = useCallback((canal: RealtimeChannel) => {
-    const state = canal.presenceState() as Record<string, Array<{
-      id?: string
-      nome?: string
-      lat?: number | null
-      lng?: number | null
-      precisao?: number
-      velocidade?: number | null
-      ts?: number
-    }>>
-    setDispositivos(() => {
-      const next = new Map<string, DispositivoRemoto>()
-      for (const [chave, presencas] of Object.entries(state)) {
-        if (chave === dispositivoId.current) continue
-        if (!presencas || presencas.length === 0) continue
-        // Pega a presença mais recente (caso o dispositivo tenha múltiplas)
-        const p = presencas.reduce((a, b) => (b.ts ?? 0) > (a.ts ?? 0) ? b : a)
-        if (p.lat == null || p.lng == null) continue
-        next.set(chave, {
-          id: chave,
-          nome: p.nome || `Equipe ${chave}`,
-          lat: p.lat,
-          lng: p.lng,
-          precisao: p.precisao ?? 0,
-          velocidade: p.velocidade ?? null,
-          ultimaVez: Date.now(),
-          indice: getIndice(chave),
-        })
-      }
-      return next
-    })
-  }, [getIndice])
-
-  const conectarWs = useCallback(() => {
-    if (canalRef.current && canalProntoRef.current) return
-    if (canalRef.current) return // já em conexão
+  useEffect(() => {
     setStatusWs('conectando')
 
-    const canal = supabase.channel('agentes-gps', {
-      config: {
-        presence: { key: dispositivoId.current },
-        broadcast: { self: false },
-      },
-    })
-    canalRef.current = canal
-
-    canal.on('presence', { event: 'sync' }, () => sincronizarPresenca(canal))
-    canal.on('presence', { event: 'leave' }, () => sincronizarPresenca(canal))
-    canal.on('presence', { event: 'join' }, () => sincronizarPresenca(canal))
-
-    canal.subscribe((status) => {
-      if (status === 'SUBSCRIBED') {
-        canalProntoRef.current = true
-        setStatusWs('conectado')
-        // Se já temos posição GPS, anuncia agora; senão, anuncia presença "online sem GPS"
-        const ultima = ultimaPosicaoRef.current
-        canal.track({
-          id: dispositivoId.current,
-          nome: nomeLocalRef.current,
-          lat: ultima?.lat ?? null,
-          lng: ultima?.lng ?? null,
-          precisao: ultima?.precisao ?? 0,
-          velocidade: ultima?.velocidade ?? null,
-          ts: Date.now(),
+    const offPosicao = wsOn('posicao', (msg) => {
+      wsConectadoRef.current = true
+      setStatusWs('conectado')
+      const id = msg.id as string
+      if (!id || id === dispositivoId.current) return
+      const lat = msg.lat as number | null
+      const lng = msg.lng as number | null
+      if (lat == null || lng == null) return
+      setDispositivos(prev => {
+        const next = new Map(prev)
+        next.set(id, {
+          id,
+          nome: (msg.nome as string) || `Equipe ${id}`,
+          lat,
+          lng,
+          precisao: (msg.precisao as number) ?? 0,
+          velocidade: (msg.velocidade as number | null) ?? null,
+          ultimaVez: Date.now(),
+          indice: getIndice(id),
         })
-      } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        canalProntoRef.current = false
-        setStatusWs('desconectado')
-      }
+        return next
+      })
     })
-  }, [sincronizarPresenca])
 
-  useEffect(() => {
-    conectarWs()
-  }, [conectarWs])
+    const offPosicoes = wsOn('posicoes_iniciais', (msg) => {
+      wsConectadoRef.current = true
+      setStatusWs('conectado')
+      const posicoes = msg.posicoes as Array<{
+        id: string; nome: string; lat: number; lng: number; precisao: number; velocidade: number | null
+      }>
+      if (!Array.isArray(posicoes)) return
+      setDispositivos(() => {
+        const next = new Map<string, DispositivoRemoto>()
+        for (const p of posicoes) {
+          if (p.id === dispositivoId.current) continue
+          next.set(p.id, {
+            id: p.id,
+            nome: p.nome || `Equipe ${p.id}`,
+            lat: p.lat,
+            lng: p.lng,
+            precisao: p.precisao ?? 0,
+            velocidade: p.velocidade ?? null,
+            ultimaVez: Date.now(),
+            indice: getIndice(p.id),
+          })
+        }
+        return next
+      })
+    })
+
+    const offRemover = wsOn('remover', (msg) => {
+      const id = msg.id as string
+      if (!id) return
+      setDispositivos(prev => {
+        const next = new Map(prev)
+        next.delete(id)
+        return next
+      })
+    })
+
+    return () => {
+      offPosicao()
+      offPosicoes()
+      offRemover()
+    }
+  }, [getIndice])
 
   const enviarPosicao = useCallback((lat: number, lng: number, prec: number, vel: number | null) => {
     ultimaPosicaoRef.current = { lat, lng, precisao: prec, velocidade: vel }
-    const canal = canalRef.current
-    if (canal && canalProntoRef.current) {
-      canal.track({
-        id: dispositivoId.current,
-        nome: nomeLocalRef.current,
-        lat, lng,
-        precisao: prec,
-        velocidade: vel,
-        ts: Date.now(),
-      })
-    }
+    wsSend({
+      tipo: 'posicao',
+      id: dispositivoId.current,
+      nome: nomeLocalRef.current,
+      lat, lng,
+      precisao: prec,
+      velocidade: vel,
+    })
   }, [])
 
-  // Re-anuncia quando o nome local muda (para outros verem o nome atualizado)
-  useEffect(() => {
-    const canal = canalRef.current
-    if (canal && canalProntoRef.current) {
-      const ultima = ultimaPosicaoRef.current
-      canal.track({
-        id: dispositivoId.current,
-        nome: nomeLocal,
-        lat: ultima?.lat ?? null,
-        lng: ultima?.lng ?? null,
-        precisao: ultima?.precisao ?? 0,
-        velocidade: ultima?.velocidade ?? null,
-        ts: Date.now(),
-      })
-    }
-  }, [nomeLocal])
-
-  // Cleanup ao desmontar
+  // Cleanup ao desmontar — para de compartilhar localização
   useEffect(() => {
     return () => {
       if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
-      const canal = canalRef.current
-      if (canal) {
-        canal.untrack().catch(() => {})
-        supabase.removeChannel(canal).catch(() => {})
-      }
-      canalRef.current = null
-      canalProntoRef.current = false
+      wsSend({ tipo: 'parar', id: dispositivoId.current })
     }
   }, [])
 
@@ -509,9 +473,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
     }
     setStatusGps('aguardando')
     setErroGps(null)
-    // Tenta conectar ao canal Realtime; se offline, falha silenciosa
-    // (não bloqueia o GPS local).
-    if (navigator.onLine) conectarWs()
+    // WebSocket já está conectado via wsClient; não precisa de reconexão manual.
 
     // IMPORTANTE: no iOS o watchPosition deve ser chamado de forma
     // síncrona dentro do handler do gesto do usuário. Qualquer await
@@ -548,20 +510,9 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
       navigator.geolocation.clearWatch(watchIdRef.current)
       watchIdRef.current = null
     }
-    // Apaga a posição publicada para que outras equipes parem de ver o ponto
+    // Avisa o servidor que parou de compartilhar localização
     ultimaPosicaoRef.current = null
-    const canal = canalRef.current
-    if (canal && canalProntoRef.current) {
-      canal.track({
-        id: dispositivoId.current,
-        nome: nomeLocalRef.current,
-        lat: null,
-        lng: null,
-        precisao: 0,
-        velocidade: null,
-        ts: Date.now(),
-      })
-    }
+    wsSend({ tipo: 'parar', id: dispositivoId.current })
     setStatusGps('inativo')
     setPosicaoAtual(null)
     setTrilha([])

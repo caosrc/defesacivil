@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { supabase } from './supabaseClient'
+import { wsOn, wsSend } from './wsClient'
 
 export interface SosAlerta {
   id: string
@@ -11,21 +11,7 @@ export interface SosAlerta {
   timestamp: number
 }
 
-const CANAL_SOS = 'sos-alerta-defesa-civil'
 const TTL_MS = 60 * 60 * 1000
-
-let _channel: ReturnType<typeof supabase.channel> | null = null
-function getChannel() {
-  if (_channel) return _channel
-  _channel = supabase.channel(CANAL_SOS, {
-    config: { broadcast: { self: false, ack: false } },
-  })
-  _channel.subscribe((status) => {
-    if (status === 'SUBSCRIBED') console.info('[SOS] canal pronto')
-    if (status === 'CHANNEL_ERROR') console.warn('[SOS] erro de canal')
-  })
-  return _channel
-}
 
 async function lerBateria(): Promise<number | null> {
   try {
@@ -82,7 +68,6 @@ async function gravarAudio(durMs = 10000): Promise<string | null> {
 export async function dispararSos(agente: string): Promise<SosAlerta> {
   const id = `sos-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const timestamp = Date.now()
-  // Capta GPS e bateria em paralelo (rápido). Áudio começa imediato e fica em background.
   const [gps, bateria] = await Promise.all([lerGps(), lerBateria()])
   const alertaInicial: SosAlerta = {
     id,
@@ -93,16 +78,11 @@ export async function dispararSos(agente: string): Promise<SosAlerta> {
     audio: null,
     timestamp,
   }
-  const ch = getChannel()
-  await ch.send({ type: 'broadcast', event: 'sos', payload: alertaInicial })
-  // Áudio em background — quando pronto, manda atualização do mesmo id
+  wsSend({ tipo: 'sos', ...alertaInicial })
+  // Áudio em background
   gravarAudio(10000).then(async (audio) => {
     if (audio) {
-      await ch.send({
-        type: 'broadcast',
-        event: 'sos-audio',
-        payload: { id, audio },
-      })
+      wsSend({ tipo: 'sos-audio', id, audio })
     }
   })
   return alertaInicial
@@ -113,9 +93,8 @@ export function useSosListener() {
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   useEffect(() => {
-    const ch = getChannel()
-    const onSos = (msg: { payload: SosAlerta }) => {
-      const a = msg.payload
+    const offSos = wsOn('sos', (msg) => {
+      const a = msg as unknown as SosAlerta
       if (!a?.id) return
       setAlertas((prev) => {
         if (prev.find(x => x.id === a.id)) return prev
@@ -123,19 +102,23 @@ export function useSosListener() {
       })
       const t = setTimeout(() => removerLocal(a.id), TTL_MS)
       timersRef.current.set(a.id, t)
-    }
-    const onAudio = (msg: { payload: { id: string; audio: string } }) => {
-      const { id, audio } = msg.payload || ({} as any)
+    })
+
+    const offAudio = wsOn('sos-audio', (msg) => {
+      const id = msg.id as string
+      const audio = msg.audio as string
       if (!id || !audio) return
       setAlertas(prev => prev.map(x => x.id === id ? { ...x, audio } : x))
-    }
-    const onCancelar = (msg: { payload: { id: string } }) => {
-      if (msg.payload?.id) removerLocal(msg.payload.id)
-    }
-    ch.on('broadcast', { event: 'sos' }, onSos)
-    ch.on('broadcast', { event: 'sos-audio' }, onAudio)
-    ch.on('broadcast', { event: 'sos-cancelar' }, onCancelar)
+    })
+
+    const offCancelar = wsOn('sos-cancelar', (msg) => {
+      if (msg.id) removerLocal(msg.id as string)
+    })
+
     return () => {
+      offSos()
+      offAudio()
+      offCancelar()
       timersRef.current.forEach(t => clearTimeout(t))
       timersRef.current.clear()
     }
@@ -151,7 +134,7 @@ export function useSosListener() {
   async function dispensar(id: string) {
     removerLocal(id)
     try {
-      await getChannel().send({ type: 'broadcast', event: 'sos-cancelar', payload: { id } })
+      wsSend({ tipo: 'sos-cancelar', id })
     } catch {}
   }
 

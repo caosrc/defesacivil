@@ -2,9 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { adicionarMarcaDagua } from '../utils'
 import { exportarChecklistExcel, type ChecklistExportData } from '../exportExcel'
 import ModalSenha from './ModalSenha'
-import { supabase } from '../supabaseClient'
 
-const TABELA_CHECKLISTS = 'checklists_viatura'
+const BASE = '/api'
 
 const MOTORISTAS = ['Moisés', 'Arthur', 'Gustavo', 'Valteir', 'Dyonathan']
 
@@ -298,11 +297,9 @@ export default function ChecklistViatura() {
   async function carregar() {
     setCarregando(true)
     try {
-      const { data, error } = await supabase
-        .from(TABELA_CHECKLISTS)
-        .select('*')
-        .order('created_at', { ascending: false })
-      if (error) throw error
+      const res = await fetch(`${BASE}/checklists`)
+      if (!res.ok) throw new Error('Falha ao carregar checklists')
+      const data = await res.json()
       setChecklists((data ?? []) as ChecklistData[])
     } catch { setChecklists([]) }
     setCarregando(false)
@@ -467,23 +464,30 @@ export default function ChecklistViatura() {
     if (!motorista) { setErro('Selecione o motorista.'); return }
     setSalvando(true); setErro('')
     try {
-      const { error } = await supabase.from(TABELA_CHECKLISTS).insert({
-        data_checklist: data, km, placa, motorista,
-        fotos_avarias: fotosAvarias,
-        foto_frontal: fotoFrontal, foto_traseira: fotoTraseira,
-        foto_direita: fotoDireita, foto_esquerda: fotoEsquerda,
-        itens, observacoes: observacoes || null, assinatura_data: assinaturaData || null,
+      const res = await fetch(`${BASE}/checklists`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          data_checklist: data, km, placa, motorista,
+          fotos_avarias: fotosAvarias,
+          foto_frontal: fotoFrontal, foto_traseira: fotoTraseira,
+          foto_direita: fotoDireita, foto_esquerda: fotoEsquerda,
+          itens, observacoes: observacoes || null, assinatura_data: assinaturaData || null,
+        }),
       })
-      if (error) throw error
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'tente novamente' }))
+        throw new Error(err.error || 'tente novamente')
+      }
       await carregar(); resetForm(); setModo('lista')
     } catch (e: any) {
-      setErro(`Erro ao salvar no Supabase: ${e?.message ?? 'tente novamente'}`)
+      setErro(`Erro ao salvar: ${e?.message ?? 'tente novamente'}`)
     }
     setSalvando(false)
   }
 
   async function deletar(id: number) {
-    await supabase.from(TABELA_CHECKLISTS).delete().eq('id', id)
+    await fetch(`${BASE}/checklists/${id}`, { method: 'DELETE' })
     setSelecionado(null); setModo('lista'); await carregar()
   }
 

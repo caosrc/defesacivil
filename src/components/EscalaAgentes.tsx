@@ -2,7 +2,8 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { getAgenteLogado } from './Login'
 import ModalSenha from './ModalSenha'
 import './EscalaAgentes.css'
-import { supabase } from '../supabaseClient'
+
+const BASE = '/api'
 
 // ── Constantes ────────────────────────────────────────────────────
 // Todos os agentes — incluindo Moisés — participam da escala/banco de horas
@@ -130,7 +131,6 @@ interface EscalaData {
 
 // ── Storage ───────────────────────────────────────────────────────
 const STORAGE_KEY = 'escala-data-v3'
-const TABELA_ESCALA = 'escala_estado'
 
 function normalizarSemanal(raw: Record<string, string | string[]>): Record<string, string[]> {
   const out: Record<string, string[]> = {}
@@ -200,24 +200,27 @@ function salvarDados(data: EscalaData) {
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   // Persistência remota (não bloqueia o salvamento local)
-  supabase
-    .from(TABELA_ESCALA)
-    .upsert({ id: 1, data, updated_at: new Date().toISOString() })
-    .then(({ error }) => {
-      if (error) console.warn('Falha ao salvar escala no Supabase:', error.message)
-    })
+  fetch(`${BASE}/escala`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).catch((e) => console.warn('Falha ao salvar escala:', e.message))
 }
 
-// Versão que aguarda a confirmação do Supabase — usada quando precisamos
-// dar feedback visual ao agente (ex.: botão "Salvar horas extras").
+// Versão que aguarda confirmação — usada quando precisamos dar feedback visual.
 async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensagem?: string }> {
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   try {
-    const { error } = await supabase
-      .from(TABELA_ESCALA)
-      .upsert({ id: 1, data, updated_at: new Date().toISOString() })
-    if (error) return { ok: false, mensagem: error.message }
+    const res = await fetch(`${BASE}/escala`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Erro desconhecido' }))
+      return { ok: false, mensagem: err.error }
+    }
     return { ok: true }
   } catch (e: any) {
     return { ok: false, mensagem: e?.message || 'Falha ao enviar para o servidor' }
@@ -225,29 +228,28 @@ async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensag
 }
 
 async function carregarDadosRemoto(): Promise<EscalaData | null> {
-  const { data, error } = await supabase
-    .from(TABELA_ESCALA)
-    .select('data')
-    .eq('id', 1)
-    .maybeSingle()
-  if (error || !data?.data) return null
-  const p = data.data as Partial<EscalaData> & Record<string, unknown>
-  return {
-    adm: (p.adm as EscalaData['adm']) ?? {},
-    sobreaviso: (p.sobreaviso as EscalaData['sobreaviso']) ?? {},
-    sobreavisoSemanal: normalizarSemanal((p.sobreavisoSemanal as Record<string, string | string[]>) ?? {}),
-    folgas: normalizarSemanal((p.folgas as Record<string, string | string[]>) ?? {}),
-    ferias: (p.ferias as EscalaData['ferias']) ?? [],
-    horasSobreaviso: (p.horasSobreaviso as EscalaData['horasSobreaviso']) ?? {},
-    horasTrabalhadasSobreaviso: (p.horasTrabalhadasSobreaviso as EscalaData['horasTrabalhadasSobreaviso']) ?? {},
-    feriadosCustom: (p.feriadosCustom as EscalaData['feriadosCustom']) ?? [],
-    percDomingoFeriado: (p.percDomingoFeriado as number) ?? 100,
-    percSobreaviso: (p.percSobreaviso as number) ?? 50,
-    percSabado: (p.percSabado as number) ?? 50,
-    descontosFolgaBanco: (p.descontosFolgaBanco as EscalaData['descontosFolgaBanco']) ?? {},
-    horasExtrasSimples: (p.horasExtrasSimples as EscalaData['horasExtrasSimples']) ?? {},
-    ajustesBanco: (p.ajustesBanco as EscalaData['ajustesBanco']) ?? {},
-  }
+  try {
+    const res = await fetch(`${BASE}/escala`)
+    if (!res.ok) return null
+    const p = await res.json() as Partial<EscalaData> & Record<string, unknown> | null
+    if (!p) return null
+    return {
+      adm: (p.adm as EscalaData['adm']) ?? {},
+      sobreaviso: (p.sobreaviso as EscalaData['sobreaviso']) ?? {},
+      sobreavisoSemanal: normalizarSemanal((p.sobreavisoSemanal as Record<string, string | string[]>) ?? {}),
+      folgas: normalizarSemanal((p.folgas as Record<string, string | string[]>) ?? {}),
+      ferias: (p.ferias as EscalaData['ferias']) ?? [],
+      horasSobreaviso: (p.horasSobreaviso as EscalaData['horasSobreaviso']) ?? {},
+      horasTrabalhadasSobreaviso: (p.horasTrabalhadasSobreaviso as EscalaData['horasTrabalhadasSobreaviso']) ?? {},
+      feriadosCustom: (p.feriadosCustom as EscalaData['feriadosCustom']) ?? [],
+      percDomingoFeriado: (p.percDomingoFeriado as number) ?? 100,
+      percSobreaviso: (p.percSobreaviso as number) ?? 50,
+      percSabado: (p.percSabado as number) ?? 50,
+      descontosFolgaBanco: (p.descontosFolgaBanco as EscalaData['descontosFolgaBanco']) ?? {},
+      horasExtrasSimples: (p.horasExtrasSimples as EscalaData['horasExtrasSimples']) ?? {},
+      ajustesBanco: (p.ajustesBanco as EscalaData['ajustesBanco']) ?? {},
+    }
+  } catch { return null }
 }
 
 // ── Helpers de data ───────────────────────────────────────────────
