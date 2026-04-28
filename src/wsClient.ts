@@ -1,6 +1,8 @@
 type WsHandler = (msg: Record<string, unknown>) => void
+type OpenHandler = () => void
 
 const handlers = new Map<string, Set<WsHandler>>()
+const openHandlers = new Set<OpenHandler>()
 let ws: WebSocket | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let manuallyClosed = false
@@ -27,6 +29,8 @@ function connect() {
   ws.onopen = () => {
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
     flushQueue()
+    // Notifica todos os assinantes que o WS está aberto (inicial e cada reconexão).
+    openHandlers.forEach(h => { try { h() } catch { /* ignore */ } })
   }
 
   ws.onmessage = (event) => {
@@ -60,6 +64,19 @@ export function wsOn(tipo: string, handler: WsHandler): () => void {
   return () => {
     handlers.get(tipo)?.delete(handler)
   }
+}
+
+// Registra um callback que é executado sempre que o WS abre (inicial e em cada reconexão).
+// Se o WS já estiver aberto no momento da assinatura, dispara imediatamente para que o
+// componente possa pedir o snapshot de estado mesmo se for montado depois.
+export function wsOnOpen(handler: OpenHandler): () => void {
+  openHandlers.add(handler)
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    queueMicrotask(() => { try { handler() } catch { /* ignore */ } })
+  } else {
+    connect()
+  }
+  return () => { openHandlers.delete(handler) }
 }
 
 export function wsSend(msg: Record<string, unknown>): void {

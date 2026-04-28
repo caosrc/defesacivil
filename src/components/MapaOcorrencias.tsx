@@ -21,7 +21,7 @@ import {
   descartarMalhaEmMemoria,
 } from '../malhaViaria'
 import { mensagemErroGps } from '../utils'
-import { wsOn, wsSend } from '../wsClient'
+import { wsOn, wsSend, wsOnOpen } from '../wsClient'
 import BotaoSos from './BotaoSos'
 
 // Fix leaflet default marker icons
@@ -430,10 +430,36 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar }: Props) {
       })
     })
 
+    // Sempre que o WS abre (inclusive depois de reconectar):
+    //  1. Pede o estado atual ao servidor — assim, mesmo que o mapa seja
+    //     aberto DEPOIS que o WS já tinha conectado, o agente recebe as
+    //     posições atuais dos demais imediatamente.
+    //  2. Reenvia a própria última posição conhecida, garantindo que os
+    //     outros agentes voltem a ver o marcador após uma queda curta de rede
+    //     (o servidor faz broadcast de "remover" no fechamento da conexão).
+    const offOpen = wsOnOpen(() => {
+      setStatusWs('conectado')
+      wsConectadoRef.current = true
+      wsSend({ tipo: 'solicitar_estado' })
+      const ultima = ultimaPosicaoRef.current
+      if (ultima) {
+        wsSend({
+          tipo: 'posicao',
+          id: dispositivoId.current,
+          nome: nomeLocalRef.current,
+          lat: ultima.lat,
+          lng: ultima.lng,
+          precisao: ultima.precisao,
+          velocidade: ultima.velocidade,
+        })
+      }
+    })
+
     return () => {
       offPosicao()
       offPosicoes()
       offRemover()
+      offOpen()
     }
   }, [getIndice])
 

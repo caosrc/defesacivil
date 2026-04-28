@@ -108,6 +108,29 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ tipo: 'pong' }))
       }
 
+      // Cliente pode pedir o estado atual sob demanda (ex.: ao abrir o mapa
+      // após o WS já ter conectado, ou quando o overlay de SOS monta tarde
+      // por causa de lazy-loading). Responde com posições atuais e SOS ativos.
+      if (msg.tipo === 'solicitar_estado') {
+        const posicoes = []
+        for (const [id, d] of dispositivosOnline) {
+          if (d.lat !== null && d.lat !== undefined) {
+            posicoes.push({ id, nome: d.nome, lat: d.lat, lng: d.lng, precisao: d.precisao, velocidade: d.velocidade })
+          }
+        }
+        if (posicoes.length > 0) {
+          ws.send(JSON.stringify({ tipo: 'posicoes_iniciais', posicoes }))
+        }
+        const agoraEstado = Date.now()
+        const sosValidos = []
+        for (const [, alerta] of sosAtivos) {
+          if (agoraEstado - alerta.timestamp < SOS_TTL_MS) sosValidos.push(alerta)
+        }
+        if (sosValidos.length > 0) {
+          ws.send(JSON.stringify({ tipo: 'sos_persistidos', alertas: sosValidos }))
+        }
+      }
+
       // SOS broadcast — retransmite para todos e persiste para novos agentes
       if (msg.tipo === 'sos') {
         sosAtivos.set(msg.id, { ...msg })

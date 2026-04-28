@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { wsOn, wsSend } from './wsClient'
+import { wsOn, wsSend, wsOnOpen } from './wsClient'
 
 export interface SosAlerta {
   id: string
@@ -124,11 +124,20 @@ export function useSosListener() {
       if (msg.id) removerLocal(msg.id as string)
     })
 
+    // Sempre que o WS abre (inclusive em reconexões e quando o overlay monta
+    // tarde por causa do lazy-loading), pede o estado atual ao servidor.
+    // O servidor responderá com `sos_persistidos` se houver SOS ativos —
+    // assim, agentes que entram depois de um alerta também o veem.
+    const offOpen = wsOnOpen(() => {
+      wsSend({ tipo: 'solicitar_estado' })
+    })
+
     return () => {
       offSos()
       offPersistidos()
       offAudio()
       offCancelar()
+      offOpen()
       timersRef.current.forEach(t => clearTimeout(t))
       timersRef.current.clear()
     }
