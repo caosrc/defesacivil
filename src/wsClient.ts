@@ -5,9 +5,19 @@ let ws: WebSocket | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let manuallyClosed = false
 
+// Fila de mensagens enviadas antes do WS estar aberto
+const sendQueue: string[] = []
+
 function getWsUrl(): string {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${protocol}//${location.host}/ws`
+}
+
+function flushQueue() {
+  while (sendQueue.length > 0 && ws && ws.readyState === WebSocket.OPEN) {
+    const msg = sendQueue.shift()!
+    try { ws.send(msg) } catch { sendQueue.unshift(msg); break }
+  }
 }
 
 function connect() {
@@ -16,6 +26,7 @@ function connect() {
 
   ws.onopen = () => {
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+    flushQueue()
   }
 
   ws.onmessage = (event) => {
@@ -33,7 +44,7 @@ function connect() {
   ws.onclose = () => {
     ws = null
     if (!manuallyClosed) {
-      reconnectTimer = setTimeout(connect, 3000)
+      reconnectTimer = setTimeout(connect, 2000)
     }
   }
 
@@ -52,9 +63,17 @@ export function wsOn(tipo: string, handler: WsHandler): () => void {
 }
 
 export function wsSend(msg: Record<string, unknown>): void {
+  const json = JSON.stringify(msg)
   connect()
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(msg))
+    try {
+      ws.send(json)
+    } catch {
+      sendQueue.push(json)
+    }
+  } else {
+    // WS ainda conectando ou desconectado — enfileira para enviar quando abrir
+    sendQueue.push(json)
   }
 }
 
