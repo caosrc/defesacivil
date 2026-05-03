@@ -43,8 +43,8 @@ Hardcoded login (no external auth service):
 - `emprestimos` — equipment loan records
 - `push_subscriptions` — Web Push subscriptions
 - `equipamentos_campo` — field equipment tracking
-- `sos_ativos` — active SOS alerts (in-memory on server + DB)
-- `locations` — agent GPS positions (in-memory on server + DB)
+- `sos_ativos_db` — active SOS alerts (persisted in DB, loaded on server restart)
+- GPS positions stored in-memory (broadcast via WebSocket)
 
 ## API Endpoints (Express)
 - `GET/POST /api/ocorrencias` — list/create occurrences

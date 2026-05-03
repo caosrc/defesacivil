@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from 'react'
 import './App.css'
 import Login, { estaLogado, agenteEscolhido, getAgenteLogado } from './components/Login'
 import type { Ocorrencia, NivelRisco } from './types'
@@ -243,10 +243,15 @@ export default function App() {
   const [toastMsg, setToastMsg] = useState('')
   const [statusNotif, setStatusNotif] = useState<'ativo'|'concedido'|'negado'|'sem-suporte'|'desconhecido'|null>(null)
   const [ativandoNotif, setAtivandoNotif] = useState(false)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   function showToast(msg: string) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToastMsg(msg)
-    setTimeout(() => setToastMsg(''), 3500)
+    toastTimerRef.current = setTimeout(() => {
+      setToastMsg('')
+      toastTimerRef.current = null
+    }, 4000)
   }
 
   const atualizarPendingCount = useCallback(async () => {
@@ -301,7 +306,6 @@ export default function App() {
     const pending = await getPending()
     if (pending.length === 0) return
     setSincronizando(true)
-    showToast(`⏳ Sincronizando ${pending.length} ocorrência(s)...`)
     let ok = 0
     let falhas = 0
     for (const item of pending) {
@@ -313,33 +317,30 @@ export default function App() {
         ok++
       } catch (err) {
         if (err instanceof ApiError) {
-          // Erro 4xx = dado inválido — remover da fila (retry não vai adiantar)
           if (err.status >= 400 && err.status < 500) {
             console.error(`[sync] Item ${localId} rejeitado pelo servidor (${err.status}): ${err.message} — removendo da fila`)
             await removePending(localId).catch(() => {})
           } else {
-            // 5xx = erro do servidor — manter para tentar de novo
             console.warn(`[sync] Item ${localId} falhou com erro ${err.status} — vai tentar de novo`)
             falhas++
           }
         } else {
-          // Erro de rede — manter para tentar quando houver conexão
           console.warn(`[sync] Item ${localId} falhou por erro de rede — vai tentar de novo:`, err)
           falhas++
         }
       }
     }
     setSincronizando(false)
+    await atualizarPendingCount()
     if (ok > 0) {
+      await carregar()
       showToast(falhas > 0
         ? `✅ ${ok} sincronizada(s). ${falhas} pendente(s) aguardando.`
         : `✅ ${ok} ocorrência(s) sincronizadas com sucesso!`
       )
-      await carregar()
     } else if (falhas > 0) {
       showToast(`⚠️ Falha ao sincronizar. Verifique a conexão e tente novamente.`)
     }
-    await atualizarPendingCount()
   }, [sincronizando, carregar, atualizarPendingCount])
 
   useEffect(() => {

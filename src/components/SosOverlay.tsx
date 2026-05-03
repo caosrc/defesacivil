@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSosListener, tocarSirene, pararSirene, vibrarLongo, rotaParaResgate, type SosAlerta } from '../sos'
-import { wsSend } from '../wsClient'
+import { wsSend, wsOnOpen } from '../wsClient'
 import { getAgenteLogado } from './Login'
 import './SosOverlay.css'
 
@@ -83,6 +83,11 @@ function SosCard({
     if (agente) {
       wsSend({ tipo: 'sos-visualizar', id: alerta.id, agente })
     }
+    const offOpen = wsOnOpen(() => {
+      const ag = getAgenteLogado()
+      if (ag) wsSend({ tipo: 'sos-visualizar', id: alerta.id, agente: ag })
+    })
+    return offOpen
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alerta.id])
 

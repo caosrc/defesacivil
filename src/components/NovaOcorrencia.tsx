@@ -146,9 +146,10 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     }
 
     try {
-      await criarOcorrencia(payload as any)
+      const resultado = await criarOcorrencia(payload as any)
       setSalvando(false)
-      onSalvo(false)
+      const foiOffline = !!(resultado as any)._offline
+      onSalvo(foiOffline)
     } catch (e: any) {
       setSalvando(false)
       setErro(`Erro ao salvar: ${e?.message ?? 'tente novamente'}`)

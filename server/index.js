@@ -130,16 +130,30 @@ function processarSos(msg, wsRemetente = null) {
     sosAtivos.set(msg.id, fundido)
     broadcastParaTodos(fundido, wsRemetente)
   } else {
-    sosAtivos.set(msg.id, { ...msg })
+    const novo = { ...msg, visualizadores: [], mensagens: [] }
+    sosAtivos.set(msg.id, novo)
     broadcastParaTodos(msg, wsRemetente)
     enviarPushSosServidor(msg).catch(() => {})
+    // Persiste no banco de dados
+    query(
+      `INSERT INTO sos_ativos_db (id, agente, lat, lng, bateria, audio, timestamp, visualizadores, mensagens)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO UPDATE SET agente=$2, lat=$3, lng=$4, bateria=$5, audio=COALESCE($6, sos_ativos_db.audio), timestamp=$7`,
+      [msg.id, msg.agente || '', msg.lat ?? null, msg.lng ?? null, msg.bateria ?? null,
+       msg.audio ?? null, msg.timestamp || Date.now(), JSON.stringify([]), JSON.stringify([])]
+    ).catch(e => console.warn('[SOS-DB] erro ao salvar:', e?.message))
   }
 }
 
 function processarSosAudio(msg, wsRemetente = null) {
   if (!msg || !msg.id || !msg.audio) return
   const existente = sosAtivos.get(msg.id)
-  if (existente) sosAtivos.set(msg.id, { ...existente, audio: msg.audio })
+  if (existente) {
+    sosAtivos.set(msg.id, { ...existente, audio: msg.audio })
+    // Atualiza áudio no banco
+    query('UPDATE sos_ativos_db SET audio=$1 WHERE id=$2', [msg.audio, msg.id])
+      .catch(e => console.warn('[SOS-DB] erro ao atualizar áudio:', e?.message))
+  }
   broadcastParaTodos(msg, wsRemetente)
 }
 
@@ -147,6 +161,9 @@ function processarSosCancelar(msg, wsRemetente = null) {
   if (!msg || !msg.id) return
   sosAtivos.delete(msg.id)
   broadcastParaTodos(msg, wsRemetente)
+  // Remove do banco de dados
+  query('DELETE FROM sos_ativos_db WHERE id=$1', [msg.id])
+    .catch(e => console.warn('[SOS-DB] erro ao remover:', e?.message))
 }
 
 wss.on('connection', (ws) => {
@@ -285,6 +302,15 @@ wss.on('connection', (ws) => {
               const atualizados = [...vizs, agente]
               sosAtivos.set(id, { ...existente, visualizadores: atualizados })
               broadcastParaTodos({ tipo: 'sos-visualizado', id, visualizadores: atualizados }, null)
+              // Persiste no banco
+              query('UPDATE sos_ativos_db SET visualizadores=$1 WHERE id=$2',
+                [JSON.stringify(atualizados), id])
+                .catch(e => console.warn('[SOS-DB] erro ao atualizar visualizadores:', e?.message))
+            } else {
+              // Já visualizou, mas envia o estado atual para o agente que reconectou
+              if (vizs.length > 0) {
+                broadcastParaTodos({ tipo: 'sos-visualizado', id, visualizadores: vizs }, null)
+              }
             }
           }
         }
@@ -299,6 +325,10 @@ wss.on('connection', (ws) => {
             const novas = [...msgs, { agente, texto, ts: ts || Date.now() }]
             sosAtivos.set(id, { ...existente, mensagens: novas })
             broadcastParaTodos({ tipo: 'sos-nova-mensagem', id, mensagens: novas }, null)
+            // Persiste no banco
+            query('UPDATE sos_ativos_db SET mensagens=$1 WHERE id=$2',
+              [JSON.stringify(novas), id])
+              .catch(e => console.warn('[SOS-DB] erro ao atualizar mensagens:', e?.message))
           }
         }
       }
@@ -641,7 +671,52 @@ async function initDb() {
     )
   `)
 
+  await query(`
+    CREATE TABLE IF NOT EXISTS sos_ativos_db (
+      id TEXT PRIMARY KEY,
+      agente TEXT NOT NULL,
+      lat DOUBLE PRECISION,
+      lng DOUBLE PRECISION,
+      bateria INTEGER,
+      audio TEXT,
+      timestamp BIGINT NOT NULL,
+      visualizadores JSONB DEFAULT '[]',
+      mensagens JSONB DEFAULT '[]',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+
   console.log('[DB] Tabelas verificadas/criadas com sucesso')
+
+  // Carrega SOS ainda válidos do banco ao iniciar
+  try {
+    const limiteTs = Date.now() - SOS_TTL_MS
+    const result = await query(
+      'SELECT * FROM sos_ativos_db WHERE timestamp > $1',
+      [limiteTs]
+    )
+    for (const row of result.rows) {
+      sosAtivos.set(row.id, {
+        tipo: 'sos',
+        id: row.id,
+        agente: row.agente,
+        lat: row.lat,
+        lng: row.lng,
+        bateria: row.bateria,
+        audio: row.audio,
+        timestamp: Number(row.timestamp),
+        visualizadores: Array.isArray(row.visualizadores) ? row.visualizadores : [],
+        mensagens: Array.isArray(row.mensagens) ? row.mensagens : [],
+      })
+    }
+    if (result.rows.length > 0) {
+      console.log(`[SOS] ${result.rows.length} alerta(s) ativo(s) carregado(s) do banco`)
+    }
+    // Limpa SOS expirados do banco
+    await query('DELETE FROM sos_ativos_db WHERE timestamp <= $1', [limiteTs]).catch(() => {})
+  } catch (e) {
+    console.warn('[SOS] erro ao carregar alertas do banco:', e?.message)
+  }
 }
 
 function broadcastOcorrenciasAtualizadas() {
