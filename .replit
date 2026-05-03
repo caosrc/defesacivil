@@ -1,0 +1,75 @@
+modules = ["nodejs-20", "web"]
+[agent]
+expertMode = true
+stack = "BEST_EFFORT_FALLBACK"
+integrations = ["javascript_database:1.0.0", "replitmail:1.0.0"]
+
+[nix]
+channel = "stable-25_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run start"
+waitForPort = 5000
+
+[[ports]]
+localPort = 3001
+externalPort = 3001
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 5001
+externalPort = 3003
+
+[[ports]]
+localPort = 5002
+externalPort = 4200
+
+[[ports]]
+localPort = 5003
+externalPort = 3000
+
+[[ports]]
+localPort = 5004
+externalPort = 3002
+
+[[ports]]
+localPort = 5005
+externalPort = 5000
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["node", "server/index.js"]
+build = ["npx", "vite", "build"]
+
+[userenv]
+
+[userenv.shared]
+VITE_VAPID_PUBLIC_KEY = "BDR2WpHgL7IN1NNdJv67HEMbyeUEnDRvgcnyfdWaopzkAOqa6EDYSbkXroYJ8CC_kaPjGEm8q5CCEn0KUqt3kmE"
+VITE_SUPABASE_URL = "https://sjdpsplbcrlkekdfnnlj.supabase.co"
+VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqZHBzcGxiY3Jsa2VrZGZubmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5ODExOTcsImV4cCI6MjA5MjU1NzE5N30.Y5-_Z6Yg99i0hHQBZjTMxBFo0TONMCiicHnjkyj_AH8"
+VAPID_PUBLIC_KEY = "BDR2WpHgL7IN1NNdJv67HEMbyeUEnDRvgcnyfdWaopzkAOqa6EDYSbkXroYJ8CC_kaPjGEm8q5CCEn0KUqt3kmE"
+VAPID_PRIVATE_KEY = "JiMyN_yufPgt4NTnVmm0ImMVx4jG8CfoD_5ENADmsIQ"
+VAPID_SUBJECT = "mailto:defesacivilob@gmail.com"
