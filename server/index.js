@@ -683,6 +683,8 @@ async function initDb() {
     )
   `)
 
+  await query(`ALTER TABLE emprestimos ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'emprestimo'`)
+
   console.log('[DB] Tabelas verificadas/criadas com sucesso')
 
   // Carrega SOS ainda válidos do banco ao iniciar
@@ -837,8 +839,8 @@ app.get('/api/health', (req, res) => res.json({ ok: true }))
 
 // ── SOS ─────────────────────────────────────────────────────────────────────
 async function processarSosMensagem(msg) {
-  const { id, agente, texto, ts } = msg
-  if (!id || !agente || !texto) return
+  const { id, agente, texto, audio, ts } = msg
+  if (!id || !agente || (!texto && !audio)) return
   let existente = sosAtivos.get(id)
   if (!existente) {
     try {
@@ -861,7 +863,9 @@ async function processarSosMensagem(msg) {
   }
   if (!existente) return
   const msgs = Array.isArray(existente.mensagens) ? existente.mensagens : []
-  const novas = [...msgs, { agente, texto, ts: ts || Date.now() }]
+  const nova = { agente, texto: texto || '', ts: ts || Date.now() }
+  if (audio) nova.audio = audio
+  const novas = [...msgs, nova]
   sosAtivos.set(id, { ...existente, mensagens: novas })
   broadcastParaTodos({ tipo: 'sos-nova-mensagem', id, mensagens: novas }, null)
   query('UPDATE sos_ativos_db SET mensagens=$1 WHERE id=$2', [JSON.stringify(novas), id])
@@ -1031,19 +1035,20 @@ app.get('/api/emprestimos', async (_req, res) => {
 })
 
 app.post('/api/emprestimos', async (req, res) => {
-  const { material_id, material_codigo, material_nome, responsavel, cpf, secretaria, prazo_dias, quantidade, data_devolucao_prevista, condicao_equipamento, observacoes, agente_emprestador, assinatura_data } = req.body || {}
+  const { material_id, material_codigo, material_nome, responsavel, cpf, secretaria, prazo_dias, quantidade, data_devolucao_prevista, condicao_equipamento, observacoes, agente_emprestador, assinatura_data, tipo } = req.body || {}
   if (!material_id || !responsavel) {
     return res.status(400).json({ error: 'material_id e responsavel obrigatórios' })
   }
   try {
+    const tipoValido = tipo === 'manutencao' ? 'manutencao' : 'emprestimo'
     const result = await query(
-      `INSERT INTO emprestimos (material_id, material_codigo, material_nome, responsavel, cpf, secretaria, prazo_dias, quantidade, data_devolucao_prevista, condicao_equipamento, observacoes, agente_emprestador, assinatura_data)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      `INSERT INTO emprestimos (material_id, material_codigo, material_nome, responsavel, cpf, secretaria, prazo_dias, quantidade, data_devolucao_prevista, condicao_equipamento, observacoes, agente_emprestador, assinatura_data, tipo)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [material_id, material_codigo || material_id, material_nome || '',
        String(responsavel).trim(), cpf || null, secretaria || null,
        Number(prazo_dias) || 7, Math.max(1, quantidade || 1),
        data_devolucao_prevista || null, condicao_equipamento || null,
-       observacoes || null, agente_emprestador || null, assinatura_data || null]
+       observacoes || null, agente_emprestador || null, assinatura_data || null, tipoValido]
     )
     broadcastEmprestimosAtualizados()
     res.status(201).json(result.rows[0])

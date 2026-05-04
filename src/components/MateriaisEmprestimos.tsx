@@ -34,6 +34,7 @@ interface Emprestimo {
   devolvido_obs: string | null
   devolvido_recebedor: string | null
   devolvido_foto: string | null
+  tipo: 'emprestimo' | 'manutencao'
   created_at: string
 }
 
@@ -337,7 +338,7 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
 
           <button className="mat-btn-grande mat-btn-laranja" onClick={() => { setMostrarDevolvidos(false); setModo('emprestimos') }}>
             <span className="mat-btn-emoji">🔄</span>
-            <span className="mat-btn-titulo">Empréstimos</span>
+            <span className="mat-btn-titulo">Empréstimos e Manutenção</span>
             <span className="mat-btn-sub">{totalEmprestados} ativo(s){totalAtrasados > 0 ? ` · ${totalAtrasados} atrasado(s)` : ''}</span>
           </button>
 
@@ -524,7 +525,7 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
         {toast && <div className="toast">{toast}</div>}
         <div className="mat-subheader">
           <button className="btn-voltar" onClick={() => setModo('inicial')}>‹</button>
-          <h2>🔄 Empréstimos</h2>
+          <h2>🔄 Empréstimos e Manutenção</h2>
           <button className="mat-btn-add" onClick={() => setModo('escolhaTipo')} disabled={materiais.length === 0}>+</button>
         </div>
 
@@ -580,7 +581,7 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
                     }
                   </div>
                   <div className="mat-empr-acoes">
-                    <button className="mat-btn-acao" onClick={() => gerarTermoEmprestimoPdf(e)}>
+                    <button className="mat-btn-acao" onClick={() => gerarTermoEmprestimoPdf(e, e.tipo === 'manutencao' ? 'manutencao' : 'emprestimo')}>
                       📄 Gerar Termo
                     </button>
                     {!e.devolvido_em && (
@@ -1164,6 +1165,7 @@ function FormNovoEmprestimo({
           observacoes: observacoes.trim() || null,
           agente_emprestador: agente || null,
           assinatura_data: assinaturaData,
+          tipo: tipoOperacao,
         }),
       })
       if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }

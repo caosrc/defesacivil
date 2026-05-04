@@ -186,6 +186,81 @@
 .sos-chat-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .sos-chat-btn:not(:disabled):hover { opacity: 0.88; }
 
+.sos-chat-modo-toggle {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.sos-chat-modo-btn {
+  flex: 1;
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.75);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.sos-chat-modo-btn.ativo {
+  background: rgba(255,255,255,0.9);
+  color: #991b1b;
+  border-color: transparent;
+}
+
+.sos-audio-resposta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sos-audio-gravar-btn {
+  border: none;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  background: rgba(255,255,255,0.9);
+  color: #991b1b;
+  cursor: pointer;
+  width: 100%;
+  transition: opacity 0.15s;
+}
+.sos-audio-gravar-btn:active { opacity: 0.8; }
+.sos-audio-gravando {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fde68a;
+}
+.sos-audio-cancelar-btn {
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  background: rgba(0,0,0,0.25);
+  color: #fca5a5;
+  cursor: pointer;
+  margin-left: auto;
+}
+.sos-audio-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sos-audio-preview-acoes {
+  display: flex;
+  gap: 8px;
+}
+.sos-audio-preview-acoes .sos-chat-btn { flex: 1; }
+.sos-audio-preview-acoes .sos-audio-cancelar-btn { margin-left: 0; }
+
+.sos-chat-msg {
+  flex-wrap: wrap;
+}
+
 .sos-botoes {
   display: flex;
   flex-direction: column;

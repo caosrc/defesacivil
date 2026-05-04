@@ -31,7 +31,7 @@ export default function BotaoSos({ modo = 'fab' }: Props) {
   const [avisoRapido, setAvisoRapido] = useState<string | null>(null)
   const [statusSos, setStatusSos] = useState<StatusSos | null>(null)
   const [visualizadores, setVisualizadores] = useState<string[]>([])
-  const [mensagensRecebidas, setMensagensRecebidas] = useState<{agente: string; texto: string; ts: number}[]>([])
+  const [mensagensRecebidas, setMensagensRecebidas] = useState<{agente: string; texto: string; audio?: string | null; ts: number}[]>([])
   const msgsFabRef = useRef<HTMLDivElement>(null)
   const seguraRef = useRef<{ start: number; raf: number; timer: number } | null>(null)
   const volumeRef = useRef<{ start: number; raf: number; timer: number } | null>(null)
@@ -98,7 +98,7 @@ export default function BotaoSos({ modo = 'fab' }: Props) {
   useEffect(() => {
     if (!idEnviado) return
     const off = wsOn('sos-nova-mensagem', (msg) => {
-      const { id, mensagens } = msg as { id: string; mensagens: {agente: string; texto: string; ts: number}[] }
+      const { id, mensagens } = msg as { id: string; mensagens: {agente: string; texto: string; audio?: string | null; ts: number}[] }
       if (id === idEnviado && Array.isArray(mensagens)) {
         setMensagensRecebidas(mensagens)
       }
@@ -296,7 +296,10 @@ export default function BotaoSos({ modo = 'fab' }: Props) {
                               <div key={i} className="sos-fab-chat-msg">
                                 <span className="sos-fab-chat-hora">{hora}</span>
                                 <strong className="sos-fab-chat-agente">{m.agente}</strong>
-                                <span className="sos-fab-chat-txt">{m.texto}</span>
+                                {m.audio
+                                  ? <audio controls src={m.audio} style={{ height: 32, maxWidth: '100%', marginTop: 4 }} />
+                                  : <span className="sos-fab-chat-txt">{m.texto}</span>
+                                }
                               </div>
                             )
                           })}
@@ -308,7 +311,7 @@ export default function BotaoSos({ modo = 'fab' }: Props) {
                   <div className="sos-fab-gravando" style={{ marginTop: 10 }}>
                     <div className="sos-fab-gravando-dot" />
                     <div className="sos-fab-gravando-txt">
-                      🎙️ Gravando áudio… <strong>{statusSos.segundosRestantes ?? 10}s</strong>
+                      🎙️ Gravando mensagem… <strong>{statusSos.segundosRestantes ?? 10}s</strong>
                     </div>
                     <div className="sos-fab-gravando-sub">
                       Fale o que está acontecendo.

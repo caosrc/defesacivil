@@ -4,6 +4,7 @@ import { wsOn, wsSend, wsOnOpen } from './wsClient'
 export interface SosMensagem {
   agente: string
   texto: string
+  audio?: string | null
   ts: number
 }
 
@@ -83,7 +84,7 @@ function lerGps(): Promise<{ lat: number; lng: number; precisa: boolean } | null
 
 // Handle retornado por `iniciarGravacaoAudio`. Devolve a Promise do áudio
 // (resolve em `durMs` ms) e um `abortar` para cancelar antes da hora.
-type GravacaoHandle = {
+export type GravacaoHandle = {
   audioPromise: Promise<string | null>
   abortar: () => void
 }
@@ -95,7 +96,7 @@ type GravacaoHandle = {
 //
 // Bitrate fixo em 24kbps (qualidade de voz) → 10s de áudio fica em ~30KB,
 // folgado dentro do limite de payload do broadcast Realtime do Supabase.
-async function iniciarGravacaoAudio(durMs = 10000): Promise<GravacaoHandle | null> {
+export async function iniciarGravacaoAudio(durMs = 10000): Promise<GravacaoHandle | null> {
   try {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') return null
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSosListener, tocarSirene, pararSirene, vibrarLongo, rotaParaResgate, type SosAlerta } from '../sos'
+import { useSosListener, tocarSirene, pararSirene, vibrarLongo, rotaParaResgate, iniciarGravacaoAudio, type SosAlerta, type GravacaoHandle } from '../sos'
 import { wsSend, wsOnOpen } from '../wsClient'
 import { getAgenteLogado } from './Login'
 import './SosOverlay.css'
@@ -76,6 +76,12 @@ function SosCard({
 }) {
   const temGps = alerta.lat != null && alerta.lng != null
   const [textoMsg, setTextoMsg] = useState('')
+  const [modoResposta, setModoResposta] = useState<'texto' | 'audio'>('texto')
+  const [gravando, setGravando] = useState(false)
+  const [segundos, setSegundos] = useState(10)
+  const [audioGravado, setAudioGravado] = useState<string | null>(null)
+  const gravacaoRef = useRef<GravacaoHandle | null>(null)
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const msgsRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -97,12 +103,70 @@ function SosCard({
     }
   }, [alerta.mensagens?.length])
 
-  function enviarMensagem() {
+  useEffect(() => {
+    return () => {
+      if (tickRef.current) clearInterval(tickRef.current)
+      if (gravacaoRef.current) try { gravacaoRef.current.abortar() } catch {}
+    }
+  }, [])
+
+  function enviarMensagemTexto() {
     const agente = getAgenteLogado()
     const txt = textoMsg.trim()
     if (!txt || !agente) return
     wsSend({ tipo: 'sos-mensagem', id: alerta.id, agente, texto: txt, ts: Date.now() })
     setTextoMsg('')
+  }
+
+  async function iniciarGravacao() {
+    const agente = getAgenteLogado()
+    if (!agente) return
+    setGravando(true)
+    setSegundos(10)
+    setAudioGravado(null)
+
+    const handle = await iniciarGravacaoAudio(10000)
+    if (!handle) {
+      setGravando(false)
+      return
+    }
+    gravacaoRef.current = handle
+
+    let rest = 10
+    tickRef.current = setInterval(() => {
+      rest -= 1
+      setSegundos(rest)
+      if (rest <= 0 && tickRef.current) clearInterval(tickRef.current)
+    }, 1000)
+
+    const audio = await handle.audioPromise
+    if (tickRef.current) clearInterval(tickRef.current)
+    setGravando(false)
+    gravacaoRef.current = null
+
+    if (audio) {
+      setAudioGravado(audio)
+    }
+  }
+
+  function cancelarGravacao() {
+    if (tickRef.current) clearInterval(tickRef.current)
+    if (gravacaoRef.current) try { gravacaoRef.current.abortar() } catch {}
+    gravacaoRef.current = null
+    setGravando(false)
+    setAudioGravado(null)
+  }
+
+  function enviarAudio() {
+    const agente = getAgenteLogado()
+    if (!audioGravado || !agente) return
+    wsSend({ tipo: 'sos-mensagem', id: alerta.id, agente, texto: '', audio: audioGravado, ts: Date.now() })
+    setAudioGravado(null)
+    setModoResposta('texto')
+  }
+
+  function descartarAudio() {
+    setAudioGravado(null)
   }
 
   return (
@@ -142,7 +206,7 @@ function SosCard({
           )}
           {alerta.audio ? (
             <div className="sos-info-audio">
-              <span>🎙️ Áudio capturado:</span>
+              <span>🎙️ Mensagem do agente:</span>
               <audio
                 controls
                 src={alerta.audio}
@@ -158,35 +222,81 @@ function SosCard({
         </div>
 
         <div className="sos-chat">
-          <div className="sos-chat-titulo">💬 Enviar mensagem para {alerta.agente}</div>
+          <div className="sos-chat-titulo">💬 Responder para {alerta.agente}</div>
+
           {(alerta.mensagens ?? []).length > 0 && (
             <div className="sos-chat-msgs" ref={msgsRef}>
               {(alerta.mensagens ?? []).map((m, i) => (
                 <div key={i} className="sos-chat-msg">
                   <span className="sos-chat-msg-hora">{formatarHoraMsg(m.ts)}</span>
                   <strong className="sos-chat-msg-agente">{m.agente}</strong>
-                  <span className="sos-chat-msg-txt">{m.texto}</span>
+                  {m.audio
+                    ? <audio controls src={m.audio} style={{ height: 32, maxWidth: '100%', marginTop: 4, display: 'block' }} />
+                    : <span className="sos-chat-msg-txt">{m.texto}</span>
+                  }
                 </div>
               ))}
             </div>
           )}
-          <div className="sos-chat-row">
-            <input
-              className="sos-chat-input"
-              type="text"
-              placeholder="Digite sua mensagem…"
-              value={textoMsg}
-              onChange={(e) => setTextoMsg(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && enviarMensagem()}
-            />
+
+          <div className="sos-chat-modo-toggle">
             <button
-              className="sos-chat-btn"
-              onClick={enviarMensagem}
-              disabled={!textoMsg.trim()}
+              className={`sos-chat-modo-btn${modoResposta === 'texto' ? ' ativo' : ''}`}
+              onClick={() => { setModoResposta('texto'); cancelarGravacao() }}
             >
-              Enviar
+              💬 Texto
+            </button>
+            <button
+              className={`sos-chat-modo-btn${modoResposta === 'audio' ? ' ativo' : ''}`}
+              onClick={() => { setModoResposta('audio'); setTextoMsg('') }}
+            >
+              🎙️ Áudio (10s)
             </button>
           </div>
+
+          {modoResposta === 'texto' ? (
+            <div className="sos-chat-row">
+              <input
+                className="sos-chat-input"
+                type="text"
+                placeholder="Digite sua mensagem…"
+                value={textoMsg}
+                onChange={(e) => setTextoMsg(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && enviarMensagemTexto()}
+              />
+              <button
+                className="sos-chat-btn"
+                onClick={enviarMensagemTexto}
+                disabled={!textoMsg.trim()}
+              >
+                Enviar
+              </button>
+            </div>
+          ) : (
+            <div className="sos-audio-resposta">
+              {!gravando && !audioGravado && (
+                <button className="sos-audio-gravar-btn" onClick={iniciarGravacao}>
+                  🎙️ Pressionar para gravar (10s)
+                </button>
+              )}
+              {gravando && (
+                <div className="sos-audio-gravando">
+                  <div className="sos-fab-gravando-dot" style={{ display: 'inline-block', marginRight: 8 }} />
+                  <span>Gravando… <strong>{segundos}s</strong></span>
+                  <button className="sos-audio-cancelar-btn" onClick={cancelarGravacao}>Cancelar</button>
+                </div>
+              )}
+              {audioGravado && !gravando && (
+                <div className="sos-audio-preview">
+                  <audio controls src={audioGravado} style={{ maxWidth: '100%', height: 36 }} />
+                  <div className="sos-audio-preview-acoes">
+                    <button className="sos-chat-btn" onClick={enviarAudio}>📤 Enviar áudio</button>
+                    <button className="sos-audio-cancelar-btn" onClick={descartarAudio}>🗑️ Descartar</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="sos-botoes">
