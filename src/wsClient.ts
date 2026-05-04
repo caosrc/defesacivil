@@ -50,6 +50,10 @@ function dispatch(tipo: string, msg: Record<string, unknown>) {
 }
 
 function getWsUrl(): string {
+  // VITE_WS_URL permite apontar para um backend externo (ex.: Replit dev).
+  // Defina essa variável nas configurações de ambiente do Netlify.
+  const configurada = (import.meta.env.VITE_WS_URL as string | undefined)?.trim()
+  if (configurada) return configurada
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
   return `${protocol}//${location.host}/ws`
 }
