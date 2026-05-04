@@ -1,92 +1,91 @@
-# Defesa Civil Ouro Branco — PWA
+# Defesa Civil Ouro Branco — App de Gerenciamento de Ocorrências
 
-Progressive Web App for the Civil Defense of Ouro Branco, MG. Manages emergency occurrences, agent schedules, vehicle checklists, materials/loans, and field equipment with real-time coordination via WebSockets and SOS alerts.
+## Visão Geral
+Aplicativo web mobile-first (PWA) para equipes de campo da Defesa Civil de Ouro Branco - MG. Funcionalidades principais:
+- Registro e gerenciamento de ocorrências com fotos e GPS
+- Rastreamento em tempo real de equipes via WebSocket
+- SOS com push notifications (Web Push / VAPID)
+- Escala de agentes e banco de horas
+- Checklist de viatura
+- Materiais, empréstimos e equipamentos em campo
+- Geração de relatório de vistoria em DOCX
+- Exportação KMZ/KML e Excel
+- Modo offline com fila de sincronização
 
-## Architecture
+## Arquitetura
 
-- **Frontend**: React 19 + TypeScript + Vite (port 5000)
-- **Backend**: Node.js + Express (port 3001)
-- **Database**: PostgreSQL (Replit native via `DATABASE_URL`)
-- **Real-time**: WebSocket (`/ws`) — position tracking, SOS alerts, online agents
-- **Push Notifications**: Web Push API with VAPID keys
+### Frontend
+- **React 19 + TypeScript + Vite** na porta 5000
+- PWA com service worker em `public/sw.js`
+- Mapas: Leaflet + react-leaflet
+- WebSocket client: `src/wsClient.ts`
+- Push notifications: `src/pushNotifications.ts`
+- GPS: `src/gpsService.ts`
+- Offline queue/cache: `src/offline.ts`
+- Exportação Excel: `src/exportExcel.ts`
 
-## Recent Changes (2026-05-04)
+### Backend
+- **Express (Node.js)** na porta 3001
+- **PostgreSQL** via `DATABASE_URL` (Replit native DB)
+- WebSocket Server (`ws`) em `/ws`
+- Geração de DOCX via `jszip`
+- Push SOS via `web-push` (VAPID)
 
-- **Escala / Banco de Horas**: Justificativa de hora extra movida para baixo da linha de input (mais ampla, 4 linhas); banco de horas pode ficar negativo (folgas excedentes mostram valor negativo em vermelho)
-- **SOS**: Trigger por chacoalho removido; mantido apenas o botão manual e a tecla de volume. Mensagens do SOS corrigidas (fallback no banco de dados quando o SOS não está em memória; envio via REST + WebSocket garantindo entrega)
-- **Patrimônio**: Ao registrar nova operação, o agente escolhe entre Empréstimo ou Manutenção. O PDF do termo adapta título e etiquetas conforme o tipo selecionado.
+### Endpoints principais
+- `GET/POST /api/ocorrencias` — CRUD de ocorrências
+- `GET/PUT /api/escala` — escala de agentes
+- `GET/POST /api/checklists` — checklists de viatura
+- `GET/POST /api/materiais` — catálogo de materiais
+- `GET/POST /api/emprestimos` — empréstimos
+- `GET/POST /api/equipamentos-campo` — equipamentos em campo
+- `POST /api/push-subscriptions` — inscrição Web Push
+- `POST /api/send-sos-push` — disparo de SOS push
+- `POST /api/relatorio-vistoria` — geração de relatório DOCX
+- `GET /api/tiles/:z/:x/:y` — proxy de tiles OSM
+- `GET /api/geocode` — proxy Nominatim
+- `GET /api/rota` — proxy OSRM
+- `GET /api/tempo` — dados climáticos INMET/Open-Meteo
+- `GET /api/vapid-public-key` — chave VAPID pública
+- `WebSocket /ws` — rastreamento GPS em tempo real + SOS
 
-## Running the App
-
-```bash
-npm run start  # runs both server (port 3001) and Vite (port 5000) concurrently
+## Estrutura de arquivos
+```
+server/index.js        — Backend Express + WebSocket + DB
+src/
+  App.tsx              — Shell principal, navegação por abas
+  main.tsx             — Entry point, registro do SW
+  config.ts            — URLs de API e WebSocket
+  api.ts               — Funções de API para ocorrências
+  wsClient.ts          — Cliente WebSocket
+  gpsService.ts        — Rastreamento GPS
+  pushNotifications.ts — Web Push (SOS)
+  offline.ts           — Cache offline e fila pendente
+  exportExcel.ts       — Exportação Excel
+  components/          — Componentes React por funcionalidade
+public/
+  sw.js                — Service Worker PWA
+attached_assets/       — Template DOCX para relatórios
 ```
 
-The Vite dev server proxies `/api` and `/ws` to `localhost:3001`.
+## Variáveis de Ambiente
+- `DATABASE_URL` — PostgreSQL (gerenciado pelo Replit)
+- `VAPID_PUBLIC_KEY` / `VITE_VAPID_PUBLIC_KEY` — Chave pública VAPID (env var)
+- `VAPID_PRIVATE_KEY` — Chave privada VAPID (secret seguro)
+- `VAPID_SUBJECT` — Email para VAPID
+- `PORT` — Porta do servidor (padrão: 3001)
 
-## Key Files
+## Scripts
+- `npm run start` — Inicia backend (porta 3001) + Vite dev server (porta 5000) em paralelo
+- `npm run build` — Build de produção do frontend
+- `node server/index.js` — Somente backend (produção)
 
-- `server/index.js` — Express API + WebSocket server + DB init
-- `src/App.tsx` — Main React component (tabs: Lista, Mapa, Viatura, Escala, Materiais)
-- `src/api.ts` — Occurrence CRUD via REST `/api/ocorrencias`
-- `src/wsClient.ts` — Native WebSocket client (real-time GPS, SOS, online agents)
-- `src/pushNotifications.ts` — Web Push subscription management
-- `src/components/` — All UI components
-- `public/sw.js` — Service Worker for PWA/offline support
-
-## Database Tables
-
-All tables are auto-created on server start via `initDb()`:
-
-- `ocorrencias` — Emergency occurrences with GPS, photos, status
-- `escala_estado` — Agent shift schedule state (JSONB)
-- `checklists_viatura` — Vehicle inspection checklists
-- `materiais` — Equipment catalog
-- `emprestimos` — Equipment loan records
-- `equipamentos_campo` — Equipment deployed in the field
-- `push_subscriptions` — Web Push subscriptions for SOS notifications
-- `sos_ativos_db` — Active SOS alerts (persisted across server restarts)
-
-## Environment Variables
-
-Set in `.replit` `[userenv.shared]` or as Replit secrets:
-
-- `DATABASE_URL` — PostgreSQL connection string (auto-set by Replit DB)
-- `VAPID_PUBLIC_KEY` — VAPID public key for Web Push
-- `VAPID_PRIVATE_KEY` — VAPID private key for Web Push
-- `VAPID_SUBJECT` — VAPID subject (mailto: or URL)
-- `VITE_VAPID_PUBLIC_KEY` — Same public key exposed to frontend
-- `PORT` — Server port (default 3001)
-
-## Login
-
-- **Email**: `defesacivilob@gmail.com`
-- **Password**: `dc-2026`
-- After login, user selects an agent name from a list
-
-## API Endpoints
-
-- `GET/POST /api/ocorrencias` — Occurrences
-- `GET/PUT /api/escala` — Agent schedule
-- `GET/POST/DELETE /api/checklists` — Vehicle checklists
-- `GET/POST/PATCH/DELETE /api/materiais` — Equipment catalog
-- `GET/POST/PATCH /api/emprestimos` — Equipment loans
-- `GET/POST/PATCH/DELETE /api/equipamentos-campo` — Field equipment
-- `POST/DELETE /api/push-subscriptions` — Push notification subscriptions
-- `POST /api/send-sos-push` — Trigger SOS push notifications
-- `POST /api/sos` — SOS event processing (REST fallback)
-- `GET /api/vapid-public-key` — Public VAPID key for frontend
-- `POST /api/relatorio-vistoria` — Generate .docx inspection reports
-- `GET /api/tiles/:z/:x/:y` — OpenStreetMap tile proxy
-- `GET /api/geocode` — Nominatim geocode proxy
-- `GET /api/rota` — OSRM routing proxy
-- `GET /api/tempo` — Weather data (INMET/Open-Meteo)
-- `GET /api/health` — Health check
-
-## Migration Notes
-
-- Migrated from Supabase to Replit's native PostgreSQL
-- All frontend Supabase calls replaced with native `fetch()` to `/api/*` endpoints
-- WebSocket client (`wsClient.ts`) rewritten from Supabase Realtime to native WebSocket
-- Supabase Edge Function (`send-sos-push`) replaced by `/api/send-sos-push` Express route
-- `@supabase/supabase-js` package still installed but only used in `supabaseClient.ts` (kept as dead code for reference, not imported anywhere functional)
+## Banco de Dados
+Tabelas criadas automaticamente no `initDb()` ao iniciar o servidor:
+- `ocorrencias` — Registros de ocorrências
+- `escala_estado` — Estado da escala de agentes
+- `checklists_viatura` — Checklists de viaturas
+- `materiais` — Catálogo de materiais
+- `emprestimos` — Registros de empréstimos
+- `push_subscriptions` — Inscrições Web Push
+- `equipamentos_campo` — Equipamentos implantados em campo
+- `sos_ativos_db` — Alertas SOS persistidos
