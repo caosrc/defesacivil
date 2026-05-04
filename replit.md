@@ -1,100 +1,96 @@
 # Defesa Civil de Ouro Branco — Sistema de Vistorias
 
 ## Overview
-This project is a comprehensive Progressive Web Application (PWA) designed for the Defesa Civil de Ouro Branco (MG) to register and manage occurrences. Its primary purpose is to streamline the workflow for civil defense operations, providing tools for real-time incident tracking, reporting, and team coordination.
+Progressive Web Application (PWA) para a Defesa Civil de Ouro Branco (MG). Gerencia ocorrências, escala, checklists, patrimônios e SOS em tempo real.
 
 ## System Architecture
 
-The app runs as a **fullstack Node.js + React** application on Replit:
+### Frontend (React 19 + TypeScript + Vite 5)
+- Toda a camada de dados usa **Supabase JS client diretamente** — não há backend Express no Netlify.
+- Comunicação em tempo real via **Supabase Realtime Broadcast + Presence** (substitui WebSocket).
+- Push notifications via **Supabase Edge Function** `send-sos-push`.
 
-- **Frontend**: React 19 + TypeScript + Vite 5. Dev server on port 5000.
-- **Backend**: Express.js on port 3001. All data access goes through `/api/*` REST endpoints.
-- **Database**: Replit native PostgreSQL (via `pg` Pool + `DATABASE_URL` env var). Tables are auto-created at startup by `initDb()` in `server/index.js`.
-- **Realtime**: Native WebSocket at `ws://host/ws` (no Supabase Realtime). Messages are broadcast from the Express server to all connected clients.
+### Backend (Express — apenas para desenvolvimento local no Replit)
+- `server/index.js` roda na porta 3001 com as mesmas tabelas.
+- Em dev usa Replit PostgreSQL (`DATABASE_URL`) + WebSocket em `/ws`.
+- Em produção (Netlify) o Express NÃO é usado — tudo vai direto ao Supabase.
+
+### Banco de Dados
+- **Produção**: Supabase PostgreSQL — projeto `sjdpsplbcrlkekdfnnlj`
+- **Desenvolvimento**: Replit native PostgreSQL (separado do Supabase)
+- Schema completo em `supabase-schema.sql` — executar no SQL Editor do Supabase.
+
+### Deploy
+- **Netlify** — hospeda apenas o frontend estático (`dist/`).
+- Build: `npm run build` → publica `dist/`.
+- Variáveis de ambiente em `netlify.toml` (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_VAPID_PUBLIC_KEY).
 
 ## Authentication
-Hardcoded login (no external auth service):
+Login fixo (sem serviço externo):
 - Email: `defesacivilob@gmail.com`
-- Password: `dc-2026`
-- Agent name selection after login (stored in localStorage).
+- Senha: `dc-2026`
+- Escolha de agente após login (localStorage).
 
 ## Running the App
-- `npm run start` — starts both Express (port 3001) and Vite dev server (port 5000) concurrently.
+- `npm run start` — inicia Express (3001) + Vite dev (5000) em paralelo.
 - Workflow: "Start application" → `npm run start`.
-- Required env var: `DATABASE_URL` (set automatically by Replit PostgreSQL integration).
 
 ## Key Files
-- `server/index.js` — Express API server, WebSocket, DB init, all CRUD endpoints
-- `src/api.ts` — frontend API calls (fetch to `/api/*`)
-- `src/wsClient.ts` — native WebSocket client (replaces Supabase Realtime)
-- `src/supabaseClient.ts` — stub file (throws if called, `isSupabaseConfigured()` returns false)
-- `src/pushNotifications.ts` — Web Push subscription via `/api/push-subscriptions`
-- `src/components/EscalaAgentes.tsx` — schedule management (fetch `/api/escala`)
-- `src/components/ChecklistViatura.tsx` — vehicle checklist (fetch `/api/checklists`)
-- `src/components/MateriaisEmprestimos.tsx` — materials & loans management
-- `src/components/NovaOcorrencia.tsx` — new occurrence form
-- `src/components/MapaOcorrencias.tsx` — occurrence map with GPS tracking
+- `src/api.ts` — CRUD de ocorrências via Supabase JS client
+- `src/wsClient.ts` — Supabase Realtime Broadcast + Presence (substitui WebSocket)
+- `src/supabaseClient.ts` — cliente Supabase inicializado (VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY)
+- `src/pushNotifications.ts` — Web Push: salva no Supabase, chama Edge Function
+- `src/components/EscalaAgentes.tsx` — escala via Supabase (tabela `escala_estado`)
+- `src/components/ChecklistViatura.tsx` — checklists via Supabase
+- `src/components/MateriaisEmprestimos.tsx` — materiais/empréstimos/campo via Supabase
+- `src/App.tsx` — equipamentos em campo para o mapa via Supabase
+- `server/index.js` — Express (dev only): todas as rotas + WebSocket + Replit PG
+- `supabase-schema.sql` — schema completo a executar no Supabase SQL Editor
+- `netlify.toml` — configuração Netlify com variáveis de ambiente Supabase
+- `supabase/functions/send-sos-push/index.ts` — Edge Function para push SOS
 
-## Database Tables (auto-created)
-- `ocorrencias` — civil defense occurrences
-- `escala_estado` — agent schedule state (single row, id=1)
-- `checklists_viatura` — vehicle inspection checklists
-- `materiais` — materials/equipment inventory
-- `emprestimos` — equipment loan records
-- `push_subscriptions` — Web Push subscriptions
-- `equipamentos_campo` — field equipment tracking
-- `sos_ativos_db` — active SOS alerts (persisted in DB, loaded on server restart)
-- GPS positions stored in-memory (broadcast via WebSocket)
+## Supabase Tables
+- `ocorrencias` — ocorrências de defesa civil
+- `escala_estado` — estado da escala (linha única, id=1, campo `data` JSONB)
+- `checklists_viatura` — checklists de inspeção da viatura
+- `materiais` — inventário de materiais/patrimônio
+- `emprestimos` — registros de empréstimos de equipamentos
+- `push_subscriptions` — inscrições Web Push (por dispositivo)
+- `equipamentos_campo` — equipamentos implantados em campo
+- `sos_ativos_db` — alertas SOS ativos (persistência entre sessões)
 
-## API Endpoints (Express)
-- `GET/POST /api/ocorrencias` — list/create occurrences
-- `GET/PUT/DELETE /api/ocorrencias/:id` — read/update/delete occurrence
-- `GET/PUT /api/escala` — get/save schedule state
-- `GET/POST /api/checklists` + `DELETE /api/checklists/:id`
-- `GET/POST /api/materiais` + `PATCH/DELETE /api/materiais/:id`
-- `GET/POST /api/emprestimos` + `PATCH /api/emprestimos/:id`
-- `GET/POST /api/equipamentos-campo` + `PATCH/DELETE /api/equipamentos-campo/:id`
-- `POST /api/push-subscriptions` + `DELETE /api/push-subscriptions/:id`
-- `POST /api/sos` — SOS broadcast
-- `POST /api/send-sos-push` — send Web Push notifications
-- `GET /api/vapid-public-key` — VAPID public key for push
-- `GET /api/tiles/:z/:x/:y` — OSM tile proxy
-- `GET /api/geocode` — Nominatim geocoding proxy
-- `GET /api/rota` — OSRM routing proxy
-- `GET /api/tempo` — Open-Meteo weather proxy
-- `GET /api/health` — health check
-
-## WebSocket Messages
-Native WS at `/ws`. Client sends/receives JSON `{ tipo, ... }`:
-- `posicao` — GPS location update
-- `parar` — GPS stopped
-- `sos` / `sos-cancelar` / `sos-audio` / `sos-visualizar`
-- `online` / `offline` — presence
-- `solicitar_estado` — request current SOS + GPS state
-- `ocorrencias_atualizadas` — DB change broadcast
-- `online_sync` — list of online agents
+## Supabase Realtime (via wsClient.ts)
+Canal: `defesacivil-realtime`. Mensagens Broadcast (event = tipo):
+- `posicao` — posição GPS do agente
+- `parar` — parou rastreamento GPS
+- `sos` / `sos-cancelar` / `sos-audio` / `sos-visualizar` / `sos-nova-mensagem`
+- `online` / `offline` — presença
+- `online_sync` — lista de agentes online (via Presence API)
 
 ## External Services
-- **OpenStreetMap**: map tiles (proxied via `/api/tiles`)
-- **Nominatim**: geocoding (proxied via `/api/geocode`)
-- **OSRM**: routing (proxied via `/api/rota`)
-- **Open-Meteo**: weather (via `/api/tempo`)
-- **Web Push**: VAPID keys in env vars `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`
+- **OpenStreetMap**: tiles de mapa (chamada direta, CORS OK)
+- **Nominatim**: geocodificação (chamada direta)
+- **OSRM**: roteamento (chamada direta)
+- **Open-Meteo**: clima (chamada direta no MapaOcorrencias.tsx)
+- **Web Push**: VAPID keys em env vars (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`)
 
 ## Push Notifications (VAPID)
-- Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` in Replit Secrets.
-- Generate keys: `npx web-push generate-vapid-keys --json`
-- `VAPID_SUBJECT` = `mailto:defesacivilob@gmail.com`
+- Chave pública: `BDR2WpHgL7IN1NNdJv67HEMbyeUEnDRvgcnyfdWaopzkAOqa6EDYSbkXroYJ8CC_kaPjGEm8q5CCEn0KUqt3kmE`
+- Chave privada: em `VAPID_PRIVATE_KEY` (Replit Secret)
+- Edge Function Supabase: `/functions/v1/send-sos-push` (precisa VAPID_PRIVATE_KEY configurada)
 
 ## Features
-- Occurrence registration with GPS, photos, risk levels
-- Real-time GPS tracking of agents on map
-- SOS emergency alert system with audio recording
-- Vehicle inspection checklists with photo evidence
-- Agent schedule management (on-call, leave, overtime tracking)
-- Equipment/materials loan tracking with digital signature
-- Field equipment deployment tracking
-- Offline support via Service Worker + IndexedDB
-- DOCX report generation (client-side, JSZip)
-- Excel export (client-side, ExcelJS)
-- Web Push notifications for SOS alerts
+- Registro de ocorrências com GPS, fotos, níveis de risco
+- Rastreamento GPS em tempo real de agentes no mapa
+- Sistema de SOS de emergência com gravação de áudio
+- Checklists de inspeção da viatura com fotos
+- Gestão de escala de plantão (sobreaviso, folgas, férias, banco de horas)
+- Controle de empréstimos de equipamentos com assinatura digital
+- Rastreamento de equipamentos em campo
+- Suporte offline via Service Worker + IndexedDB
+- Geração de relatórios DOCX (client-side, JSZip)
+- Exportação Excel (client-side, ExcelJS)
+- Push notifications Web para alertas SOS
+
+## GitHub
+Repositório: `https://github.com/caosrc/defesacivil`

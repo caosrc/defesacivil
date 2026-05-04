@@ -1,8 +1,6 @@
 import type { Ocorrencia } from './types'
 import { savePending, getCachedOcorrencias } from './offline'
-import { API_BASE } from './config'
-
-const BASE = `${API_BASE}/api`
+import { supabase } from './supabaseClient'
 
 function localOffline(dados: Omit<Ocorrencia, 'id' | 'created_at'>, localId: number): Ocorrencia {
   return {
@@ -12,31 +10,6 @@ function localOffline(dados: Omit<Ocorrencia, 'id' | 'created_at'>, localId: num
     _offline: true,
     _localId: Number(localId),
   } as unknown as Ocorrencia
-}
-
-// Valida que a resposta é JSON antes de tentar parsear.
-// Evita que redirecionamentos para index.html (Netlify SPA) sejam tratados como sucesso.
-async function parseJsonSeguro<T>(resp: Response): Promise<T> {
-  const ct = resp.headers.get('content-type') ?? ''
-  if (!ct.includes('application/json')) {
-    throw new Error(`Resposta não é JSON (content-type: ${ct}) — possível redirect para index.html`)
-  }
-  return resp.json() as Promise<T>
-}
-
-export async function listarOcorrencias(): Promise<Ocorrencia[]> {
-  if (!navigator.onLine) {
-    return (await getCachedOcorrencias()) as Ocorrencia[]
-  }
-  try {
-    const resp = await fetch(`${BASE}/ocorrencias`)
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    const data = await parseJsonSeguro<unknown>(resp)
-    return (Array.isArray(data) ? data : []) as Ocorrencia[]
-  } catch (e) {
-    console.warn('[api] listarOcorrencias falhou — usando cache offline:', e)
-    return (await getCachedOcorrencias()) as Ocorrencia[]
-  }
 }
 
 function buildPayload(dados: Omit<Ocorrencia, 'id' | 'created_at'>) {
@@ -68,33 +41,36 @@ export class ApiError extends Error {
   }
 }
 
-// Envia diretamente para o servidor — LANÇA erro se falhar (sem fallback offline).
-// Usar durante a sincronização de pendentes.
+export async function listarOcorrencias(): Promise<Ocorrencia[]> {
+  if (!navigator.onLine) {
+    return (await getCachedOcorrencias()) as Ocorrencia[]
+  }
+  try {
+    const { data, error } = await supabase
+      .from('ocorrencias')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return (Array.isArray(data) ? data : []) as Ocorrencia[]
+  } catch (e) {
+    console.warn('[api] listarOcorrencias falhou — usando cache offline:', e)
+    return (await getCachedOcorrencias()) as Ocorrencia[]
+  }
+}
+
 export async function enviarOcorrenciaServidor(
   dados: Omit<Ocorrencia, 'id' | 'created_at'>
 ): Promise<Ocorrencia> {
-  const resp = await fetch(`${BASE}/ocorrencias`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildPayload(dados)),
-  })
-  if (!resp.ok) {
-    let msg = `HTTP ${resp.status}`
-    try {
-      const ct = resp.headers.get('content-type') ?? ''
-      if (ct.includes('application/json')) {
-        const body = await resp.json()
-        msg = body?.error ?? msg
-      }
-    } catch { /* ignora */ }
-    throw new ApiError(resp.status, msg)
+  const { data, error } = await supabase
+    .from('ocorrencias')
+    .insert(buildPayload(dados))
+    .select()
+    .single()
+  if (error) throw new ApiError(500, error.message)
+  if (!data || typeof (data as Record<string, unknown>).id === 'undefined') {
+    throw new Error('Supabase retornou resposta inválida (sem id)')
   }
-  // Valida que é JSON real — evita aceitar index.html como sucesso
-  const resultado = await parseJsonSeguro<Ocorrencia>(resp)
-  if (!resultado || typeof (resultado as any).id === 'undefined') {
-    throw new Error('Servidor retornou resposta inválida (sem id)')
-  }
-  return resultado
+  return data as unknown as Ocorrencia
 }
 
 export async function criarOcorrencia(
@@ -117,21 +93,22 @@ export async function atualizarOcorrencia(
   id: number,
   dados: Partial<Ocorrencia>
 ): Promise<Ocorrencia> {
-  const { id: _i, created_at: _c, _offline: _o, _localId: _l, ...payload } = dados as any
+  const { id: _i, created_at: _c, _offline: _o, _localId: _l, ...payload } = dados as Record<string, unknown>
   void _i; void _c; void _o; void _l
-  const resp = await fetch(`${BASE}/ocorrencias/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }))
-    throw new Error(err.error || `HTTP ${resp.status}`)
-  }
-  return await resp.json() as Ocorrencia
+  const { data, error } = await supabase
+    .from('ocorrencias')
+    .update(payload)
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw new Error(error.message)
+  return data as unknown as Ocorrencia
 }
 
 export async function deletarOcorrencia(id: number): Promise<void> {
-  const resp = await fetch(`${BASE}/ocorrencias/${id}`, { method: 'DELETE' })
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  const { error } = await supabase
+    .from('ocorrencias')
+    .delete()
+    .eq('id', id)
+  if (error) throw new Error(error.message)
 }

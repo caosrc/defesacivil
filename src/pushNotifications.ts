@@ -1,12 +1,17 @@
 // ════════════════════════════════════════════════════════════════════════════
 // Defesa Civil Ouro Branco — Push Notifications (Web Push API)
+// Usa Supabase diretamente (sem servidor Express).
 // ════════════════════════════════════════════════════════════════════════════
 
-import { API_BASE } from './config'
+import { supabase } from './supabaseClient'
 
 const STORAGE_DEVICE_ID = 'defesacivil-device-id'
 const STORAGE_PUSH_PEDIU = 'defesacivil-push-permissao-pedida-v1'
 const STORAGE_PUSH_VAPID = 'defesacivil-push-vapid-key'
+
+const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? ''
+const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? ''
+const VAPID_PUBLIC_KEY_ENV = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined) ?? ''
 
 function getMeuId(): string {
   let id = sessionStorage.getItem(STORAGE_DEVICE_ID)
@@ -25,34 +30,6 @@ function getMeuId(): string {
   return id
 }
 
-// Cache da chave VAPID buscada do servidor
-let _vapidKeyCache: string | null = null
-
-// Busca a chave VAPID do servidor (ou usa env var se disponível).
-// Resultado é cacheado para não bater no servidor toda vez.
-async function getVapidPublicKeyAsync(): Promise<string> {
-  // 1. Env var (build-time) — funciona em Replit dev se VITE_VAPID_PUBLIC_KEY estiver definida
-  const envKey = (window as any).__VAPID_PUBLIC_KEY__ || (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined)
-  if (envKey) return envKey
-
-  // 2. Cache de sessão
-  if (_vapidKeyCache) return _vapidKeyCache
-
-  // 3. Busca do servidor — sempre disponível em produção
-  try {
-    const resp = await fetch(`${API_BASE}/api/vapid-public-key`)
-    if (!resp.ok) return ''
-    const data = await resp.json()
-    if (data?.publicKey) {
-      _vapidKeyCache = data.publicKey as string
-      return _vapidKeyCache
-    }
-  } catch {
-    /* ignora se offline ou endpoint não disponível */
-  }
-  return ''
-}
-
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
@@ -68,6 +45,10 @@ function arrayBufferToBase64(buffer: ArrayBuffer | null): string {
   let bin = ''
   for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i])
   return btoa(bin)
+}
+
+function getVapidPublicKey(): string {
+  return (window as Record<string, unknown>).__VAPID_PUBLIC_KEY__ as string || VAPID_PUBLIC_KEY_ENV
 }
 
 export function pushSuportado(): boolean {
@@ -117,11 +98,15 @@ async function salvarInscricao(
 
   const id = getMeuId()
   try {
-    await fetch(`${API_BASE}/api/push-subscriptions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, agente, endpoint, p256dh, auth }),
-    })
+    const { error } = await supabase.from('push_subscriptions').upsert({
+      id,
+      agente: agente || null,
+      endpoint,
+      p256dh,
+      auth,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' })
+    if (error) console.warn('[Push] erro ao salvar inscrição no Supabase:', error.message)
   } catch (e) {
     console.warn('[Push] erro ao salvar inscrição:', e)
   }
@@ -131,7 +116,7 @@ export async function registrarPushSeNecessario(agente: string): Promise<void> {
   if (!pushSuportado()) return
   if (!agente) return
 
-  const VAPID_PUBLIC_KEY = await getVapidPublicKeyAsync()
+  const VAPID_PUBLIC_KEY = getVapidPublicKey()
   if (!VAPID_PUBLIC_KEY) {
     console.warn('[Push] VAPID public key não disponível — push desabilitado.')
     return
@@ -140,7 +125,6 @@ export async function registrarPushSeNecessario(agente: string): Promise<void> {
   const reg = await getServiceWorkerRegistration()
   if (!reg) return
 
-  // Se a chave VAPID mudou, cancela a inscrição antiga e força nova
   const chaveSalva = localStorage.getItem(STORAGE_PUSH_VAPID)
   const existente = await reg.pushManager.getSubscription().catch(() => null)
   if (existente && chaveSalva && chaveSalva !== VAPID_PUBLIC_KEY) {
@@ -179,24 +163,21 @@ export async function registrarPushSeNecessario(agente: string): Promise<void> {
 export async function pedirPermissaoEInscrever(agente: string): Promise<'ok' | 'negado' | 'erro' | 'sem-suporte'> {
   if (!pushSuportado()) return 'sem-suporte'
 
-  // Garante que o SW está registrado antes de qualquer coisa
   const okRegistro = await registrarServiceWorker()
   if (!okRegistro) {
     console.warn('[Push] service worker não pôde ser registrado')
     return 'erro'
   }
 
-  // Busca a chave VAPID do servidor (async, não depende de env var)
-  const VAPID_PUBLIC_KEY = await getVapidPublicKeyAsync()
+  const VAPID_PUBLIC_KEY = getVapidPublicKey()
   if (!VAPID_PUBLIC_KEY) {
-    console.warn('[Push] VAPID public key não encontrada no servidor nem nas env vars')
+    console.warn('[Push] VAPID public key não encontrada nas env vars')
     return 'erro'
   }
 
   const reg = await getServiceWorkerRegistration()
   if (!reg) return 'erro'
 
-  // Pede permissão ao usuário se ainda não foi concedida
   if (Notification.permission === 'default') {
     try {
       const r = await Notification.requestPermission()
@@ -236,7 +217,7 @@ export async function getStatusNotificacoes(): Promise<'ativo' | 'concedido' | '
   return 'desconhecido'
 }
 
-// Dispara push SOS via servidor Express próprio (/api/send-sos-push).
+// Dispara push SOS via Supabase Edge Function.
 export async function dispararPushSos(payload: {
   id: string
   agente: string
@@ -244,10 +225,14 @@ export async function dispararPushSos(payload: {
   lng?: number | null
   bateria?: number | null
 }): Promise<void> {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return
   try {
-    await fetch(`${API_BASE}/api/send-sos-push`, {
+    await fetch(`${SUPABASE_URL}/functions/v1/send-sos-push`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
       body: JSON.stringify({
         id: payload.id,
         agente: payload.agente,
@@ -258,6 +243,6 @@ export async function dispararPushSos(payload: {
       }),
     })
   } catch (e) {
-    console.warn('[Push] erro ao chamar /api/send-sos-push:', e)
+    console.warn('[Push] erro ao chamar Edge Function send-sos-push:', e)
   }
 }

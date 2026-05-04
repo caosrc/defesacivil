@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { adicionarMarcaDagua } from '../utils'
 import { exportarChecklistExcel, type ChecklistExportData } from '../exportExcel'
 import ModalSenha from './ModalSenha'
+import { supabase } from '../supabaseClient'
 
 const MOTORISTAS = ['Moisés', 'Arthur', 'Gustavo', 'Valteir', 'Dyonathan']
 
@@ -335,9 +336,11 @@ export default function ChecklistViatura() {
   async function carregar() {
     setCarregando(true)
     try {
-      const resp = await fetch('/api/checklists')
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const data = await resp.json()
+      const { data, error } = await supabase
+        .from('checklists_viatura')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (error) throw new Error(error.message)
       setChecklists((Array.isArray(data) ? data : []) as ChecklistData[])
     } catch (e) {
       console.warn('[Checklist] erro ao carregar:', e)
@@ -508,38 +511,31 @@ export default function ChecklistViatura() {
     if (!nomeMotorista) { setErro('Informe o motorista.'); return }
     setSalvando(true); setErro('')
     try {
-      const resp = await fetch('/api/checklists', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          data_checklist: data,
-          km: km || null,
-          placa: placa || null,
-          motorista: nomeMotorista || null,
-          fotos_avarias: fotosAvarias,
-          foto_frontal: fotoFrontal,
-          foto_traseira: fotoTraseira,
-          foto_direita: fotoDireita,
-          foto_esquerda: fotoEsquerda,
-          itens,
-          observacoes: observacoes || null,
-          assinatura_data: assinaturaData || null,
-        }),
+      const { error } = await supabase.from('checklists_viatura').insert({
+        data_checklist: data,
+        km: km || null,
+        placa: placa || null,
+        motorista: nomeMotorista || null,
+        fotos_avarias: fotosAvarias,
+        foto_frontal: fotoFrontal,
+        foto_traseira: fotoTraseira,
+        foto_direita: fotoDireita,
+        foto_esquerda: fotoEsquerda,
+        itens,
+        observacoes: observacoes || null,
+        assinatura_data: assinaturaData || null,
       })
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }))
-        throw new Error(err.error || `HTTP ${resp.status}`)
-      }
+      if (error) throw new Error(error.message)
       await carregar(); resetForm(); setModo('lista')
-    } catch (e: any) {
-      setErro(`Erro ao salvar: ${e?.message ?? 'tente novamente'}`)
+    } catch (e: unknown) {
+      setErro(`Erro ao salvar: ${(e as Error)?.message ?? 'tente novamente'}`)
     }
     setSalvando(false)
   }
 
   async function deletar(id: number) {
     try {
-      await fetch(`/api/checklists/${id}`, { method: 'DELETE' })
+      await supabase.from('checklists_viatura').delete().eq('id', id)
     } catch { /* ignore */ }
     setSelecionado(null); setModo('lista'); await carregar()
   }

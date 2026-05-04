@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { getAgenteLogado } from './Login'
 import ModalSenha from './ModalSenha'
+import { supabase } from '../supabaseClient'
 import './EscalaAgentes.css'
 
 // ── Constantes ────────────────────────────────────────────────────
@@ -200,12 +201,10 @@ function teveEdicaoLocalRecente(janelaMs = 60_000) {
 function salvarDados(data: EscalaData) {
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  // Persistência remota via API Express (não bloqueia o salvamento local)
-  fetch('/api/escala', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  }).catch((e: any) => console.warn('Falha ao salvar escala:', e))
+  supabase.from('escala_estado').upsert(
+    { id: 1, data, updated_at: new Date().toISOString() },
+    { onConflict: 'id' }
+  ).then(() => {}).catch((e: unknown) => console.warn('Falha ao salvar escala:', e))
 }
 
 // Versão que aguarda confirmação — usada quando precisamos dar feedback visual.
@@ -213,26 +212,22 @@ async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensag
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   try {
-    const resp = await fetch('/api/escala', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }))
-      return { ok: false, mensagem: err.error || `HTTP ${resp.status}` }
-    }
+    const { error } = await supabase.from('escala_estado').upsert(
+      { id: 1, data, updated_at: new Date().toISOString() },
+      { onConflict: 'id' }
+    )
+    if (error) return { ok: false, mensagem: error.message }
     return { ok: true }
-  } catch (e: any) {
-    return { ok: false, mensagem: e?.message || 'Falha ao salvar escala' }
+  } catch (e: unknown) {
+    return { ok: false, mensagem: (e as Error)?.message || 'Falha ao salvar escala' }
   }
 }
 
 async function carregarDadosRemoto(): Promise<EscalaData | null> {
   try {
-    const resp = await fetch('/api/escala')
-    if (!resp.ok) return null
-    const p = await resp.json() as (Partial<EscalaData> & Record<string, unknown>) | null
+    const { data: row, error } = await supabase.from('escala_estado').select('data').eq('id', 1).single()
+    if (error || !row) return null
+    const p = row.data as (Partial<EscalaData> & Record<string, unknown>) | null
     if (!p) return null
     return {
       adm: (p.adm as EscalaData['adm']) ?? {},
