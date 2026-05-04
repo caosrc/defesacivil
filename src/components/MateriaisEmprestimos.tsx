@@ -8,8 +8,9 @@ interface Material {
   nome: string
   descricao: string | null
   observacoes: string | null
-  foto: string | null
-  foto_placa: string | null
+  foto_thumb: string | null        // miniatura — presente na listagem
+  foto?: string | null             // foto original — carregada só no detalhe
+  foto_placa?: string | null       // foto da placa  — carregada só no detalhe
   quantidade: number | null
   created_at: string
 }
@@ -118,7 +119,7 @@ function statusEmprestimo(e: Emprestimo): 'devolvido' | 'atrasado' | 'proximo' |
   return 'no_prazo'
 }
 
-function redimensionarImagem(dataUrl: string, maxW: number, maxH: number): Promise<string> {
+function redimensionarImagem(dataUrl: string, maxW: number, maxH: number, qualidade = 0.85): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
@@ -128,10 +129,15 @@ function redimensionarImagem(dataUrl: string, maxW: number, maxH: number): Promi
       const canvas = document.createElement('canvas')
       canvas.width = w; canvas.height = h
       canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
-      resolve(canvas.toDataURL('image/jpeg', 0.85))
+      resolve(canvas.toDataURL('image/jpeg', qualidade))
     }
     img.src = dataUrl
   })
+}
+
+// Gera miniatura pequena para a listagem (sem baixar a foto grande)
+function gerarThumbnail(dataUrl: string): Promise<string> {
+  return redimensionarImagem(dataUrl, 120, 120, 0.5)
 }
 
 async function lerArquivoComoDataUrl(file: File): Promise<string> {
@@ -428,8 +434,8 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
               return (
                 <button key={m.id} className="mat-card" onClick={() => { setMaterialSelecionado(m); setModo('detalheMaterial') }}>
                   <div className="mat-card-foto">
-                    {(m.foto || m.foto_placa)
-                      ? <img src={m.foto || m.foto_placa!} alt={m.nome} />
+                    {m.foto_thumb
+                      ? <img src={m.foto_thumb} alt={m.nome} loading="lazy" />
                       : <span>📦</span>}
                   </div>
                   <div className="mat-card-corpo">
@@ -800,6 +806,29 @@ function DetalheMaterial({
   onEditar: () => void
   onExcluir: () => void
 }) {
+  // Busca fotos em alta resolução só quando o usuário abre o detalhe
+  const [fotoCompleta, setFotoCompleta] = useState<{ foto: string | null; foto_placa: string | null } | null>(null)
+  const [carregandoFoto, setCarregandoFoto] = useState(false)
+
+  useEffect(() => {
+    let cancelado = false
+    async function buscarFotos() {
+      setCarregandoFoto(true)
+      try {
+        const res = await fetch(`/api/materiais/${encodeURIComponent(material.id)}`)
+        if (!res.ok || cancelado) return
+        const data = await res.json()
+        if (!cancelado) setFotoCompleta({ foto: data.foto ?? null, foto_placa: data.foto_placa ?? null })
+      } catch { /* silencioso */ } finally {
+        if (!cancelado) setCarregandoFoto(false)
+      }
+    }
+    buscarFotos()
+    return () => { cancelado = true }
+  }, [material.id])
+
+  const temFoto = fotoCompleta ? (fotoCompleta.foto || fotoCompleta.foto_placa) : material.foto_thumb
+
   return (
     <div className="mat-tela">
       <div className="mat-subheader">
@@ -812,18 +841,29 @@ function DetalheMaterial({
       </div>
 
       <div className="mat-detalhe">
-        {(material.foto || material.foto_placa) && (
+        {/* Enquanto carrega as fotos grandes, mostra o thumbnail ou indicador */}
+        {carregandoFoto && !fotoCompleta && material.foto_thumb && (
           <div className="mat-detalhe-fotos">
-            {material.foto_placa && (
+            <div className="mat-detalhe-foto-wrap" style={{ opacity: 0.6 }}>
+              <span className="mat-foto-label">📸 Carregando foto...</span>
+              <img src={material.foto_thumb} alt={material.nome} style={{ filter: 'blur(2px)' }} />
+            </div>
+          </div>
+        )}
+
+        {/* Fotos completas carregadas */}
+        {fotoCompleta && temFoto && (
+          <div className="mat-detalhe-fotos">
+            {fotoCompleta.foto_placa && (
               <div className="mat-detalhe-foto-wrap">
                 <span className="mat-foto-label">🏷️ Placa do patrimônio</span>
-                <img src={material.foto_placa} alt="Placa do patrimônio" />
+                <img src={fotoCompleta.foto_placa} alt="Placa do patrimônio" />
               </div>
             )}
-            {material.foto && (
+            {fotoCompleta.foto && (
               <div className="mat-detalhe-foto-wrap">
                 <span className="mat-foto-label">📸 Foto do item</span>
-                <img src={material.foto} alt={material.nome} />
+                <img src={fotoCompleta.foto} alt={material.nome} />
               </div>
             )}
           </div>
@@ -882,6 +922,7 @@ function FormMaterial({
   const [descricao, setDescricao] = useState(materialInicial?.descricao ?? '')
   const [observacoes, setObservacoes] = useState(materialInicial?.observacoes ?? '')
   const [foto, setFoto] = useState<string | null>(materialInicial?.foto ?? null)
+  const [fotoThumb, setFotoThumb] = useState<string | null>(materialInicial?.foto_thumb ?? null)
   const [quantidade, setQuantidade] = useState(materialInicial?.quantidade ?? 1)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
@@ -891,8 +932,13 @@ function FormMaterial({
     if (!file) return
     try {
       const raw = await lerArquivoComoDataUrl(file)
-      const redim = await redimensionarImagem(raw, 1000, 1000)
+      // Gera foto em alta resolução (para o detalhe) e miniatura (para a lista)
+      const [redim, thumb] = await Promise.all([
+        redimensionarImagem(raw, 1000, 1000),
+        gerarThumbnail(raw),
+      ])
       setFoto(redim)
+      setFotoThumb(thumb)
     } catch {
       alert('Não consegui carregar a foto. Tente outra.')
     }
@@ -908,7 +954,14 @@ function FormMaterial({
         const res = await fetch(`/api/materiais/${materialInicial.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ nome: nm, descricao: descricao.trim() || null, observacoes: observacoes.trim() || null, foto, quantidade: Math.max(1, quantidade) }),
+          body: JSON.stringify({
+            nome: nm,
+            descricao: descricao.trim() || null,
+            observacoes: observacoes.trim() || null,
+            foto,
+            foto_thumb: fotoThumb,
+            quantidade: Math.max(1, quantidade),
+          }),
         })
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
         const data = await res.json()
@@ -920,7 +973,15 @@ function FormMaterial({
         const res = await fetch('/api/materiais', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: cod, nome: nm, descricao: descricao.trim() || null, observacoes: observacoes.trim() || null, foto, quantidade: Math.max(1, quantidade) }),
+          body: JSON.stringify({
+            id: cod,
+            nome: nm,
+            descricao: descricao.trim() || null,
+            observacoes: observacoes.trim() || null,
+            foto,
+            foto_thumb: fotoThumb,
+            quantidade: Math.max(1, quantidade),
+          }),
         })
         if (!res.ok) {
           const e = await res.json().catch(() => ({}))

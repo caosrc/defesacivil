@@ -606,10 +606,13 @@ async function initDb() {
       observacoes TEXT,
       foto TEXT,
       foto_placa TEXT,
+      foto_thumb TEXT,
       quantidade INTEGER NOT NULL DEFAULT 1,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `)
+  // Adiciona foto_thumb se tabela já existia sem a coluna
+  await query(`ALTER TABLE materiais ADD COLUMN IF NOT EXISTS foto_thumb TEXT`)
 
   await query(`
     CREATE TABLE IF NOT EXISTS emprestimos (
@@ -961,24 +964,38 @@ function broadcastEmprestimosAtualizados() {
   broadcastParaTodos({ tipo: 'emprestimos_atualizados' })
 }
 
+// Lista leve — SEM foto e foto_placa (só thumbnail) para não travar o carregamento
 app.get('/api/materiais', async (_req, res) => {
   try {
-    const result = await query('SELECT * FROM materiais ORDER BY id')
+    const result = await query(
+      'SELECT id, nome, descricao, observacoes, foto_thumb, quantidade, created_at FROM materiais ORDER BY id'
+    )
     res.json(result.rows)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
+// Detalhe completo — inclui foto e foto_placa (carregado só quando o usuário abre o item)
+app.get('/api/materiais/:id', async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM materiais WHERE id = $1', [req.params.id])
+    if (!result.rows[0]) return res.status(404).json({ error: 'Material não encontrado' })
+    res.json(result.rows[0])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.post('/api/materiais', async (req, res) => {
-  const { id, nome, descricao, observacoes, foto, foto_placa, quantidade } = req.body || {}
+  const { id, nome, descricao, observacoes, foto, foto_placa, foto_thumb, quantidade } = req.body || {}
   if (!id || !nome) return res.status(400).json({ error: 'id e nome obrigatórios' })
   try {
     const result = await query(
-      `INSERT INTO materiais (id, nome, descricao, observacoes, foto, foto_placa, quantidade)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      `INSERT INTO materiais (id, nome, descricao, observacoes, foto, foto_placa, foto_thumb, quantidade)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, nome, descricao, observacoes, foto_thumb, quantidade, created_at`,
       [String(id).trim(), String(nome).trim(), descricao || null, observacoes || null,
-       foto || null, foto_placa || null, Math.max(1, quantidade || 1)]
+       foto || null, foto_placa || null, foto_thumb || null, Math.max(1, quantidade || 1)]
     )
     broadcastMateriaisAtualizados()
     res.status(201).json(result.rows[0])
@@ -990,7 +1007,7 @@ app.post('/api/materiais', async (req, res) => {
 })
 
 app.patch('/api/materiais/:id', async (req, res) => {
-  const { nome, descricao, observacoes, foto, foto_placa, quantidade } = req.body || {}
+  const { nome, descricao, observacoes, foto, foto_placa, foto_thumb, quantidade } = req.body || {}
   const sets = []
   const vals = []
   let idx = 1
@@ -999,11 +1016,16 @@ app.patch('/api/materiais/:id', async (req, res) => {
   if (observacoes !== undefined) { sets.push(`observacoes=$${idx++}`); vals.push(observacoes || null) }
   if (foto !== undefined) { sets.push(`foto=$${idx++}`); vals.push(foto || null) }
   if (foto_placa !== undefined) { sets.push(`foto_placa=$${idx++}`); vals.push(foto_placa || null) }
+  if (foto_thumb !== undefined) { sets.push(`foto_thumb=$${idx++}`); vals.push(foto_thumb || null) }
   if (quantidade !== undefined) { sets.push(`quantidade=$${idx++}`); vals.push(Math.max(1, quantidade || 1)) }
   if (sets.length === 0) return res.status(400).json({ error: 'Nada para atualizar' })
   vals.push(req.params.id)
   try {
-    const result = await query(`UPDATE materiais SET ${sets.join(', ')} WHERE id=$${idx} RETURNING *`, vals)
+    const result = await query(
+      `UPDATE materiais SET ${sets.join(', ')} WHERE id=$${idx}
+       RETURNING id, nome, descricao, observacoes, foto_thumb, quantidade, created_at`,
+      vals
+    )
     if (!result.rows[0]) return res.status(404).json({ error: 'Material não encontrado' })
     broadcastMateriaisAtualizados()
     res.json(result.rows[0])
