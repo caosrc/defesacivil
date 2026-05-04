@@ -63,6 +63,7 @@ type Modo =
   | 'formMaterial'
   | 'editarMaterial'
   | 'emprestimos'
+  | 'escolhaTipo'
   | 'novoEmprestimo'
   | 'devolucao'
   | 'campo'
@@ -160,6 +161,7 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
   const [toast, setToast] = useState('')
   const [mostrarImport, setMostrarImport] = useState(false)
   const [notificacoesPrazo, setNotificacoesPrazo] = useState<Emprestimo[]>([])
+  const [tipoOperacao, setTipoOperacao] = useState<'emprestimo' | 'manutencao'>('emprestimo')
 
   function showToast(msg: string) {
     setToast(msg)
@@ -523,7 +525,7 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
         <div className="mat-subheader">
           <button className="btn-voltar" onClick={() => setModo('inicial')}>‹</button>
           <h2>🔄 Empréstimos</h2>
-          <button className="mat-btn-add" onClick={() => setModo('novoEmprestimo')} disabled={materiais.length === 0}>+</button>
+          <button className="mat-btn-add" onClick={() => setModo('escolhaTipo')} disabled={materiais.length === 0}>+</button>
         </div>
 
         <div className="mat-toggle-row">
@@ -550,7 +552,7 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
               {mostrarDevolvidos ? 'Nenhuma devolução registrada ainda.' : 'Nenhum empréstimo ativo no momento.'}
             </div>
             {!mostrarDevolvidos && materiais.length > 0 && (
-              <button className="btn-nova-vazia" onClick={() => setModo('novoEmprestimo')}>+ Registrar empréstimo</button>
+              <button className="btn-nova-vazia" onClick={() => setModo('escolhaTipo')}>+ Registrar empréstimo ou manutenção</button>
             )}
           </div>
         ) : (
@@ -596,6 +598,43 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
     )
   }
 
+  // ─── ESCOLHA DE TIPO (Empréstimo ou Manutenção) ──────────────────────────
+  if (modo === 'escolhaTipo') {
+    return (
+      <div className="mat-tela">
+        {toast && <div className="toast">{toast}</div>}
+        <div className="mat-subheader">
+          <button className="btn-voltar" onClick={() => setModo('emprestimos')}>‹</button>
+          <h2>📋 Nova Operação</h2>
+          <span style={{ width: '2rem' }} />
+        </div>
+        <div className="mat-form" style={{ gap: '1.2rem', paddingTop: '1.5rem' }}>
+          <p style={{ textAlign: 'center', color: '#6b7280', fontSize: '0.88rem', fontWeight: 600 }}>
+            Selecione o tipo de operação:
+          </p>
+          <button
+            className="mat-btn-grande mat-btn-laranja"
+            onClick={() => { setTipoOperacao('emprestimo'); setModo('novoEmprestimo') }}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.8rem 1rem', gap: '0.5rem' }}
+          >
+            <span style={{ fontSize: '2.5rem' }}>🔄</span>
+            <span style={{ fontSize: '1.1rem', fontWeight: 800 }}>Empréstimo</span>
+            <span style={{ fontSize: '0.78rem', opacity: 0.85 }}>Equipamento cedido com prazo de devolução</span>
+          </button>
+          <button
+            className="mat-btn-grande mat-btn-verde"
+            onClick={() => { setTipoOperacao('manutencao'); setModo('novoEmprestimo') }}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.8rem 1rem', gap: '0.5rem' }}
+          >
+            <span style={{ fontSize: '2.5rem' }}>🔧</span>
+            <span style={{ fontSize: '1.1rem', fontWeight: 800 }}>Manutenção</span>
+            <span style={{ fontSize: '0.78rem', opacity: 0.85 }}>Envio para conserto ou revisão técnica</span>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // ─── NOVO EMPRÉSTIMO (formulário + termo) ────────────────────────────────
   if (modo === 'novoEmprestimo') {
     return (
@@ -603,11 +642,12 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
         materiais={materiais}
         emprestimos={emprestimos}
         equipamentos={equipamentosCampo}
-        onCancelar={() => setModo('inicial')}
+        tipoOperacao={tipoOperacao}
+        onCancelar={() => setModo('escolhaTipo')}
         onSalvo={async (novo) => {
-          showToast('✅ Empréstimo registrado!')
+          showToast(tipoOperacao === 'manutencao' ? '✅ Manutenção registrada!' : '✅ Empréstimo registrado!')
           await carregar()
-          gerarTermoEmprestimoPdf(novo)
+          gerarTermoEmprestimoPdf(novo, tipoOperacao)
           setModo('emprestimos')
         }}
       />
@@ -1004,11 +1044,12 @@ function FormMaterial({
 }
 
 function FormNovoEmprestimo({
-  materiais, emprestimos, equipamentos, onCancelar, onSalvo,
+  materiais, emprestimos, equipamentos, tipoOperacao, onCancelar, onSalvo,
 }: {
   materiais: Material[]
   emprestimos: Emprestimo[]
   equipamentos: EquipamentoCampo[]
+  tipoOperacao: 'emprestimo' | 'manutencao'
   onCancelar: () => void
   onSalvo: (novo: Emprestimo) => void
 }) {
@@ -1138,7 +1179,7 @@ function FormNovoEmprestimo({
     <div className="mat-tela">
       <div className="mat-subheader">
         <button className="btn-voltar" onClick={onCancelar}>‹</button>
-        <h2>➕ Novo Empréstimo</h2>
+        <h2>{tipoOperacao === 'manutencao' ? '🔧 Nova Manutenção' : '➕ Novo Empréstimo'}</h2>
         <span style={{ width: '2rem' }} />
       </div>
 
@@ -1307,7 +1348,7 @@ function FormNovoEmprestimo({
             {erro && <div className="login-erro" style={{ marginBottom: '0.8rem' }}>{erro}</div>}
 
             <button className="btn-salvar" onClick={salvar} disabled={salvando}>
-              {salvando ? '⏳ Registrando...' : '✅ Registrar Empréstimo + Gerar Termo'}
+              {salvando ? '⏳ Registrando...' : tipoOperacao === 'manutencao' ? '✅ Registrar Manutenção + Gerar Termo' : '✅ Registrar Empréstimo + Gerar Termo'}
             </button>
           </>
         )}
@@ -1438,7 +1479,7 @@ function FormDevolucao({
 // ═══════════════════════════════════════════════════════════════════════════
 // GERAÇÃO DO TERMO DE EMPRÉSTIMO (PDF via window.print)
 // ═══════════════════════════════════════════════════════════════════════════
-function gerarTermoEmprestimoPdf(e: Emprestimo) {
+function gerarTermoEmprestimoPdf(e: Emprestimo, tipoOperacao: 'emprestimo' | 'manutencao' = 'emprestimo') {
   const dataE = new Date(e.data_emprestimo)
   const win = window.open('', '_blank')
   if (!win) {
@@ -1469,7 +1510,7 @@ function gerarTermoEmprestimoPdf(e: Emprestimo) {
     @media print{button{display:none}body{margin:0;padding:18mm}}
   `
   const html = `<!doctype html><html lang="pt-br"><head>
-<meta charset="utf-8"/><title>Termo de Empréstimo #${e.id}</title>
+<meta charset="utf-8"/><title>${tipoOperacao === 'manutencao' ? 'Termo de Manutenção' : 'Termo de Empréstimo'} #${e.id}</title>
 <style>${css}</style>
 </head><body>
   <button onclick="window.print()">🖨️ Salvar em PDF</button>
@@ -1481,9 +1522,9 @@ function gerarTermoEmprestimoPdf(e: Emprestimo) {
     </div>
   </div>
 
-  <h1>Termo de Empréstimo</h1>
+  <h1>${tipoOperacao === 'manutencao' ? 'Termo de Entrega para Manutenção' : 'Termo de Empréstimo'}</h1>
 
-  <div class="linha"><strong>Empréstimo de:</strong> ${htmlEscape(e.material_nome)}${e.material_codigo ? ` (cód. ${htmlEscape(e.material_codigo)})` : ''}${(e.quantidade ?? 1) > 1 ? ` — Qtd: ${e.quantidade}` : ''}</div>
+  <div class="linha"><strong>${tipoOperacao === 'manutencao' ? 'Equipamento:' : 'Empréstimo de:'}</strong> ${htmlEscape(e.material_nome)}${e.material_codigo ? ` (cód. ${htmlEscape(e.material_codigo)})` : ''}${(e.quantidade ?? 1) > 1 ? ` — Qtd: ${e.quantidade}` : ''}</div>
   <div class="linha"><strong>Para:</strong> ${htmlEscape(e.responsavel)}</div>
   <div class="linha"><strong>CPF nº:</strong> ${htmlEscape(e.cpf || '—')}</div>
   <div class="linha"><strong>Secretaria:</strong> ${htmlEscape(e.secretaria || '—')}</div>
@@ -1501,14 +1542,14 @@ function gerarTermoEmprestimoPdf(e: Emprestimo) {
       <div class="img-wrap" style="align-items:center;justify-content:center;padding-bottom:8px">
         <span style="font-size:13px;font-style:italic;color:#374151">${htmlEscape(e.agente_emprestador || '—')}</span>
       </div>
-      <strong>Emprestador (cedente)</strong>
+      <strong>${tipoOperacao === 'manutencao' ? 'Responsável (cedente)' : 'Emprestador (cedente)'}</strong>
       <div class="nome">${htmlEscape(e.agente_emprestador || '—')}</div>
     </div>
     <div class="assinatura">
       <div class="img-wrap">
         ${e.assinatura_data ? `<img src="${e.assinatura_data}" alt="assinatura"/>` : ''}
       </div>
-      <strong>Emprestado (solicitante)</strong>
+      <strong>${tipoOperacao === 'manutencao' ? 'Recebedor (manutenção)' : 'Emprestado (solicitante)'}</strong>
       <div class="nome">${htmlEscape(e.responsavel)}</div>
     </div>
   </div>

@@ -317,20 +317,7 @@ wss.on('connection', (ws) => {
       }
 
       if (msg.tipo === 'sos-mensagem') {
-        const { id, agente, texto, ts } = msg
-        if (id && agente && texto) {
-          const existente = sosAtivos.get(id)
-          if (existente) {
-            const msgs = Array.isArray(existente.mensagens) ? existente.mensagens : []
-            const novas = [...msgs, { agente, texto, ts: ts || Date.now() }]
-            sosAtivos.set(id, { ...existente, mensagens: novas })
-            broadcastParaTodos({ tipo: 'sos-nova-mensagem', id, mensagens: novas }, null)
-            // Persiste no banco
-            query('UPDATE sos_ativos_db SET mensagens=$1 WHERE id=$2',
-              [JSON.stringify(novas), id])
-              .catch(e => console.warn('[SOS-DB] erro ao atualizar mensagens:', e?.message))
-          }
-        }
+        processarSosMensagem(msg).catch(() => {})
       }
     } catch { /* ignora mensagens malformadas */ }
   })
@@ -839,6 +826,38 @@ app.put('/api/escala', async (req, res) => {
 app.get('/api/health', (req, res) => res.json({ ok: true }))
 
 // ── SOS ─────────────────────────────────────────────────────────────────────
+async function processarSosMensagem(msg) {
+  const { id, agente, texto, ts } = msg
+  if (!id || !agente || !texto) return
+  let existente = sosAtivos.get(id)
+  if (!existente) {
+    try {
+      const r = await query('SELECT * FROM sos_ativos_db WHERE id=$1', [id])
+      if (r.rows[0]) {
+        const row = r.rows[0]
+        existente = {
+          id: row.id, agente: row.agente,
+          lat: row.lat != null ? Number(row.lat) : null,
+          lng: row.lng != null ? Number(row.lng) : null,
+          bateria: row.bateria != null ? Number(row.bateria) : null,
+          audio: row.audio ?? null,
+          timestamp: Number(row.timestamp),
+          visualizadores: Array.isArray(row.visualizadores) ? row.visualizadores : [],
+          mensagens: Array.isArray(row.mensagens) ? row.mensagens : [],
+        }
+        sosAtivos.set(id, existente)
+      }
+    } catch (e) { console.warn('[SOS-MSG] fallback DB:', e?.message) }
+  }
+  if (!existente) return
+  const msgs = Array.isArray(existente.mensagens) ? existente.mensagens : []
+  const novas = [...msgs, { agente, texto, ts: ts || Date.now() }]
+  sosAtivos.set(id, { ...existente, mensagens: novas })
+  broadcastParaTodos({ tipo: 'sos-nova-mensagem', id, mensagens: novas }, null)
+  query('UPDATE sos_ativos_db SET mensagens=$1 WHERE id=$2', [JSON.stringify(novas), id])
+    .catch(e => console.warn('[SOS-DB] erro ao atualizar mensagens:', e?.message))
+}
+
 app.post('/api/sos', (req, res) => {
   const msg = req.body
   if (!msg || typeof msg !== 'object' || !msg.tipo || !msg.id) {
@@ -848,6 +867,7 @@ app.post('/api/sos', (req, res) => {
     if (msg.tipo === 'sos') processarSos(msg, null)
     else if (msg.tipo === 'sos-audio') processarSosAudio(msg, null)
     else if (msg.tipo === 'sos-cancelar') processarSosCancelar(msg, null)
+    else if (msg.tipo === 'sos-mensagem') { processarSosMensagem(msg).catch(() => {}) }
     else return res.status(400).json({ error: `Tipo SOS desconhecido: ${msg.tipo}` })
     res.json({ ok: true })
   } catch (err) {

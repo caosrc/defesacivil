@@ -10,6 +10,12 @@ Progressive Web App for the Civil Defense of Ouro Branco, MG. Manages emergency 
 - **Real-time**: WebSocket (`/ws`) — position tracking, SOS alerts, online agents
 - **Push Notifications**: Web Push API with VAPID keys
 
+## Recent Changes (2026-05-04)
+
+- **Escala / Banco de Horas**: Justificativa de hora extra movida para baixo da linha de input (mais ampla, 4 linhas); banco de horas pode ficar negativo (folgas excedentes mostram valor negativo em vermelho)
+- **SOS**: Trigger por chacoalho removido; mantido apenas o botão manual e a tecla de volume. Mensagens do SOS corrigidas (fallback no banco de dados quando o SOS não está em memória; envio via REST + WebSocket garantindo entrega)
+- **Patrimônio**: Ao registrar nova operação, o agente escolhe entre Empréstimo ou Manutenção. O PDF do termo adapta título e etiquetas conforme o tipo selecionado.
+
 ## Running the App
 
 ```bash

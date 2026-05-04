@@ -157,7 +157,7 @@ export function wsSend(msg: Record<string, unknown>): void {
     dispararPushSos({ id: id as string, agente: agente as string, lat: lat as number | null, lng: lng as number | null, bateria: bateria as number | null }).catch(() => {})
   }
 
-  if (tipo === 'sos-audio' || tipo === 'sos-cancelar') {
+  if (tipo === 'sos-audio' || tipo === 'sos-cancelar' || tipo === 'sos-mensagem') {
     fetch('/api/sos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

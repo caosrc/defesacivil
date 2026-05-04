@@ -1253,11 +1253,64 @@
 
 .bh-dia-row {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0.4rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+  padding: 0.4rem 0.5rem;
   border-radius: 6px;
   background: #f9fafb;
+}
+
+.bh-dia-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bh-dia-justif-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 100%;
+}
+
+.bh-dia-justif-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #374151;
+}
+
+.bh-dia-justif-obrig {
+  color: #dc2626;
+}
+
+.bh-dia-justif-input {
+  width: 100%;
+  border: 1.5px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  color: #374151;
+  background: #fff;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.bh-dia-justif-input:focus {
+  border-color: #7c3aed;
+}
+
+.bh-dia-justif-vazio {
+  border-color: #f87171;
+}
+
+.bh-dia-justif-aviso {
+  font-size: 0.7rem;
+  color: #b91c1c;
+  font-weight: 600;
 }
 
 .bh-dia-row.feriado-dom {
