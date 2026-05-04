@@ -158,10 +158,12 @@ export interface StatusSos {
 
 const DURACAO_AUDIO_MS = 10_000
 
-// Handle público devolvido por dispararSos. O chamador pode `abortar()`
-// a gravação enquanto ela está acontecendo (sem mandar nada para os outros)
-// e fica `await alerta` para receber o objeto final OU `null` se foi abortado.
+// Handle público devolvido por dispararSos.
+// - `alertaEnviado`: resolve assim que o SOS for transmitido (sem áudio), OU null se abortado antes disso.
+// - `alerta`: resolve quando tudo terminar (incluindo gravação de áudio em segundo plano).
+// - `abortar()`: cancela a gravação (mas se o SOS já foi enviado, não cancela para os outros).
 export type DisparoEmCurso = {
+  alertaEnviado: Promise<SosAlerta | null>
   alerta: Promise<SosAlerta | null>
   abortar: () => void
 }
@@ -176,59 +178,58 @@ export function dispararSos(
   let abortado = false
   let abortarGravacao: (() => void) | null = null
 
-  const alertaPromise = (async (): Promise<SosAlerta | null> => {
-    // 1. Abre o microfone JÁ. O agente que disparou vê o contador 10→0
-    //    enquanto fala. NADA é enviado aos outros agentes ainda.
-    const gravacao = await iniciarGravacaoAudio(DURACAO_AUDIO_MS)
-    if (abortado) {
-      gravacao?.abortar()
-      return null
-    }
-    abortarGravacao = gravacao?.abortar ?? null
+  // Resolve assim que o SOS é transmitido (sem áudio)
+  let resolverEnviado!: (v: SosAlerta | null) => void
+  const alertaEnviadoPromise = new Promise<SosAlerta | null>((res) => { resolverEnviado = res })
 
-    let restantes = Math.ceil(DURACAO_AUDIO_MS / 1000)
-    let tick: ReturnType<typeof setInterval> | null = null
-    if (gravacao) {
-      onStatus?.({ fase: 'gravando', segundosRestantes: restantes })
-      tick = setInterval(() => {
-        restantes -= 1
-        if (restantes <= 0) {
-          if (tick) { clearInterval(tick); tick = null }
-        } else {
-          onStatus?.({ fase: 'gravando', segundosRestantes: restantes })
-        }
-      }, 1000)
-    } else {
-      // Sem microfone → avisa, mas NÃO bloqueia: o alerta sai sem áudio.
-      onStatus?.({ fase: 'audio_falhou' })
-    }
+  const alertaFinalPromise = (async (): Promise<SosAlerta | null> => {
+    // 1. Lê GPS e bateria em paralelo — sem esperar microfone
+    const [gps, bateria] = await Promise.all([lerGps(), lerBateria()])
+    if (abortado) { resolverEnviado(null); return null }
 
-    // 2. Em paralelo com a gravação, lê GPS + bateria. Quando os 10s
-    //    da gravação terminarem, ambos já vão estar prontos.
-    const [audio, gps, bateria] = await Promise.all([
-      gravacao ? gravacao.audioPromise : Promise.resolve<string | null>(null),
-      lerGps(),
-      lerBateria(),
-    ])
-    if (tick) { clearInterval(tick); tick = null }
-    if (abortado) return null
-
-    // 3. Agora sim: envia o alerta junto com o áudio para todos os agentes.
-    const alerta: SosAlerta = {
-      id,
-      agente,
+    // 2. Envia o alerta IMEDIATAMENTE sem áudio
+    const alertaInicial: SosAlerta = {
+      id, agente,
       lat: gps?.lat ?? null,
       lng: gps?.lng ?? null,
       bateria,
-      audio,
+      audio: null,
       timestamp,
     }
-    enviarSosTodosOsCanais({ tipo: 'sos', ...alerta })
-    return alerta
+    enviarSosTodosOsCanais({ tipo: 'sos', ...alertaInicial })
+    resolverEnviado(alertaInicial)
+
+    // 3. Grava áudio em segundo plano (sem bloquear a confirmação de envio)
+    const gravacao = await iniciarGravacaoAudio(DURACAO_AUDIO_MS)
+    if (abortado) { gravacao?.abortar(); return alertaInicial }
+    abortarGravacao = gravacao?.abortar ?? null
+
+    if (gravacao) {
+      let restantes = Math.ceil(DURACAO_AUDIO_MS / 1000)
+      onStatus?.({ fase: 'gravando', segundosRestantes: restantes })
+      const tick = setInterval(() => {
+        restantes -= 1
+        if (restantes <= 0) clearInterval(tick)
+        else onStatus?.({ fase: 'gravando', segundosRestantes: restantes })
+      }, 1000)
+
+      const audio = await gravacao.audioPromise
+      clearInterval(tick)
+
+      if (!abortado && audio) {
+        enviarSosTodosOsCanais({ tipo: 'sos-audio', id, audio })
+        return { ...alertaInicial, audio }
+      }
+    } else {
+      onStatus?.({ fase: 'audio_falhou' })
+    }
+
+    return alertaInicial
   })()
 
   return {
-    alerta: alertaPromise,
+    alertaEnviado: alertaEnviadoPromise,
+    alerta: alertaFinalPromise,
     abortar: () => {
       abortado = true
       if (abortarGravacao) try { abortarGravacao() } catch {}

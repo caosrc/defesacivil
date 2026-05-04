@@ -50,16 +50,24 @@ export default function BotaoSos({ modo = 'fab' }: Props) {
     const disparo = dispararSos(getNomeAgente(), (s) => setStatusSos(s))
     disparoRef.current = disparo
     try {
-      const alerta = await disparo.alerta
-      if (alerta) {
-        setIdEnviado(alerta.id)
+      // Mostra "enviado" assim que o SOS for transmitido (sem esperar o áudio)
+      const alertaInicial = await disparo.alertaEnviado
+      if (alertaInicial) {
+        setIdEnviado(alertaInicial.id)
         setEnviado(true)
+        setEnviando(false)
+      } else {
+        // abortado antes de enviar
+        setEnviando(false)
+        disparoRef.current = null
+        return
       }
-      // se `alerta` é null, o disparo foi abortado pelo agente — fechar painel
+      // Aguarda o áudio em segundo plano (não bloqueia a UI)
+      await disparo.alerta
     } catch (e: any) {
       setErro(e?.message || 'Falha ao enviar SOS')
-    } finally {
       setEnviando(false)
+    } finally {
       disparoRef.current = null
     }
   }

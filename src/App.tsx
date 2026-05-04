@@ -301,7 +301,7 @@ export default function App() {
     await atualizarPendingCount()
   }, [atualizarPendingCount])
 
-  const sincronizar = useCallback(async () => {
+  const sincronizar = useCallback(async (silencioso = false) => {
     if (!navigator.onLine || sincronizando) return
     const pending = await getPending()
     if (pending.length === 0) return
@@ -334,11 +334,13 @@ export default function App() {
     await atualizarPendingCount()
     if (ok > 0) {
       await carregar()
-      showToast(falhas > 0
-        ? `✅ ${ok} sincronizada(s). ${falhas} pendente(s) aguardando.`
-        : `✅ ${ok} ocorrência(s) sincronizadas com sucesso!`
-      )
-    } else if (falhas > 0) {
+      if (!silencioso) {
+        showToast(falhas > 0
+          ? `✅ ${ok} sincronizada(s). ${falhas} pendente(s) aguardando.`
+          : `✅ ${ok} ocorrência(s) sincronizadas com sucesso!`
+        )
+      }
+    } else if (falhas > 0 && !silencioso) {
       showToast(`⚠️ Falha ao sincronizar. Verifique a conexão e tente novamente.`)
     }
   }, [sincronizando, carregar, atualizarPendingCount])
@@ -373,7 +375,7 @@ export default function App() {
   }, [carregar])
 
   useEffect(() => {
-    const goOnline = () => { setIsOnline(true); setTimeout(sincronizar, 800) }
+    const goOnline = () => { setIsOnline(true); setTimeout(() => sincronizar(true), 800) }
     const goOffline = () => setIsOnline(false)
     window.addEventListener('online', goOnline)
     window.addEventListener('offline', goOffline)
@@ -477,8 +479,7 @@ export default function App() {
       <Suspense fallback={<LazyFallback />}>
         <NovaOcorrencia
           onSalvo={async (ocOffline) => {
-            if (ocOffline) showToast('📥 Salvo offline. Será enviado quando houver conexão.')
-            else showToast('✅ Ocorrência salva com sucesso!')
+            if (ocOffline) showToast('📥 Salvo localmente. Será enviado ao reconectar.')
             await carregar()
             await atualizarPendingCount()
             setAba('lista')
