@@ -49,13 +49,18 @@ function dispatch(tipo: string, msg: Record<string, unknown>) {
   } catch { /* ignore */ }
 }
 
+// URL do backend Replit (dev server público, não precisa publicar no Replit)
+const REPLIT_WS = 'wss://87a7d4ce-738a-4aa3-ac74-9e5507611668-00-1qfaq1dnzb4z7.picard.replit.dev/ws'
+
 function getWsUrl(): string {
-  // VITE_WS_URL permite apontar para um backend externo (ex.: Replit dev).
-  // Defina essa variável nas configurações de ambiente do Netlify.
-  const configurada = (import.meta.env.VITE_WS_URL as string | undefined)?.trim()
-  if (configurada) return configurada
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${location.host}/ws`
+  const host = location.hostname
+  // localhost ou domínio do próprio Replit → proxy local do Vite
+  if (host === 'localhost' || host.includes('replit.dev')) {
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${protocol}//${location.host}/ws`
+  }
+  // Qualquer outro domínio (ex.: Netlify) → conecta direto ao backend Replit
+  return REPLIT_WS
 }
 
 function startPing() {
