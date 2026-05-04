@@ -5,7 +5,6 @@ import type { Ocorrencia, NivelRisco } from './types'
 import { NATUREZA_ICONE } from './types'
 import { listarOcorrencias, criarOcorrencia, enviarOcorrenciaServidor, ApiError } from './api'
 import { wsOn } from './wsClient'
-import { supabase } from './supabaseClient'
 import { EVT_ROTA_RESGATE } from './sos'
 import { registrarPushSeNecessario, pedirPermissaoEInscrever, getStatusNotificacoes } from './pushNotifications'
 import AgentesOnline from './components/AgentesOnline'
@@ -181,11 +180,11 @@ export default function App() {
   useEffect(() => {
     async function carregarCampo() {
       try {
-        const { data } = await supabase
-          .from('equipamentos_campo')
-          .select('*')
-          .order('created_at', { ascending: false })
-        setEquipamentosCampoMapa((Array.isArray(data) ? data : []) as EquipamentoCampoMapa[])
+        const res = await fetch('/api/equipamentos-campo')
+        if (res.ok) {
+          const data = await res.json()
+          setEquipamentosCampoMapa((Array.isArray(data) ? data : []) as EquipamentoCampoMapa[])
+        }
       } catch { /* silencioso */ }
     }
     carregarCampo()

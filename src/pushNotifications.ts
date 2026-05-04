@@ -1,16 +1,12 @@
 // ════════════════════════════════════════════════════════════════════════════
 // Defesa Civil Ouro Branco — Push Notifications (Web Push API)
-// Usa Supabase diretamente (sem servidor Express).
+// Usa o servidor Express local (sem Supabase).
 // ════════════════════════════════════════════════════════════════════════════
-
-import { supabase } from './supabaseClient'
 
 const STORAGE_DEVICE_ID = 'defesacivil-device-id'
 const STORAGE_PUSH_PEDIU = 'defesacivil-push-permissao-pedida-v1'
 const STORAGE_PUSH_VAPID = 'defesacivil-push-vapid-key'
 
-const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? ''
-const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? ''
 const VAPID_PUBLIC_KEY_ENV = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined) ?? ''
 
 function getMeuId(): string {
@@ -47,8 +43,17 @@ function arrayBufferToBase64(buffer: ArrayBuffer | null): string {
   return btoa(bin)
 }
 
-function getVapidPublicKey(): string {
-  return (window as Record<string, unknown>).__VAPID_PUBLIC_KEY__ as string || VAPID_PUBLIC_KEY_ENV
+async function getVapidPublicKey(): Promise<string> {
+  const envKey = (window as Record<string, unknown>).__VAPID_PUBLIC_KEY__ as string || VAPID_PUBLIC_KEY_ENV
+  if (envKey) return envKey
+  try {
+    const res = await fetch('/api/vapid-public-key')
+    if (res.ok) {
+      const json = await res.json()
+      return json.publicKey || ''
+    }
+  } catch { /* ignore */ }
+  return ''
 }
 
 export function pushSuportado(): boolean {
@@ -98,15 +103,12 @@ async function salvarInscricao(
 
   const id = getMeuId()
   try {
-    const { error } = await supabase.from('push_subscriptions').upsert({
-      id,
-      agente: agente || null,
-      endpoint,
-      p256dh,
-      auth,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' })
-    if (error) console.warn('[Push] erro ao salvar inscrição no Supabase:', error.message)
+    const res = await fetch('/api/push-subscriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, agente: agente || null, endpoint, p256dh, auth }),
+    })
+    if (!res.ok) console.warn('[Push] erro ao salvar inscrição:', res.status)
   } catch (e) {
     console.warn('[Push] erro ao salvar inscrição:', e)
   }
@@ -116,7 +118,7 @@ export async function registrarPushSeNecessario(agente: string): Promise<void> {
   if (!pushSuportado()) return
   if (!agente) return
 
-  const VAPID_PUBLIC_KEY = getVapidPublicKey()
+  const VAPID_PUBLIC_KEY = await getVapidPublicKey()
   if (!VAPID_PUBLIC_KEY) {
     console.warn('[Push] VAPID public key não disponível — push desabilitado.')
     return
@@ -169,7 +171,7 @@ export async function pedirPermissaoEInscrever(agente: string): Promise<'ok' | '
     return 'erro'
   }
 
-  const VAPID_PUBLIC_KEY = getVapidPublicKey()
+  const VAPID_PUBLIC_KEY = await getVapidPublicKey()
   if (!VAPID_PUBLIC_KEY) {
     console.warn('[Push] VAPID public key não encontrada nas env vars')
     return 'erro'
@@ -217,7 +219,7 @@ export async function getStatusNotificacoes(): Promise<'ativo' | 'concedido' | '
   return 'desconhecido'
 }
 
-// Dispara push SOS via Supabase Edge Function.
+// Dispara push SOS via servidor Express.
 export async function dispararPushSos(payload: {
   id: string
   agente: string
@@ -225,14 +227,10 @@ export async function dispararPushSos(payload: {
   lng?: number | null
   bateria?: number | null
 }): Promise<void> {
-  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return
   try {
-    await fetch(`${SUPABASE_URL}/functions/v1/send-sos-push`, {
+    await fetch('/api/send-sos-push', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         id: payload.id,
         agente: payload.agente,
@@ -243,6 +241,6 @@ export async function dispararPushSos(payload: {
       }),
     })
   } catch (e) {
-    console.warn('[Push] erro ao chamar Edge Function send-sos-push:', e)
+    console.warn('[Push] erro ao chamar /api/send-sos-push:', e)
   }
 }

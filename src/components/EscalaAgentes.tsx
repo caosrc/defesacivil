@@ -1,7 +1,6 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { getAgenteLogado } from './Login'
 import ModalSenha from './ModalSenha'
-import { supabase } from '../supabaseClient'
 import './EscalaAgentes.css'
 
 // ── Constantes ────────────────────────────────────────────────────
@@ -201,10 +200,11 @@ function teveEdicaoLocalRecente(janelaMs = 60_000) {
 function salvarDados(data: EscalaData) {
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  supabase.from('escala_estado').upsert(
-    { id: 1, data, updated_at: new Date().toISOString() },
-    { onConflict: 'id' }
-  ).then(() => {}).catch((e: unknown) => console.warn('Falha ao salvar escala:', e))
+  fetch('/api/escala', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then(() => {}).catch((e: unknown) => console.warn('Falha ao salvar escala:', e))
 }
 
 // Versão que aguarda confirmação — usada quando precisamos dar feedback visual.
@@ -212,11 +212,15 @@ async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensag
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   try {
-    const { error } = await supabase.from('escala_estado').upsert(
-      { id: 1, data, updated_at: new Date().toISOString() },
-      { onConflict: 'id' }
-    )
-    if (error) return { ok: false, mensagem: error.message }
+    const res = await fetch('/api/escala', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+      return { ok: false, mensagem: err.error || `HTTP ${res.status}` }
+    }
     return { ok: true }
   } catch (e: unknown) {
     return { ok: false, mensagem: (e as Error)?.message || 'Falha ao salvar escala' }
@@ -225,9 +229,11 @@ async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensag
 
 async function carregarDadosRemoto(): Promise<EscalaData | null> {
   try {
-    const { data: row, error } = await supabase.from('escala_estado').select('data').eq('id', 1).single()
-    if (error || !row) return null
-    const p = row.data as (Partial<EscalaData> & Record<string, unknown>) | null
+    const res = await fetch('/api/escala')
+    if (!res.ok) return null
+    const row = await res.json()
+    if (!row) return null
+    const p = row as (Partial<EscalaData> & Record<string, unknown>) | null
     if (!p) return null
     return {
       adm: (p.adm as EscalaData['adm']) ?? {},
