@@ -30,7 +30,17 @@ const app = express()
 const httpServer = createServer(app)
 
 app.use(compression())
-app.use(cors())
+app.use(cors({
+  origin: [
+    'https://dc-26.netlify.app',
+    /\.netlify\.app$/,
+    /\.replit\.dev$/,
+    /\.replit\.app$/,
+    'http://localhost:5000',
+    'http://localhost:3001',
+  ],
+  credentials: true,
+}))
 app.use(express.json({ limit: '100mb' }))
 
 // ── VAPID (Web Push) ──
