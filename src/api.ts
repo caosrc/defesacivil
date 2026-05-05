@@ -41,9 +41,6 @@ export class ApiError extends Error {
 }
 
 export async function listarOcorrencias(): Promise<Ocorrencia[]> {
-  if (!navigator.onLine) {
-    return (await getCachedOcorrencias()) as Ocorrencia[]
-  }
   try {
     const res = await fetch('/api/ocorrencias')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -77,10 +74,6 @@ export async function enviarOcorrenciaServidor(
 export async function criarOcorrencia(
   dados: Omit<Ocorrencia, 'id' | 'created_at'>
 ): Promise<Ocorrencia> {
-  if (!navigator.onLine) {
-    const localId = await savePending(dados)
-    return localOffline(dados, Number(localId))
-  }
   try {
     return await enviarOcorrenciaServidor(dados)
   } catch (e) {

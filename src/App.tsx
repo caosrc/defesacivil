@@ -261,17 +261,13 @@ export default function App() {
     setPendingCount(n)
   }, [])
 
-  const carregar = useCallback(async (forcar = false) => {
+  const carregar = useCallback(async (_forcar = false) => {
     setCarregando(true)
     let serverData: Ocorrencia[] = []
-    if (navigator.onLine || forcar) {
-      try {
-        serverData = await listarOcorrencias()
-        await cacheOcorrencias(serverData)
-      } catch {
-        serverData = await getCachedOcorrencias()
-      }
-    } else {
+    try {
+      serverData = await listarOcorrencias()
+      await cacheOcorrencias(serverData)
+    } catch {
       serverData = await getCachedOcorrencias()
     }
     const pending = await getPending()
@@ -304,7 +300,7 @@ export default function App() {
   }, [atualizarPendingCount])
 
   const sincronizar = useCallback(async (silencioso = false) => {
-    if (!navigator.onLine || sincronizando) return
+    if (sincronizando) return
     const pending = await getPending()
     if (pending.length === 0) return
     setSincronizando(true)
