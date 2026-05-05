@@ -13,8 +13,13 @@ import { WebSocketServer } from 'ws'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-// ── PostgreSQL (Replit native DB) ──────────────────────────────────────────
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })
+// ── PostgreSQL — usa Supabase se SUPABASE_DB_URL estiver definido ──────────
+const dbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL
+console.log(`🗄️  Banco: ${process.env.SUPABASE_DB_URL ? 'Supabase' : 'Replit PostgreSQL'}`)
+const pool = new pg.Pool({
+  connectionString: dbUrl,
+  ssl: process.env.SUPABASE_DB_URL ? { rejectUnauthorized: false } : false,
+})
 
 async function query(sql, params = []) {
   const client = await pool.connect()
