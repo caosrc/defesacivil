@@ -68,11 +68,11 @@ attached_assets/       — Template DOCX para relatórios
 ```
 
 ## Variáveis de Ambiente
-- `DATABASE_URL` — PostgreSQL (gerenciado pelo Replit)
-- `VAPID_PUBLIC_KEY` / `VITE_VAPID_PUBLIC_KEY` — Chave pública VAPID (env var)
-- `VAPID_PRIVATE_KEY` — Chave privada VAPID (secret seguro)
-- `VAPID_SUBJECT` — Email para VAPID
-- `PORT` — Porta do servidor (padrão: 3001)
+- `DATABASE_URL` — PostgreSQL (gerenciado pelo Replit, provisionado automaticamente)
+- `VAPID_PUBLIC_KEY` / `VITE_VAPID_PUBLIC_KEY` — Chave pública VAPID (env var compartilhada)
+- `VAPID_PRIVATE_KEY` — Chave privada VAPID (**Replit Secret** — nunca exposta no frontend)
+- `VAPID_SUBJECT` — Email para VAPID (env var compartilhada)
+- `PORT` — Porta do servidor (padrão: 3001, env var compartilhada)
 
 ## Scripts
 - `npm run start` — Inicia backend (porta 3001) + Vite dev server (porta 5000) em paralelo
@@ -89,3 +89,13 @@ Tabelas criadas automaticamente no `initDb()` ao iniciar o servidor:
 - `push_subscriptions` — Inscrições Web Push
 - `equipamentos_campo` — Equipamentos implantados em campo
 - `sos_ativos_db` — Alertas SOS persistidos
+
+## Credenciais de acesso (desenvolvimento)
+- Usuário: `defesacivilob@gmail.com`
+- Senha: `dc-2026`
+
+## Notas de migração Replit
+- Supabase foi removido — `supabaseClient.ts` retorna `null`; todos os dados vão via Express + PostgreSQL nativo do Replit
+- Edge Function `send-sos-push` foi portada para `POST /api/send-sos-push` no servidor Express
+- VAPID_PRIVATE_KEY armazenada como Replit Secret (não exposta em código)
+- Banco de dados PostgreSQL provisionado pelo Replit com DATABASE_URL injetado automaticamente
