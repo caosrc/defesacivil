@@ -834,7 +834,10 @@ function DetalheMaterial({
     return () => { cancelado = true }
   }, [material.id])
 
-  const temFoto = fotoCompleta ? (fotoCompleta.foto || fotoCompleta.foto_placa) : material.foto_thumb
+  // Usa foto_thumb como fallback se o detalhe não tiver foto em alta resolução
+  const temFoto = fotoCompleta
+    ? (fotoCompleta.foto || fotoCompleta.foto_placa || material.foto_thumb)
+    : material.foto_thumb
 
   return (
     <div className="mat-tela">
@@ -867,10 +870,10 @@ function DetalheMaterial({
                 <img src={fotoCompleta.foto_placa} alt="Placa do patrimônio" />
               </div>
             )}
-            {fotoCompleta.foto && (
+            {(fotoCompleta.foto || (!fotoCompleta.foto && !fotoCompleta.foto_placa && material.foto_thumb)) && (
               <div className="mat-detalhe-foto-wrap">
                 <span className="mat-foto-label">📸 Foto do item</span>
-                <img src={fotoCompleta.foto} alt={material.nome} />
+                <img src={fotoCompleta.foto || material.foto_thumb || ''} alt={material.nome} />
               </div>
             )}
           </div>
@@ -928,8 +931,11 @@ function FormMaterial({
   const [nome, setNome] = useState(materialInicial?.nome ?? '')
   const [descricao, setDescricao] = useState(materialInicial?.descricao ?? '')
   const [observacoes, setObservacoes] = useState(materialInicial?.observacoes ?? '')
-  const [foto, setFoto] = useState<string | null>(materialInicial?.foto ?? null)
+  // foto e fotoThumb só são preenchidos quando o usuário escolhe uma NOVA foto.
+  // fotoAlterada=false => não inclui foto no PATCH, preservando a existente no banco.
+  const [foto, setFoto] = useState<string | null>(null)
   const [fotoThumb, setFotoThumb] = useState<string | null>(materialInicial?.foto_thumb ?? null)
+  const [fotoAlterada, setFotoAlterada] = useState(false)
   const [quantidade, setQuantidade] = useState(materialInicial?.quantidade ?? 1)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
@@ -939,17 +945,23 @@ function FormMaterial({
     if (!file) return
     try {
       const raw = await lerArquivoComoDataUrl(file)
-      // Gera foto em alta resolução (para o detalhe) e miniatura (para a lista)
       const [redim, thumb] = await Promise.all([
         redimensionarImagem(raw, 600, 600),
         gerarThumbnail(raw),
       ])
       setFoto(redim)
       setFotoThumb(thumb)
+      setFotoAlterada(true)
     } catch {
       alert('Não consegui carregar a foto. Tente outra.')
     }
     e.target.value = ''
+  }
+
+  function removerFoto() {
+    setFoto(null)
+    setFotoThumb(null)
+    setFotoAlterada(true)
   }
 
   async function salvar() {
@@ -958,17 +970,21 @@ function FormMaterial({
     setSalvando(true); setErro('')
     try {
       if (editando && materialInicial) {
+        const patchBody: Record<string, unknown> = {
+          nome: nm,
+          descricao: descricao.trim() || null,
+          observacoes: observacoes.trim() || null,
+          quantidade: Math.max(1, quantidade),
+        }
+        // Só inclui foto/thumb se o usuário trocou ou removeu a foto
+        if (fotoAlterada) {
+          patchBody.foto = foto
+          patchBody.foto_thumb = fotoThumb
+        }
         const res = await fetch(`/api/materiais/${materialInicial.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            nome: nm,
-            descricao: descricao.trim() || null,
-            observacoes: observacoes.trim() || null,
-            foto,
-            foto_thumb: fotoThumb,
-            quantidade: Math.max(1, quantidade),
-          }),
+          body: JSON.stringify(patchBody),
         })
         if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
         const data = await res.json()
@@ -1081,10 +1097,25 @@ function FormMaterial({
 
         <div className="campo">
           <label className="campo-label">Foto</label>
-          {foto ? (
+          {/* Mostra nova foto escolhida, ou o thumbnail existente (ao editar), ou botões para adicionar */}
+          {foto || (editando && fotoThumb && !fotoAlterada) ? (
             <div className="mat-foto-preview">
-              <img src={foto} alt="material" style={{ width: 90, height: 90, objectFit: 'cover', borderRadius: 8 }} />
-              <button type="button" className="mat-foto-remover" onClick={() => setFoto(null)}>Remover foto</button>
+              <img
+                src={foto || fotoThumb || ''}
+                alt="material"
+                style={{ width: 90, height: 90, objectFit: 'cover', borderRadius: 8 }}
+              />
+              {editando && !fotoAlterada ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <label className="mat-foto-remover" style={{ cursor: 'pointer', textAlign: 'center' }}>
+                    Trocar foto
+                    <input type="file" accept="image/*" onChange={escolherFoto} style={{ display: 'none' }} />
+                  </label>
+                  <button type="button" className="mat-foto-remover" onClick={removerFoto}>Remover foto</button>
+                </div>
+              ) : (
+                <button type="button" className="mat-foto-remover" onClick={removerFoto}>Remover foto</button>
+              )}
             </div>
           ) : (
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>

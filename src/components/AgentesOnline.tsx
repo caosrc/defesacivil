@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { wsOn, wsOnOpen, wsSend } from '../wsClient'
+import { wsOn } from '../wsClient'
 
 // Mostra um pill no cabeçalho com a contagem de agentes ONLINE — qualquer
 // equipe com o app aberto entra automaticamente no Presence do Supabase
@@ -22,7 +22,6 @@ export default function AgentesOnline() {
   const pillRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
 
-  // Calcula a posição do popover (ancorado abaixo do pill, alinhado à direita).
   function recalcular() {
     const r = pillRef.current?.getBoundingClientRect()
     if (!r) return
@@ -43,7 +42,6 @@ export default function AgentesOnline() {
     }
   }, [aberto])
 
-  // Fecha o popover ao clicar fora (do pill E do próprio popover).
   useEffect(() => {
     if (!aberto) return
     function onClick(e: MouseEvent) {
@@ -57,6 +55,18 @@ export default function AgentesOnline() {
   }, [aberto])
 
   useEffect(() => {
+    // Carrega a lista via REST na montagem (sem depender de timing do WebSocket)
+    fetch('/api/agentes-online')
+      .then(r => r.ok ? r.json() : [])
+      .then((lista: AgenteOnline[]) => {
+        const limpa = lista
+          .filter((a) => a && a.id)
+          .map((a) => ({ id: a.id, nome: a.nome || `Equipe ${a.id.slice(0, 4)}` }))
+        setAgentes(limpa)
+      })
+      .catch(() => {})
+
+    // Escuta atualizações em tempo real via WebSocket
     const offSync = wsOn('online_sync', (m) => {
       const lista = (m.agentes ?? []) as AgenteOnline[]
       const limpa = lista
@@ -64,11 +74,8 @@ export default function AgentesOnline() {
         .map((a) => ({ id: a.id, nome: a.nome || `Equipe ${a.id.slice(0, 4)}` }))
       setAgentes(limpa)
     })
-    // Pede a lista quando o WS estiver aberto (imediato se já estiver)
-    const offOpen = wsOnOpen(() => {
-      wsSend({ tipo: 'solicitar_online' })
-    })
-    return () => { offSync(); offOpen() }
+
+    return () => { offSync() }
   }, [])
 
   const lista = [...agentes].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))

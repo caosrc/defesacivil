@@ -69,6 +69,17 @@ const dispositivosOnline = new Map()
 const agentesOnline = new Map()
 const ONLINE_TTL_MS = 60 * 1000
 
+// Endpoint REST para leitura inicial da lista de agentes online
+// (independente de timing do WebSocket)
+function getAgentesOnlineAtivos() {
+  const agora = Date.now()
+  const lista = []
+  for (const [id, info] of agentesOnline) {
+    if (agora - info.ts <= ONLINE_TTL_MS) lista.push({ id, nome: info.nome })
+  }
+  return lista
+}
+
 function emitirOnlineSync() {
   const agora = Date.now()
   const agentes = []
@@ -611,7 +622,9 @@ async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `)
-  // Adiciona foto_thumb se tabela já existia sem a coluna
+  // Garante que todas as colunas de foto existam em tabelas criadas com schema antigo
+  await query(`ALTER TABLE materiais ADD COLUMN IF NOT EXISTS foto TEXT`)
+  await query(`ALTER TABLE materiais ADD COLUMN IF NOT EXISTS foto_placa TEXT`)
   await query(`ALTER TABLE materiais ADD COLUMN IF NOT EXISTS foto_thumb TEXT`)
 
   await query(`
@@ -966,6 +979,11 @@ function broadcastMateriaisAtualizados() {
 function broadcastEmprestimosAtualizados() {
   broadcastParaTodos({ tipo: 'emprestimos_atualizados' })
 }
+
+// Retorna lista de agentes online no momento (via REST, sem depender de timing do WS)
+app.get('/api/agentes-online', (_req, res) => {
+  res.json(getAgentesOnlineAtivos())
+})
 
 // Lista leve — SEM foto e foto_placa (só thumbnail) para não travar o carregamento
 app.get('/api/materiais', async (_req, res) => {
