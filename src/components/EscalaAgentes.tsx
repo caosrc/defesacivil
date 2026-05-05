@@ -1,8 +1,8 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { getAgenteLogado } from './Login'
 import ModalSenha from './ModalSenha'
-import { wsOn } from '../wsClient'
-import { apiUrl } from '../config'
+import { wsOn, wsSend } from '../wsClient'
+import { supabase } from '../supabaseClient'
 import './EscalaAgentes.css'
 
 // ── Constantes ────────────────────────────────────────────────────
@@ -205,11 +205,9 @@ function teveEdicaoLocalRecente(janelaMs = 60_000) {
 function salvarDados(data: EscalaData) {
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  fetch(apiUrl('/api/escala'), {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  }).then(() => {}).catch((e: unknown) => console.warn('Falha ao salvar escala:', e))
+  supabase.from('escala_estado').upsert({ id: 1, data, updated_at: new Date().toISOString() })
+    .then(() => { wsSend({ tipo: 'escala_atualizada' }) })
+    .catch((e: unknown) => console.warn('Falha ao salvar escala:', e))
 }
 
 // Versão que aguarda confirmação — usada quando precisamos dar feedback visual.
@@ -217,15 +215,9 @@ async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensag
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   try {
-    const res = await fetch(apiUrl('/api/escala'), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-      return { ok: false, mensagem: err.error || `HTTP ${res.status}` }
-    }
+    const { error: saveErr } = await supabase.from('escala_estado').upsert({ id: 1, data, updated_at: new Date().toISOString() })
+    if (saveErr) return { ok: false, mensagem: saveErr.message }
+    wsSend({ tipo: 'escala_atualizada' })
     return { ok: true }
   } catch (e: unknown) {
     return { ok: false, mensagem: (e as Error)?.message || 'Falha ao salvar escala' }
@@ -234,9 +226,10 @@ async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensag
 
 async function carregarDadosRemoto(): Promise<EscalaData | null> {
   try {
-    const res = await fetch(apiUrl('/api/escala'))
-    if (!res.ok) return null
-    const row = await res.json()
+    const { data: result, error } = await supabase.from('escala_estado').select('data').eq('id', 1).single()
+    if (error && error.code !== 'PGRST116') return null
+    if (!result) return null
+    const row = result.data
     if (!row) return null
     const p = row as (Partial<EscalaData> & Record<string, unknown>) | null
     if (!p) return null

@@ -1,6 +1,6 @@
 import type { Ocorrencia } from './types'
 import { savePending, getCachedOcorrencias } from './offline'
-import { apiUrl } from './config'
+import { supabase } from './supabaseClient'
 
 function localOffline(dados: Omit<Ocorrencia, 'id' | 'created_at'>, localId: number): Ocorrencia {
   return {
@@ -43,10 +43,12 @@ export class ApiError extends Error {
 
 export async function listarOcorrencias(): Promise<Ocorrencia[]> {
   try {
-    const res = await fetch(apiUrl('/api/ocorrencias'))
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
-    return (Array.isArray(data) ? data : []) as Ocorrencia[]
+    const { data, error } = await supabase
+      .from('ocorrencias')
+      .select('*')
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return (data || []) as Ocorrencia[]
   } catch (e) {
     console.warn('[api] listarOcorrencias falhou — usando cache offline:', e)
     return (await getCachedOcorrencias()) as Ocorrencia[]
@@ -56,19 +58,14 @@ export async function listarOcorrencias(): Promise<Ocorrencia[]> {
 export async function enviarOcorrenciaServidor(
   dados: Omit<Ocorrencia, 'id' | 'created_at'>
 ): Promise<Ocorrencia> {
-  const res = await fetch(apiUrl('/api/ocorrencias'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(buildPayload(dados)),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-    throw new ApiError(res.status, err.error || `HTTP ${res.status}`)
-  }
-  const data = await res.json()
-  if (!data || typeof data.id === 'undefined') {
-    throw new Error('Servidor retornou resposta inválida (sem id)')
-  }
+  const payload = buildPayload(dados)
+  const { data, error } = await supabase
+    .from('ocorrencias')
+    .insert([payload])
+    .select('*')
+    .single()
+  if (error) throw new ApiError(400, error.message)
+  if (!data) throw new Error('Servidor retornou resposta inválida (sem dados)')
   return data as Ocorrencia
 }
 
@@ -90,22 +87,21 @@ export async function atualizarOcorrencia(
 ): Promise<Ocorrencia> {
   const { id: _i, created_at: _c, _offline: _o, _localId: _l, ...payload } = dados as Record<string, unknown>
   void _i; void _c; void _o; void _l
-  const res = await fetch(apiUrl(`/api/ocorrencias/${id}`), {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-    throw new Error(err.error || `HTTP ${res.status}`)
-  }
-  return res.json()
+  const { data, error } = await supabase
+    .from('ocorrencias')
+    .update(payload)
+    .eq('id', id)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('Ocorrência não encontrada')
+  return data as Ocorrencia
 }
 
 export async function deletarOcorrencia(id: number): Promise<void> {
-  const res = await fetch(apiUrl(`/api/ocorrencias/${id}`), { method: 'DELETE' })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
-    throw new Error(err.error || `HTTP ${res.status}`)
-  }
+  const { error } = await supabase
+    .from('ocorrencias')
+    .delete()
+    .eq('id', id)
+  if (error) throw new Error(error.message)
 }

@@ -11,7 +11,7 @@ import AgentesOnline from './components/AgentesOnline'
 import BotaoSos from './components/BotaoSos'
 import BannerNotifSos from './components/BannerNotifSos'
 import { cacheOcorrencias, getCachedOcorrencias, getPending, removePending, countPending } from './offline'
-import { apiUrl } from './config'
+import { supabase } from './supabaseClient'
 
 interface EquipamentoCampoMapa {
   id: number
@@ -181,11 +181,8 @@ export default function App() {
   useEffect(() => {
     async function carregarCampo() {
       try {
-        const res = await fetch(apiUrl('/api/equipamentos-campo'))
-        if (res.ok) {
-          const data = await res.json()
-          setEquipamentosCampoMapa((Array.isArray(data) ? data : []) as EquipamentoCampoMapa[])
-        }
+        const { data } = await supabase.from('equipamentos_campo').select('id, material_nome, latitude, longitude, status, agente').eq('status', 'ativo')
+        if (data) setEquipamentosCampoMapa((Array.isArray(data) ? data : []) as EquipamentoCampoMapa[])
       } catch { /* silencioso */ }
     }
     carregarCampo()

@@ -9,6 +9,12 @@
   VITE_VAPID_PUBLIC_KEY = "BDR2WpHgL7IN1NNdJv67HEMbyeUEnDRvgcnyfdWaopzkAOqa6EDYSbkXroYJ8CC_kaPjGEm8q5CCEn0KUqt3kmE"
 
 [[redirects]]
+  from = "/api/send-sos-push"
+  to = "/.netlify/functions/send-sos-push"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
