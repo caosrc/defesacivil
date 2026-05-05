@@ -175,6 +175,26 @@ export function wsConnect() {
   connect()
 }
 
+export function wsAnunciarOnline() {
+  const id = getMeuId()
+  const nome = getMeuNome()
+  if (!id) return
+  connect()
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ tipo: 'online', id, nome }))
+    ws.send(JSON.stringify({ tipo: 'solicitar_online' }))
+  } else {
+    // aguarda abertura e anuncia logo em seguida
+    const off = wsOnOpen(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ tipo: 'online', id, nome }))
+        ws.send(JSON.stringify({ tipo: 'solicitar_online' }))
+      }
+      off()
+    })
+  }
+}
+
 export function wsDisconnect() {
   stopPing()
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }

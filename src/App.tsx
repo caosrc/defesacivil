@@ -4,7 +4,7 @@ import Login, { estaLogado, agenteEscolhido, getAgenteLogado } from './component
 import type { Ocorrencia, NivelRisco } from './types'
 import { NATUREZA_ICONE } from './types'
 import { listarOcorrencias, criarOcorrencia, enviarOcorrenciaServidor, ApiError } from './api'
-import { wsOn } from './wsClient'
+import { wsOn, wsAnunciarOnline } from './wsClient'
 import { EVT_ROTA_RESGATE } from './sos'
 import { registrarPushSeNecessario, pedirPermissaoEInscrever, getStatusNotificacoes } from './pushNotifications'
 import AgentesOnline from './components/AgentesOnline'
@@ -199,13 +199,14 @@ export default function App() {
     return () => window.removeEventListener('ws-message', handler as EventListener)
   }, [])
 
-  // Quando o agente entra no app, registra a inscrição de Web Push para que
-  // ele receba notificações de SOS mesmo com o app fechado. A primeira vez
-  // pede permissão; nas próximas, só atualiza o nome do agente no banco.
+  // Quando o agente entra no app, anuncia presença online e registra push
   useEffect(() => {
     if (!logado) return
     const agente = getAgenteLogado()
     if (!agente) return
+    // Re-anuncia presença com o nome correto do agente (o WS pode ter conectado
+    // antes do login, quando o nome ainda estava vazio)
+    wsAnunciarOnline()
     // Aguarda 2s para não pedir permissão no exato momento do clique de login
     // (alguns navegadores bloqueiam permissions sem gesto recente; 2s funciona
     // porque o gesto do login ainda conta).

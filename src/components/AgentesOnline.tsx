@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { wsOn, wsSend } from '../wsClient'
+import { wsOn, wsOnOpen, wsSend } from '../wsClient'
 
 // Mostra um pill no cabeçalho com a contagem de agentes ONLINE — qualquer
 // equipe com o app aberto entra automaticamente no Presence do Supabase
@@ -57,16 +57,18 @@ export default function AgentesOnline() {
   }, [aberto])
 
   useEffect(() => {
-    const off = wsOn('online_sync', (m) => {
+    const offSync = wsOn('online_sync', (m) => {
       const lista = (m.agentes ?? []) as AgenteOnline[]
       const limpa = lista
         .filter((a) => a && a.id)
         .map((a) => ({ id: a.id, nome: a.nome || `Equipe ${a.id.slice(0, 4)}` }))
       setAgentes(limpa)
     })
-    // Pede a lista atualizada logo que o componente monta
-    wsSend({ tipo: 'solicitar_online' })
-    return () => { off() }
+    // Pede a lista quando o WS estiver aberto (imediato se já estiver)
+    const offOpen = wsOnOpen(() => {
+      wsSend({ tipo: 'solicitar_online' })
+    })
+    return () => { offSync(); offOpen() }
   }, [])
 
   const lista = [...agentes].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
