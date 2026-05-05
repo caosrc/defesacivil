@@ -1714,6 +1714,78 @@ input, select, textarea { font-family: inherit; }
   font-weight: 700;
 }
 
+/* ── Dropdown colapsável (Tipo/Natureza) ─────────────────────────── */
+.campo-dropdown {
+  position: relative;
+  width: 100%;
+}
+.campo-dropdown-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.85rem;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  background: #fafafa;
+  color: #6b7280;
+  font-size: 0.92rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.campo-dropdown-trigger.selecionado {
+  color: #1a202c;
+  font-weight: 600;
+  border-color: #1a4b8c;
+  background: #f0f5ff;
+}
+.campo-dropdown-trigger.aberto {
+  border-color: #1a4b8c;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.campo-dropdown-chevron {
+  font-size: 0.7rem;
+  opacity: 0.55;
+  flex-shrink: 0;
+  margin-left: 0.5rem;
+}
+.campo-dropdown-lista {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 80;
+  background: #fff;
+  border: 1.5px solid #1a4b8c;
+  border-top: none;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.13);
+}
+.campo-dropdown-item {
+  width: 100%;
+  padding: 0.6rem 0.85rem;
+  text-align: left;
+  border: none;
+  border-bottom: 1px solid #f0f2f5;
+  background: transparent;
+  color: #1a202c;
+  font-size: 0.91rem;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.campo-dropdown-item:last-child { border-bottom: none; }
+.campo-dropdown-item:hover { background: #f0f5ff; }
+.campo-dropdown-item.ativo {
+  background: #e8f0fb;
+  color: #1a4b8c;
+  font-weight: 700;
+}
+
 .campo-input, .campo-select, .campo-textarea {
   width: 100%;
   border: 1.5px solid #d1d5db;

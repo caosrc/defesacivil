@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { getAgenteLogado } from './Login'
 import ModalSenha from './ModalSenha'
+import { wsOn } from '../wsClient'
 import './EscalaAgentes.css'
 
 // ── Constantes ────────────────────────────────────────────────────
@@ -2133,6 +2134,19 @@ export default function EscalaAgentes() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(remoto))
     })
     return () => { cancelado = true }
+  }, [])
+
+  // Atualiza em tempo real quando outro agente salva a escala
+  useEffect(() => {
+    const off = wsOn('escala_atualizada', () => {
+      carregarDadosRemoto().then(remoto => {
+        if (!remoto) return
+        if (teveEdicaoLocalRecente()) return
+        setDados(remoto)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(remoto))
+      })
+    })
+    return off
   }, [])
 
   // Reset único do banco do Valteir (pedido em abr/2026: zerar 4,5h)

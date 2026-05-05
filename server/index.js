@@ -831,6 +831,7 @@ app.put('/api/escala', async (req, res) => {
        ON CONFLICT (id) DO UPDATE SET data = $1, updated_at = NOW()`,
       [JSON.stringify(data)]
     )
+    broadcastParaTodos({ tipo: 'escala_atualizada' })
     res.json({ success: true })
   } catch (err) {
     console.error('PUT /api/escala error:', err)
@@ -940,6 +941,7 @@ app.post('/api/checklists', async (req, res) => {
        foto_frontal || null, foto_traseira || null, foto_direita || null, foto_esquerda || null,
        JSON.stringify(itens || {}), observacoes || null, assinatura_data || null]
     )
+    broadcastParaTodos({ tipo: 'checklist_atualizado' })
     res.status(201).json(result.rows[0])
   } catch (err) {
     console.error('POST /api/checklists error:', err)
@@ -950,6 +952,7 @@ app.post('/api/checklists', async (req, res) => {
 app.delete('/api/checklists/:id', async (req, res) => {
   try {
     await query('DELETE FROM checklists_viatura WHERE id = $1', [req.params.id])
+    broadcastParaTodos({ tipo: 'checklist_atualizado' })
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: err.message })

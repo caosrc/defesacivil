@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { TIPOS_OCORRENCIA, NATUREZAS, AGENTES } from '../types'
 import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
@@ -38,8 +38,21 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const [geoMsg, setGeoMsg] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+  const [tipoAberto, setTipoAberto] = useState(false)
+  const [naturezaAberta, setNaturezaAberta] = useState(false)
+  const tipoRef = useRef<HTMLDivElement>(null)
+  const naturezaRef = useRef<HTMLDivElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
   const galeriaRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    function fechar(e: MouseEvent) {
+      if (tipoRef.current && !tipoRef.current.contains(e.target as Node)) setTipoAberto(false)
+      if (naturezaRef.current && !naturezaRef.current.contains(e.target as Node)) setNaturezaAberta(false)
+    }
+    document.addEventListener('mousedown', fechar)
+    return () => document.removeEventListener('mousedown', fechar)
+  }, [])
 
   const precisaSubnatureza = natureza === 'Queda de Estrutura' || natureza === 'Apreensão e Captura de Animal'
   const labelSubnatureza = natureza === 'Queda de Estrutura' ? 'Qual é a estrutura?' : 'Qual é o animal?'
@@ -182,17 +195,29 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
           {/* 1 - Tipo */}
           <div className="campo">
             <label className="campo-label">1 — Tipo de Ocorrência</label>
-            <div className="campo-lista-opcoes">
-              {TIPOS_OCORRENCIA.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  className={`campo-opcao-btn ${tipo === t ? 'ativo' : ''}`}
-                  onClick={() => { setTipo(t); setTipoOutro(''); setNatureza('') }}
-                >
-                  {t}
-                </button>
-              ))}
+            <div className="campo-dropdown" ref={tipoRef}>
+              <button
+                type="button"
+                className={`campo-dropdown-trigger ${tipo ? 'selecionado' : ''} ${tipoAberto ? 'aberto' : ''}`}
+                onClick={() => setTipoAberto(v => !v)}
+              >
+                <span>{tipo || 'Selecione o tipo...'}</span>
+                <span className="campo-dropdown-chevron">{tipoAberto ? '▲' : '▼'}</span>
+              </button>
+              {tipoAberto && (
+                <div className="campo-dropdown-lista">
+                  {TIPOS_OCORRENCIA.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      className={`campo-dropdown-item ${tipo === t ? 'ativo' : ''}`}
+                      onClick={() => { setTipo(t); setTipoOutro(''); setNatureza(''); setTipoAberto(false) }}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {tipo === 'Outro' && (
               <input
@@ -210,17 +235,29 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
           {tipo && (
             <div className="campo campo-animado">
               <label className="campo-label">2 — Natureza da Ocorrência</label>
-              <div className="campo-lista-opcoes">
-                {NATUREZAS.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    className={`campo-opcao-btn ${natureza === n ? 'ativo' : ''}`}
-                    onClick={() => { setNatureza(n); setSubnatureza('') }}
-                  >
-                    {n}
-                  </button>
-                ))}
+              <div className="campo-dropdown" ref={naturezaRef}>
+                <button
+                  type="button"
+                  className={`campo-dropdown-trigger ${natureza ? 'selecionado' : ''} ${naturezaAberta ? 'aberto' : ''}`}
+                  onClick={() => setNaturezaAberta(v => !v)}
+                >
+                  <span>{natureza || 'Selecione a natureza...'}</span>
+                  <span className="campo-dropdown-chevron">{naturezaAberta ? '▲' : '▼'}</span>
+                </button>
+                {naturezaAberta && (
+                  <div className="campo-dropdown-lista">
+                    {NATUREZAS.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className={`campo-dropdown-item ${natureza === n ? 'ativo' : ''}`}
+                        onClick={() => { setNatureza(n); setSubnatureza(''); setNaturezaAberta(false) }}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

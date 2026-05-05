@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { wsOn } from '../wsClient'
+import { wsOn, wsSend } from '../wsClient'
 
 // Mostra um pill no cabeçalho com a contagem de agentes ONLINE — qualquer
 // equipe com o app aberto entra automaticamente no Presence do Supabase
@@ -64,6 +64,8 @@ export default function AgentesOnline() {
         .map((a) => ({ id: a.id, nome: a.nome || `Equipe ${a.id.slice(0, 4)}` }))
       setAgentes(limpa)
     })
+    // Pede a lista atualizada logo que o componente monta
+    wsSend({ tipo: 'solicitar_online' })
     return () => { off() }
   }, [])
 

@@ -941,7 +941,7 @@ function FormMaterial({
       const raw = await lerArquivoComoDataUrl(file)
       // Gera foto em alta resolução (para o detalhe) e miniatura (para a lista)
       const [redim, thumb] = await Promise.all([
-        redimensionarImagem(raw, 1000, 1000),
+        redimensionarImagem(raw, 600, 600),
         gerarThumbnail(raw),
       ])
       setFoto(redim)
@@ -1448,7 +1448,7 @@ function FormDevolucao({
     if (!file) return
     try {
       const raw = await lerArquivoComoDataUrl(file)
-      const redim = await redimensionarImagem(raw, 1000, 1000)
+      const redim = await redimensionarImagem(raw, 600, 600)
       setFoto(redim)
     } catch {
       alert('Não consegui carregar a foto.')
@@ -2014,7 +2014,7 @@ function FormCampo({
     for (const file of files) {
       try {
         const raw = await lerArquivoComoDataUrl(file)
-        const redim = await redimensionarImagem(raw, 1200, 1200)
+        const redim = await redimensionarImagem(raw, 700, 700)
         setFotos(prev => [...prev, redim])
       } catch { /* ignora */ }
     }

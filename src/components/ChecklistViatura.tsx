@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { adicionarMarcaDagua } from '../utils'
 import { exportarChecklistExcel, type ChecklistExportData } from '../exportExcel'
 import ModalSenha from './ModalSenha'
+import { wsOn } from '../wsClient'
 
 const MOTORISTAS = ['Moisés', 'Arthur', 'Gustavo', 'Valteir', 'Dyonathan']
 
@@ -347,6 +348,12 @@ export default function ChecklistViatura() {
   }
 
   useEffect(() => { carregar() }, [])
+
+  // Atualiza em tempo real quando outro agente salva ou apaga um checklist
+  useEffect(() => {
+    const off = wsOn('checklist_atualizado', () => { carregar() })
+    return off
+  }, [])
 
   useEffect(() => {
     if (modo !== 'form') return
