@@ -79,7 +79,7 @@ export default function Login({ onLogin, apenasAgente = false }: Props) {
             <img src="/logo-dc.jpg" alt="Defesa Civil Ouro Branco" className="login-logo" />
           </div>
           <div className="login-titulo">Defesa Civil</div>
-          <div className="login-subtitulo">Ouro Branco — MG</div>
+          <div className="login-subtitulo">Defesa Civil somos todos nós</div>
 
           <div className="login-agente-titulo">Quem está acessando?</div>
           <div className="login-agente-grid">
@@ -105,7 +105,7 @@ export default function Login({ onLogin, apenasAgente = false }: Props) {
           <img src="/logo-dc.jpg" alt="Defesa Civil Ouro Branco" className="login-logo" />
         </div>
         <div className="login-titulo">Defesa Civil</div>
-        <div className="login-subtitulo">Ouro Branco — MG</div>
+        <div className="login-subtitulo">Defesa Civil somos todos nós</div>
 
         <form className="login-form" onSubmit={entrar} autoComplete="off">
           <div className="login-campo">

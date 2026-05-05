@@ -375,7 +375,14 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
         <div className="mat-subheader">
           <button className="btn-voltar" onClick={() => { setBusca(''); setModo('inicial') }}>‹</button>
           <h2>📋 Materiais ({materiais.length})</h2>
-          <button className="mat-btn-add" onClick={() => { setMaterialSelecionado(null); setModo('formMaterial') }}>+</button>
+          <div style={{ display: 'flex', gap: '0.4rem' }}>
+            <button
+              className="mat-btn-exportar"
+              title="Exportar catálogo em Excel"
+              onClick={() => exportarMateriaisExcel(materiais, emprestimos).catch(() => alert('Falha ao gerar Excel.'))}
+            >📊</button>
+            <button className="mat-btn-add" onClick={() => { setMaterialSelecionado(null); setModo('formMaterial') }}>+</button>
+          </div>
         </div>
 
         <div className="mat-busca-wrap">
@@ -1537,6 +1544,104 @@ function FormDevolucao({
       </div>
     </div>
   )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXPORTAR CATÁLOGO DE MATERIAIS EM EXCEL
+// ═══════════════════════════════════════════════════════════════════════════
+async function exportarMateriaisExcel(materiais: Material[], emprestimos: Emprestimo[]) {
+  const { default: ExcelJS } = await import('exceljs')
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Defesa Civil Ouro Branco'
+  wb.created = new Date()
+
+  // ── Aba 1: Catálogo de Materiais ───────────────────────────────────────
+  const ws1 = wb.addWorksheet('Catálogo')
+  ws1.columns = [
+    { header: 'Código', key: 'codigo', width: 16 },
+    { header: 'Nome', key: 'nome', width: 32 },
+    { header: 'Quantidade', key: 'quantidade', width: 12 },
+    { header: 'Descrição', key: 'descricao', width: 36 },
+    { header: 'Observações', key: 'observacoes', width: 36 },
+    { header: 'Status', key: 'status', width: 16 },
+    { header: 'Cadastrado em', key: 'cadastrado', width: 18 },
+  ]
+
+  const headerRow1 = ws1.getRow(1)
+  headerRow1.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+  headerRow1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A4B8C' } }
+  headerRow1.alignment = { vertical: 'middle', horizontal: 'center' }
+  headerRow1.height = 22
+
+  const empAtivos = emprestimos.filter(e => !e.devolvido_em)
+  materiais.forEach(m => {
+    const emprestado = empAtivos.some(e => e.material_id === m.id || e.material_codigo === m.id)
+    const row = ws1.addRow({
+      codigo: m.id,
+      nome: m.nome,
+      quantidade: m.quantidade ?? 1,
+      descricao: m.descricao ?? '',
+      observacoes: m.observacoes ?? '',
+      status: emprestado ? 'Emprestado' : 'Disponível',
+      cadastrado: m.created_at ? new Date(m.created_at).toLocaleDateString('pt-BR') : '',
+    })
+    row.getCell('status').font = { color: { argb: emprestado ? 'FFDC2626' : 'FF16A34A' } }
+  })
+
+  ws1.autoFilter = { from: 'A1', to: 'G1' }
+
+  // ── Aba 2: Histórico de Empréstimos ──────────────────────────────────────
+  const ws2 = wb.addWorksheet('Empréstimos')
+  ws2.columns = [
+    { header: 'ID', key: 'id', width: 8 },
+    { header: 'Código', key: 'codigo', width: 14 },
+    { header: 'Material', key: 'material', width: 28 },
+    { header: 'Tipo', key: 'tipo', width: 14 },
+    { header: 'Responsável', key: 'responsavel', width: 24 },
+    { header: 'Secretaria', key: 'secretaria', width: 22 },
+    { header: 'Qtd', key: 'qtd', width: 8 },
+    { header: 'Saída', key: 'saida', width: 14 },
+    { header: 'Devolução Prevista', key: 'prevista', width: 18 },
+    { header: 'Devolvido em', key: 'devolvido', width: 16 },
+    { header: 'Status', key: 'status', width: 14 },
+    { header: 'Agente', key: 'agente', width: 18 },
+  ]
+
+  const headerRow2 = ws2.getRow(1)
+  headerRow2.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+  headerRow2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB45309' } }
+  headerRow2.alignment = { vertical: 'middle', horizontal: 'center' }
+  headerRow2.height = 22
+
+  emprestimos.forEach(e => {
+    const devolvido = !!e.devolvido_em
+    const row = ws2.addRow({
+      id: e.id,
+      codigo: e.material_codigo,
+      material: e.material_nome,
+      tipo: e.tipo === 'manutencao' ? 'Manutenção' : 'Empréstimo',
+      responsavel: e.responsavel,
+      secretaria: e.secretaria ?? '',
+      qtd: e.quantidade ?? 1,
+      saida: e.data_emprestimo ? new Date(e.data_emprestimo).toLocaleDateString('pt-BR') : '',
+      prevista: e.data_devolucao_prevista ? new Date(e.data_devolucao_prevista).toLocaleDateString('pt-BR') : '',
+      devolvido: e.devolvido_em ? new Date(e.devolvido_em).toLocaleDateString('pt-BR') : '',
+      status: devolvido ? 'Devolvido' : 'Ativo',
+      agente: e.agente_emprestador ?? '',
+    })
+    row.getCell('status').font = { color: { argb: devolvido ? 'FF16A34A' : 'FFDC2626' } }
+  })
+
+  ws2.autoFilter = { from: 'A1', to: 'L1' }
+
+  const buf = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `materiais-dc-${new Date().toISOString().slice(0, 10)}.xlsx`
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 10000)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

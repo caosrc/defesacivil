@@ -125,6 +125,7 @@ interface EscalaData {
   percSabado: number
   descontosFolgaBanco: Record<string, Record<string, number>>  // legado — descontos manuais antigos
   horasExtrasSimples: Record<string, Record<string, number>>   // agente → { data: horas } — sem multiplicador
+  justificativasExtrasSimples: Record<string, Record<string, string>>  // agente → { data: justificativa }
   ajustesBanco: Record<string, number>                         // agente → horas ajuste manual do Moisés (+/-)
 }
 
@@ -160,6 +161,7 @@ function carregarDados(): EscalaData {
         percSabado: p.percSabado ?? 50,
         descontosFolgaBanco: p.descontosFolgaBanco ?? {},
         horasExtrasSimples: p.horasExtrasSimples ?? {},
+        justificativasExtrasSimples: p.justificativasExtrasSimples ?? {},
         ajustesBanco: p.ajustesBanco ?? {},
       }
     }
@@ -182,11 +184,12 @@ function carregarDados(): EscalaData {
         percSabado: 50,
         descontosFolgaBanco: {},
         horasExtrasSimples: {},
+        justificativasExtrasSimples: {},
         ajustesBanco: {},
       }
     }
   } catch { /* */ }
-  return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, folgas: {}, ferias: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {}, justificativasSobreaviso: {}, feriadosCustom: [], percDomingoFeriado: 100, percSobreaviso: 50, percSabado: 50, descontosFolgaBanco: {}, horasExtrasSimples: {}, ajustesBanco: {} }
+  return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, folgas: {}, ferias: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {}, justificativasSobreaviso: {}, feriadosCustom: [], percDomingoFeriado: 100, percSobreaviso: 50, percSabado: 50, descontosFolgaBanco: {}, horasExtrasSimples: {}, justificativasExtrasSimples: {}, ajustesBanco: {} }
 }
 
 // Marca o instante da última edição local — usado para evitar que o snapshot remoto
@@ -250,6 +253,7 @@ async function carregarDadosRemoto(): Promise<EscalaData | null> {
       percSabado: (p.percSabado as number) ?? 50,
       descontosFolgaBanco: (p.descontosFolgaBanco as EscalaData['descontosFolgaBanco']) ?? {},
       horasExtrasSimples: (p.horasExtrasSimples as EscalaData['horasExtrasSimples']) ?? {},
+      justificativasExtrasSimples: (p.justificativasExtrasSimples as EscalaData['justificativasExtrasSimples']) ?? {},
       ajustesBanco: (p.ajustesBanco as EscalaData['ajustesBanco']) ?? {},
     }
   } catch { return null }
@@ -861,14 +865,18 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
 interface BancoHorasExtraSimplesProps {
   agente: string
   horasExtrasSimples: Record<string, Record<string, number>>
+  justificativasExtrasSimples: Record<string, Record<string, string>>
   onSalvarHora: (data: string, horas: number) => Promise<{ ok: boolean; mensagem?: string }>
+  onSalvarJustificativa: (data: string, justificativa: string) => void
 }
 
-function BancoHorasExtraSimples({ agente, horasExtrasSimples, onSalvarHora }: BancoHorasExtraSimplesProps) {
+function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtrasSimples, onSalvarHora, onSalvarJustificativa }: BancoHorasExtraSimplesProps) {
   const info = AGENTE_MAP[agente]
   const horasAgente = horasExtrasSimples[agente] ?? {}
+  const justifAgente = justificativasExtrasSimples[agente] ?? {}
   const [novaData, setNovaData] = useState<string>(hojeStr())
   const [novasHoras, setNovasHoras] = useState<string>('')
+  const [novaJustif, setNovaJustif] = useState<string>('')
   const [erro, setErro] = useState<string>('')
   const [salvando, setSalvando] = useState(false)
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
@@ -891,9 +899,11 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, onSalvarHora }: Ba
     setSalvando(true)
     const atual = horasAgente[novaData] ?? 0
     const resultado = await onSalvarHora(novaData, Math.min(24, atual + h))
+    if (novaJustif.trim()) onSalvarJustificativa(novaData, novaJustif.trim())
     setSalvando(false)
     if (resultado.ok) {
       setNovasHoras('')
+      setNovaJustif('')
       mostrarFeedback('ok', `✅ ${fmtH(h)}h salvas no banco de dados (${fmtDataLonga(novaData)})`)
     } else {
       mostrarFeedback('erro', `⚠️ Salvo localmente. Falha ao enviar ao servidor: ${resultado.mensagem ?? 'erro desconhecido'}`)
@@ -903,6 +913,7 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, onSalvarHora }: Ba
   async function removerLinha(data: string) {
     setSalvando(true)
     await onSalvarHora(data, 0)
+    onSalvarJustificativa(data, '')
     setSalvando(false)
   }
 
@@ -944,6 +955,17 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, onSalvarHora }: Ba
               />
             </div>
           </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
+            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#6b7280' }}>Justificativa (opcional)</label>
+            <textarea
+              className="escala-justif-textarea"
+              rows={2}
+              maxLength={500}
+              placeholder="Ex: reunião de coordenação, vistoria emergencial..."
+              value={novaJustif}
+              onChange={e => setNovaJustif(e.target.value)}
+            />
+          </div>
           {erro && <span className="escala-ferias-erro">{erro}</span>}
           <button className="escala-ferias-add bh-salvar-btn" onClick={salvar} disabled={salvando}>
             {salvando ? '⏳ Salvando no banco de dados…' : '💾 Salvar horas no banco de dados'}
@@ -963,19 +985,36 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, onSalvarHora }: Ba
               const [y, m, d] = data.split('-').map(Number)
               const dow = new Date(y, m - 1, d).getDay()
               const nomeDia = DIAS_SEMANA_NOMES[dow]
+              const justif = justifAgente[data]
               return (
-                <div key={data} className="bh-domfer-row">
-                  <span className="bh-domfer-dia">{nomeDia}</span>
-                  <span className="bh-domfer-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}/{y}</span>
-                  <span className="bh-domfer-input">{fmtH(h)}h</span>
-                  <span className="bh-domfer-mult">×1,0</span>
-                  <span className="bh-domfer-calc">= {fmtH(h)}h</span>
-                  <button
-                    className="escala-ferias-remover"
-                    onClick={() => removerLinha(data)}
-                    disabled={salvando}
-                    title="Remover"
-                  >✕</button>
+                <div key={data} className="bh-domfer-row bh-domfer-row--justif">
+                  <div className="bh-domfer-row-topo">
+                    <span className="bh-domfer-dia">{nomeDia}</span>
+                    <span className="bh-domfer-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}/{y}</span>
+                    <span className="bh-domfer-input">{fmtH(h)}h</span>
+                    <span className="bh-domfer-mult">×1,0</span>
+                    <span className="bh-domfer-calc">= {fmtH(h)}h</span>
+                    <button
+                      className="escala-ferias-remover"
+                      onClick={() => removerLinha(data)}
+                      disabled={salvando}
+                      title="Remover"
+                    >✕</button>
+                  </div>
+                  {justif && (
+                    <div className="bh-domfer-justif">📝 {justif}</div>
+                  )}
+                  {!justif && (
+                    <div className="bh-domfer-justif-input-wrap">
+                      <input
+                        className="bh-domfer-justif-input"
+                        type="text"
+                        placeholder="Adicionar justificativa..."
+                        defaultValue=""
+                        onBlur={e => { if (e.target.value.trim()) onSalvarJustificativa(data, e.target.value.trim()) }}
+                      />
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -2073,6 +2112,7 @@ export default function EscalaAgentes() {
           percSabado: 50,
           descontosFolgaBanco: {},
           horasExtrasSimples: {},
+          justificativasExtrasSimples: {},
           ajustesBanco: {},
         }
         salvarDados(migrado)
@@ -2240,6 +2280,25 @@ export default function EscalaAgentes() {
     return await salvarDadosAsync(novos)
   }
 
+  function salvarJustificativaExtraSimples(data: string, justificativa: string) {
+    const agenteJustifs = { ...(dados.justificativasExtrasSimples?.[agenteLogado] ?? {}) }
+    const valor = justificativa.slice(0, 500)
+    if (!valor.trim()) {
+      delete agenteJustifs[data]
+    } else {
+      agenteJustifs[data] = valor
+    }
+    const novos = {
+      ...dados,
+      justificativasExtrasSimples: {
+        ...(dados.justificativasExtrasSimples ?? {}),
+        [agenteLogado]: agenteJustifs,
+      },
+    }
+    setDados(novos)
+    salvarDados(novos)
+  }
+
   return (
     <div className="escala-wrap">
       <div className="escala-nav-mes">
@@ -2336,7 +2395,9 @@ export default function EscalaAgentes() {
         <BancoHorasExtraSimples
           agente={agenteLogado}
           horasExtrasSimples={dados.horasExtrasSimples}
+          justificativasExtrasSimples={dados.justificativasExtrasSimples ?? {}}
           onSalvarHora={salvarHoraExtraSimples}
+          onSalvarJustificativa={salvarJustificativaExtraSimples}
         />
       )}
 

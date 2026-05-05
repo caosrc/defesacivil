@@ -1689,6 +1689,31 @@ input, select, textarea { font-family: inherit; }
   border-left: 3px solid #7c3aed;
 }
 
+.campo-lista-opcoes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.campo-opcao-btn {
+  width: 100%;
+  padding: 0.6rem 0.9rem;
+  text-align: left;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  background: #fafafa;
+  color: #1a202c;
+  font-size: 0.92rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.campo-opcao-btn:active { background: #e0e7f0; }
+.campo-opcao-btn.ativo {
+  border-color: #1a4b8c;
+  background: #e8f0fb;
+  color: #1a4b8c;
+  font-weight: 700;
+}
+
 .campo-input, .campo-select, .campo-textarea {
   width: 100%;
   border: 1.5px solid #d1d5db;
@@ -3044,11 +3069,11 @@ input, select, textarea { font-family: inherit; }
 }
 
 .login-logo-wrap {
-  width: 110px;
-  height: 110px;
-  border-radius: 22px;
+  width: 150px;
+  height: 150px;
+  border-radius: 28px;
   overflow: hidden;
-  margin-bottom: 1rem;
+  margin-bottom: 1.2rem;
   box-shadow: 0 4px 18px rgba(26,75,140,0.25);
   border: 3px solid #e8edf5;
 }
@@ -3571,12 +3596,12 @@ input, select, textarea { font-family: inherit; }
   display: flex; align-items: center; justify-content: center; line-height: 1;
 }
 .mat-subheader .btn-voltar:hover { background: rgba(255,255,255,0.3); }
-.mat-btn-add, .mat-btn-excluir, .mat-btn-editar {
+.mat-btn-add, .mat-btn-excluir, .mat-btn-editar, .mat-btn-exportar {
   background: rgba(255,255,255,0.2); border: 0; color: white;
   width: 2rem; height: 2rem; border-radius: 50%; font-size: 1.2rem; cursor: pointer;
   font-weight: bold;
 }
-.mat-btn-add:hover, .mat-btn-excluir:hover, .mat-btn-editar:hover { background: rgba(255,255,255,0.35); }
+.mat-btn-add:hover, .mat-btn-excluir:hover, .mat-btn-editar:hover, .mat-btn-exportar:hover { background: rgba(255,255,255,0.35); }
 .mat-btn-add:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* Tela inicial */

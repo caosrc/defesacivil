@@ -49,18 +49,9 @@ function dispatch(tipo: string, msg: Record<string, unknown>) {
   } catch { /* ignore */ }
 }
 
-// URL do backend Replit (dev server público, não precisa publicar no Replit)
-const REPLIT_WS = 'wss://87a7d4ce-738a-4aa3-ac74-9e5507611668-00-1qfaq1dnzb4z7.picard.replit.dev/ws'
-
 function getWsUrl(): string {
-  const host = location.hostname
-  // localhost ou domínio do próprio Replit → proxy local do Vite
-  if (host === 'localhost' || host.includes('replit.dev')) {
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${location.host}/ws`
-  }
-  // Qualquer outro domínio (ex.: Netlify) → conecta direto ao backend Replit
-  return REPLIT_WS
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${location.host}/ws`
 }
 
 function startPing() {
@@ -72,7 +63,7 @@ function startPing() {
       const id = getMeuId()
       if (id) ws.send(JSON.stringify({ tipo: 'online_ping', id }))
     }
-  }, 30000)
+  }, 15000)
 }
 
 function stopPing() {

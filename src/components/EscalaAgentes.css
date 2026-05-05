@@ -1987,6 +1987,59 @@
   font-size: 0.82rem;
 }
 
+.bh-domfer-row--justif {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.bh-domfer-row-topo {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.bh-domfer-justif {
+  font-size: 0.78rem;
+  color: #6b7280;
+  font-style: italic;
+  padding-left: 0.2rem;
+  padding-top: 0.15rem;
+}
+
+.bh-domfer-justif-input-wrap {
+  padding-top: 0.2rem;
+}
+
+.bh-domfer-justif-input {
+  width: 100%;
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.78rem;
+  color: #374151;
+  background: transparent;
+  outline: none;
+  box-sizing: border-box;
+}
+.bh-domfer-justif-input::placeholder { color: #9ca3af; }
+.bh-domfer-justif-input:focus { border-color: #1a4b8c; background: #fff; }
+
+.escala-justif-textarea {
+  width: 100%;
+  border: 1.5px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
+  color: #374151;
+  background: #f9fafb;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+.escala-justif-textarea:focus { border-color: #1a4b8c; background: #fff; }
+
 .bh-domfer-row.desconto {
   background: #f0fdf4;
   border-color: #bbf7d0;

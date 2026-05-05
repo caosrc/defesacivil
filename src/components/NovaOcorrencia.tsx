@@ -182,10 +182,18 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
           {/* 1 - Tipo */}
           <div className="campo">
             <label className="campo-label">1 — Tipo de Ocorrência</label>
-            <select className="campo-select" value={tipo} onChange={(e) => { setTipo(e.target.value); setTipoOutro(''); setNatureza('') }}>
-              <option value="">Selecione...</option>
-              {TIPOS_OCORRENCIA.map((t) => <option key={t}>{t}</option>)}
-            </select>
+            <div className="campo-lista-opcoes">
+              {TIPOS_OCORRENCIA.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={`campo-opcao-btn ${tipo === t ? 'ativo' : ''}`}
+                  onClick={() => { setTipo(t); setTipoOutro(''); setNatureza('') }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
             {tipo === 'Outro' && (
               <input
                 className="campo-input"
@@ -202,10 +210,18 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
           {tipo && (
             <div className="campo campo-animado">
               <label className="campo-label">2 — Natureza da Ocorrência</label>
-              <select className="campo-select" value={natureza} onChange={(e) => { setNatureza(e.target.value); setSubnatureza('') }}>
-                <option value="">Selecione...</option>
-                {NATUREZAS.map((n) => <option key={n}>{n}</option>)}
-              </select>
+              <div className="campo-lista-opcoes">
+                {NATUREZAS.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`campo-opcao-btn ${natureza === n ? 'ativo' : ''}`}
+                    onClick={() => { setNatureza(n); setSubnatureza('') }}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
