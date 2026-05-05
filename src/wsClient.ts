@@ -2,6 +2,7 @@
 // API pública idêntica à versão Supabase Realtime para compatibilidade total.
 
 import { dispararPushSos } from './pushNotifications'
+import { apiUrl } from './config'
 
 type WsHandler = (msg: Record<string, unknown>) => void
 type OpenHandler = () => void
@@ -147,7 +148,7 @@ export function wsSend(msg: Record<string, unknown>): void {
   // For SOS events, also notify the server via REST for persistence + push
   if (tipo === 'sos') {
     // Send via REST API for server-side push notifications and DB persistence
-    fetch('/api/sos', {
+    fetch(apiUrl('/api/sos'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(msg),
@@ -158,7 +159,7 @@ export function wsSend(msg: Record<string, unknown>): void {
   }
 
   if (tipo === 'sos-audio' || tipo === 'sos-cancelar' || tipo === 'sos-mensagem') {
-    fetch('/api/sos', {
+    fetch(apiUrl('/api/sos'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(msg),

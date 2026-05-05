@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { wsOn } from '../wsClient'
+import { apiUrl } from '../config'
 
 // Mostra um pill no cabeçalho com a contagem de agentes ONLINE — qualquer
 // equipe com o app aberto entra automaticamente no Presence do Supabase
@@ -56,7 +57,7 @@ export default function AgentesOnline() {
 
   useEffect(() => {
     // Carrega a lista via REST na montagem (sem depender de timing do WebSocket)
-    fetch('/api/agentes-online')
+    fetch(apiUrl('/api/agentes-online'))
       .then(r => r.ok ? r.json() : [])
       .then((lista: AgenteOnline[]) => {
         const limpa = lista

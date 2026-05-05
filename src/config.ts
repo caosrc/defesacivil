@@ -1,6 +1,10 @@
 const rawApi = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
 export const API_BASE = rawApi.replace(/\/+$/, '')
 
+export function apiUrl(path: string): string {
+  return API_BASE + path
+}
+
 const rawWs = (import.meta.env.VITE_WS_URL as string | undefined) ?? ''
 const WS_OVERRIDE = rawWs.replace(/\/+$/, '')
 

@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { getAgenteLogado } from './Login'
 import ModalSenha from './ModalSenha'
 import { wsOn } from '../wsClient'
+import { apiUrl } from '../config'
 import './EscalaAgentes.css'
 
 // ── Constantes ────────────────────────────────────────────────────
@@ -204,7 +205,7 @@ function teveEdicaoLocalRecente(janelaMs = 60_000) {
 function salvarDados(data: EscalaData) {
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  fetch('/api/escala', {
+  fetch(apiUrl('/api/escala'), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -216,7 +217,7 @@ async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensag
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   try {
-    const res = await fetch('/api/escala', {
+    const res = await fetch(apiUrl('/api/escala'), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -233,7 +234,7 @@ async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensag
 
 async function carregarDadosRemoto(): Promise<EscalaData | null> {
   try {
-    const res = await fetch('/api/escala')
+    const res = await fetch(apiUrl('/api/escala'))
     if (!res.ok) return null
     const row = await res.json()
     if (!row) return null

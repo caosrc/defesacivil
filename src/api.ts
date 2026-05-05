@@ -1,5 +1,6 @@
 import type { Ocorrencia } from './types'
 import { savePending, getCachedOcorrencias } from './offline'
+import { apiUrl } from './config'
 
 function localOffline(dados: Omit<Ocorrencia, 'id' | 'created_at'>, localId: number): Ocorrencia {
   return {
@@ -42,7 +43,7 @@ export class ApiError extends Error {
 
 export async function listarOcorrencias(): Promise<Ocorrencia[]> {
   try {
-    const res = await fetch('/api/ocorrencias')
+    const res = await fetch(apiUrl('/api/ocorrencias'))
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     return (Array.isArray(data) ? data : []) as Ocorrencia[]
@@ -55,7 +56,7 @@ export async function listarOcorrencias(): Promise<Ocorrencia[]> {
 export async function enviarOcorrenciaServidor(
   dados: Omit<Ocorrencia, 'id' | 'created_at'>
 ): Promise<Ocorrencia> {
-  const res = await fetch('/api/ocorrencias', {
+  const res = await fetch(apiUrl('/api/ocorrencias'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(buildPayload(dados)),
@@ -89,7 +90,7 @@ export async function atualizarOcorrencia(
 ): Promise<Ocorrencia> {
   const { id: _i, created_at: _c, _offline: _o, _localId: _l, ...payload } = dados as Record<string, unknown>
   void _i; void _c; void _o; void _l
-  const res = await fetch(`/api/ocorrencias/${id}`, {
+  const res = await fetch(apiUrl(`/api/ocorrencias/${id}`), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -102,7 +103,7 @@ export async function atualizarOcorrencia(
 }
 
 export async function deletarOcorrencia(id: number): Promise<void> {
-  const res = await fetch(`/api/ocorrencias/${id}`, { method: 'DELETE' })
+  const res = await fetch(apiUrl(`/api/ocorrencias/${id}`), { method: 'DELETE' })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
     throw new Error(err.error || `HTTP ${res.status}`)

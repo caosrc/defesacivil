@@ -3,6 +3,7 @@ import { adicionarMarcaDagua } from '../utils'
 import { exportarChecklistExcel, type ChecklistExportData } from '../exportExcel'
 import ModalSenha from './ModalSenha'
 import { wsOn } from '../wsClient'
+import { apiUrl } from '../config'
 
 const MOTORISTAS = ['Moisés', 'Arthur', 'Gustavo', 'Valteir', 'Dyonathan']
 
@@ -336,7 +337,7 @@ export default function ChecklistViatura() {
   async function carregar() {
     setCarregando(true)
     try {
-      const res = await fetch('/api/checklists')
+      const res = await fetch(apiUrl('/api/checklists'))
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setChecklists((Array.isArray(data) ? data : []) as ChecklistData[])
@@ -515,7 +516,7 @@ export default function ChecklistViatura() {
     if (!nomeMotorista) { setErro('Informe o motorista.'); return }
     setSalvando(true); setErro('')
     try {
-      const res = await fetch('/api/checklists', {
+      const res = await fetch(apiUrl('/api/checklists'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -543,7 +544,7 @@ export default function ChecklistViatura() {
 
   async function deletar(id: number) {
     try {
-      await fetch(`/api/checklists/${id}`, { method: 'DELETE' })
+      await fetch(apiUrl(`/api/checklists/${id}`), { method: 'DELETE' })
     } catch { /* ignore */ }
     setSelecionado(null); setModo('lista'); await carregar()
   }

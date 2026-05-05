@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { getAgenteLogado } from './Login'
 import { parseExcelPatrimonio, type ItemImportado, type ResultadoParse } from '../importarExcelPatrimonio'
+import { apiUrl } from '../config'
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 interface Material {
@@ -179,9 +180,9 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
     setCarregando(true)
     try {
       const [rm, re, rc] = await Promise.all([
-        fetch('/api/materiais').then(r => r.ok ? r.json() : []),
-        fetch('/api/emprestimos').then(r => r.ok ? r.json() : []),
-        fetch('/api/equipamentos-campo').then(r => r.ok ? r.json() : []),
+        fetch(apiUrl('/api/materiais')).then(r => r.ok ? r.json() : []),
+        fetch(apiUrl('/api/emprestimos')).then(r => r.ok ? r.json() : []),
+        fetch(apiUrl('/api/equipamentos-campo')).then(r => r.ok ? r.json() : []),
       ])
       setMateriais((Array.isArray(rm) ? rm : []) as Material[])
       setEmprestimos((Array.isArray(re) ? re : []) as Emprestimo[])
@@ -484,7 +485,7 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
         onExcluir={async () => {
           if (!confirm(`Excluir definitivamente o material "${materialSelecionado.nome}"?\nIsso apaga TODOS os empréstimos relacionados.`)) return
           try {
-            const delRes = await fetch(`/api/materiais/${materialSelecionado.id}`, { method: 'DELETE' })
+            const delRes = await fetch(apiUrl(`/api/materiais/${materialSelecionado.id}`), { method: 'DELETE' })
             if (!delRes.ok) { const e = await delRes.json().catch(() => ({})); alert('Erro: ' + (e.error || delRes.status)); return }
           } catch (err: unknown) {
             alert('Erro: ' + ((err as Error)?.message || 'falha de rede')); return
@@ -774,7 +775,7 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
         onVoltar={() => { setCampoSelecionado(null); setModo('campo') }}
         onIrParaMapa={onIrParaMapa}
         onDevolver={async () => {
-          const dRes = await fetch(`/api/equipamentos-campo/${campoSelecionado.id}`, {
+          const dRes = await fetch(apiUrl(`/api/equipamentos-campo/${campoSelecionado.id}`), {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: 'devolvido' }),
@@ -787,7 +788,7 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
         }}
         onExcluir={async () => {
           if (!confirm('Excluir este registro de equipamento em campo?')) return
-          await fetch(`/api/equipamentos-campo/${campoSelecionado.id}`, { method: 'DELETE' })
+          await fetch(apiUrl(`/api/equipamentos-campo/${campoSelecionado.id}`), { method: 'DELETE' })
           showToast('🗑️ Registro excluído.')
           await carregar()
           setCampoSelecionado(null)
@@ -822,7 +823,7 @@ function DetalheMaterial({
     async function buscarFotos() {
       setCarregandoFoto(true)
       try {
-        const res = await fetch(`/api/materiais/${encodeURIComponent(material.id)}`)
+        const res = await fetch(apiUrl(`/api/materiais/${encodeURIComponent(material.id)}`))
         if (!res.ok || cancelado) return
         const data = await res.json()
         if (!cancelado) setFotoCompleta({ foto: data.foto ?? null, foto_placa: data.foto_placa ?? null })
@@ -981,7 +982,7 @@ function FormMaterial({
           patchBody.foto = foto
           patchBody.foto_thumb = fotoThumb
         }
-        const res = await fetch(`/api/materiais/${materialInicial.id}`, {
+        const res = await fetch(apiUrl(`/api/materiais/${materialInicial.id}`), {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(patchBody),
@@ -993,7 +994,7 @@ function FormMaterial({
         const cod = codigo.trim().toUpperCase()
         if (!cod) { setErro('Informe o código do material.'); setSalvando(false); return }
         if (existentes.includes(cod)) { setErro(`Já existe um material com código "${cod}".`); setSalvando(false); return }
-        const res = await fetch('/api/materiais', {
+        const res = await fetch(apiUrl('/api/materiais'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1247,7 +1248,7 @@ function FormNovoEmprestimo({
     setSalvando(true); setErro('')
     try {
       const dataPrev = dataPrevista ? dataPrevista.toISOString().slice(0, 10) : null
-      const res = await fetch('/api/emprestimos', {
+      const res = await fetch(apiUrl('/api/emprestimos'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1491,7 +1492,7 @@ function FormDevolucao({
     if (!recebedor.trim()) { setErro('Informe quem recebeu o equipamento.'); return }
     setSalvando(true); setErro('')
     try {
-      const res = await fetch(`/api/emprestimos/${emprestimo.id}/devolver`, {
+      const res = await fetch(apiUrl(`/api/emprestimos/${emprestimo.id}/devolver`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1785,7 +1786,7 @@ function ImportarExcelModal({
 
   // Carrega lista atual de materiais para detectar duplicatas
   useEffect(() => {
-    fetch('/api/materiais')
+    fetch(apiUrl('/api/materiais'))
       .then(r => r.ok ? r.json() : [])
       .then((data: { id: string }[]) => {
         if (Array.isArray(data)) {
@@ -1834,7 +1835,7 @@ function ImportarExcelModal({
 
       try {
         if (!jaExiste) {
-          const r = await fetch('/api/materiais', {
+          const r = await fetch(apiUrl('/api/materiais'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: item.id, nome: item.nome, descricao: item.descricao, observacoes: item.observacoes, foto: item.foto }),
@@ -1843,7 +1844,7 @@ function ImportarExcelModal({
           else if (r.status === 409) ignorados++
           else falhas++
         } else if (atualizarExistentes) {
-          const r = await fetch(`/api/materiais/${item.id}`, {
+          const r = await fetch(apiUrl(`/api/materiais/${item.id}`), {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ nome: item.nome, descricao: item.descricao, observacoes: item.observacoes, foto: item.foto }),
@@ -2075,7 +2076,7 @@ function FormCampo({
     try {
       const dataRecolha = new Date()
       dataRecolha.setDate(dataRecolha.getDate() + Math.max(1, typeof prazoCampoDias === 'number' ? prazoCampoDias : 1))
-      const res = await fetch('/api/equipamentos-campo', {
+      const res = await fetch(apiUrl('/api/equipamentos-campo'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -2,6 +2,7 @@
 // Defesa Civil Ouro Branco — Push Notifications (Web Push API)
 // Usa o servidor Express local (sem Supabase).
 // ════════════════════════════════════════════════════════════════════════════
+import { apiUrl } from './config'
 
 const STORAGE_DEVICE_ID = 'defesacivil-device-id'
 const STORAGE_PUSH_PEDIU = 'defesacivil-push-permissao-pedida-v1'
@@ -47,7 +48,7 @@ async function getVapidPublicKey(): Promise<string> {
   const envKey = (window as Record<string, unknown>).__VAPID_PUBLIC_KEY__ as string || VAPID_PUBLIC_KEY_ENV
   if (envKey) return envKey
   try {
-    const res = await fetch('/api/vapid-public-key')
+    const res = await fetch(apiUrl('/api/vapid-public-key'))
     if (res.ok) {
       const json = await res.json()
       return json.publicKey || ''
@@ -103,7 +104,7 @@ async function salvarInscricao(
 
   const id = getMeuId()
   try {
-    const res = await fetch('/api/push-subscriptions', {
+    const res = await fetch(apiUrl('/api/push-subscriptions'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, agente: agente || null, endpoint, p256dh, auth }),
@@ -228,7 +229,7 @@ export async function dispararPushSos(payload: {
   bateria?: number | null
 }): Promise<void> {
   try {
-    await fetch('/api/send-sos-push', {
+    await fetch(apiUrl('/api/send-sos-push'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
