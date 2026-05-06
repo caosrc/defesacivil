@@ -2,7 +2,6 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { getAgenteLogado } from './Login'
 import ModalSenha from './ModalSenha'
 import { wsOn, wsSend } from '../wsClient'
-import { supabase } from '../supabaseClient'
 import './EscalaAgentes.css'
 
 // ── Constantes ────────────────────────────────────────────────────
@@ -205,7 +204,11 @@ function teveEdicaoLocalRecente(janelaMs = 60_000) {
 function salvarDados(data: EscalaData) {
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  supabase.from('escala_estado').upsert({ id: 1, data, updated_at: new Date().toISOString() })
+  fetch('/api/escala', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
     .then(() => { wsSend({ tipo: 'escala_atualizada' }) })
     .catch((e: unknown) => console.warn('Falha ao salvar escala:', e))
 }
@@ -215,8 +218,12 @@ async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensag
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   try {
-    const { error: saveErr } = await supabase.from('escala_estado').upsert({ id: 1, data, updated_at: new Date().toISOString() })
-    if (saveErr) return { ok: false, mensagem: saveErr.message }
+    const res = await fetch('/api/escala', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    if (!res.ok) { const e = await res.json().catch(() => ({})); return { ok: false, mensagem: e.error || 'Falha ao salvar' } }
     wsSend({ tipo: 'escala_atualizada' })
     return { ok: true }
   } catch (e: unknown) {
@@ -226,10 +233,11 @@ async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensag
 
 async function carregarDadosRemoto(): Promise<EscalaData | null> {
   try {
-    const { data: result, error } = await supabase.from('escala_estado').select('data').eq('id', 1).single()
-    if (error && error.code !== 'PGRST116') return null
+    const res = await fetch('/api/escala')
+    if (!res.ok) return null
+    const result = await res.json()
     if (!result) return null
-    const row = result.data
+    const row = result
     if (!row) return null
     const p = row as (Partial<EscalaData> & Record<string, unknown>) | null
     if (!p) return null

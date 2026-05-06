@@ -1,8 +1,6 @@
-// WebSocket client — usa Supabase Realtime (Broadcast + Presence)
-// API pública idêntica à versão WebSocket para compatibilidade total.
+// WebSocket client — connects to the Express WebSocket server
+// API pública idêntica para compatibilidade total.
 
-import type { RealtimeChannel } from '@supabase/supabase-js'
-import { supabase } from './supabaseClient'
 import { dispararPushSos } from './pushNotifications'
 
 type WsHandler = (msg: Record<string, unknown>) => void
@@ -11,7 +9,7 @@ type OpenHandler = () => void
 const handlers = new Map<string, Set<WsHandler>>()
 const openHandlers = new Set<OpenHandler>()
 
-let channel: RealtimeChannel | null = null
+let ws: WebSocket | null = null
 let isOpen = false
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -50,27 +48,57 @@ function dispatch(tipo: string, msg: Record<string, unknown>) {
   } catch { /* ignore */ }
 }
 
-function syncPresence() {
-  if (!channel) return
-  const state = channel.presenceState()
-  const agentes: { id: string; nome: string }[] = []
-  for (const presences of Object.values(state)) {
-    for (const p of presences as Array<Record<string, unknown>>) {
-      if (p.id && p.nome) agentes.push({ id: p.id as string, nome: p.nome as string })
+function getWsUrl(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/ws`
+}
+
+function connect() {
+  if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return
+
+  ws = new WebSocket(getWsUrl())
+
+  ws.onopen = () => {
+    isOpen = true
+    const id = getMeuId()
+    const nome = getMeuNome()
+    // Announce presence
+    ws!.send(JSON.stringify({ tipo: 'online', id, nome }))
+    openHandlers.forEach(h => { try { h() } catch { /* ignore */ } })
+  }
+
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data) as Record<string, unknown>
+      const tipo = msg.tipo as string
+      if (tipo) dispatch(tipo, msg)
+    } catch { /* ignore */ }
+  }
+
+  ws.onclose = () => {
+    isOpen = false
+    ws = null
+    if (!reconnectTimer) {
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null
+        connect()
+      }, 3000)
     }
   }
-  dispatch('online_sync', { tipo: 'online_sync', agentes })
+
+  ws.onerror = () => {
+    ws?.close()
+  }
 }
 
 async function loadSosAtivos() {
   try {
     const limiteTs = Date.now() - 60 * 60 * 1000
-    const { data } = await supabase
-      .from('sos_ativos_db')
-      .select('*')
-      .gt('timestamp', limiteTs)
+    const res = await fetch('/api/sos-ativos')
+    if (!res.ok) return
+    const data = await res.json()
     if (data && data.length > 0) {
-      const alertas = data.map(row => ({
+      const alertas = data.filter((row: Record<string, unknown>) => Number(row.timestamp) > limiteTs).map((row: Record<string, unknown>) => ({
         tipo: 'sos',
         id: row.id,
         agente: row.agente,
@@ -82,54 +110,13 @@ async function loadSosAtivos() {
         visualizadores: Array.isArray(row.visualizadores) ? row.visualizadores : [],
         mensagens: Array.isArray(row.mensagens) ? row.mensagens : [],
       }))
-      dispatch('sos_persistidos', { tipo: 'sos_persistidos', alertas })
+      if (alertas.length > 0) {
+        dispatch('sos_persistidos', { tipo: 'sos_persistidos', alertas })
+      }
     }
   } catch (e) {
     console.warn('[wsClient] erro ao carregar SOS ativos:', e)
   }
-}
-
-function connect() {
-  if (channel) return
-
-  const id = getMeuId()
-  const nome = getMeuNome()
-
-  channel = supabase.channel('defesacivil-main', {
-    config: {
-      broadcast: { ack: false },
-      presence: { key: id },
-    },
-  })
-
-  channel.on('broadcast', { event: '*' }, ({ event, payload }) => {
-    const msg = (payload || {}) as Record<string, unknown>
-    const tipo = event || (msg.tipo as string)
-    if (tipo) dispatch(tipo, { ...msg, tipo })
-  })
-
-  channel.on('presence', { event: 'sync' }, () => { syncPresence() })
-  channel.on('presence', { event: 'join' }, () => { syncPresence() })
-  channel.on('presence', { event: 'leave' }, () => { syncPresence() })
-
-  channel.subscribe(async (status) => {
-    if (status === 'SUBSCRIBED') {
-      isOpen = true
-      await channel!.track({ id, nome })
-      await loadSosAtivos()
-      openHandlers.forEach(h => { try { h() } catch { /* ignore */ } })
-    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-      isOpen = false
-      supabase.removeChannel(channel!)
-      channel = null
-      if (!reconnectTimer) {
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = null
-          connect()
-        }, 3000)
-      }
-    }
-  })
 }
 
 // ─── API pública ──────────────────────────────────────────────────────────
@@ -157,18 +144,7 @@ export function wsSend(msg: Record<string, unknown>): void {
   if (!tipo) return
 
   if (tipo === 'sos') {
-    const { id, agente, lat, lng, bateria, audio, timestamp } = msg as Record<string, unknown>
-    supabase.from('sos_ativos_db').upsert({
-      id: String(id),
-      agente: String(agente || ''),
-      lat: lat ?? null,
-      lng: lng ?? null,
-      bateria: bateria ?? null,
-      audio: audio ?? null,
-      timestamp: Number(timestamp || Date.now()),
-      visualizadores: [],
-      mensagens: [],
-    }).then(() => {}).catch(() => {})
+    const { id, agente, lat, lng, bateria } = msg as Record<string, unknown>
     dispararPushSos({
       id: id as string,
       agente: agente as string,
@@ -178,70 +154,43 @@ export function wsSend(msg: Record<string, unknown>): void {
     }).catch(() => {})
   }
 
-  if (tipo === 'sos-cancelar') {
-    const { id } = msg as Record<string, unknown>
-    supabase.from('sos_ativos_db').delete().eq('id', String(id)).then(() => {}).catch(() => {})
-  }
-
-  if (tipo === 'sos-visualizar') {
-    const { id, agente } = msg as Record<string, unknown>
-    if (id && agente) {
-      supabase.from('sos_ativos_db').select('visualizadores').eq('id', String(id)).single()
-        .then(({ data }) => {
-          const vizs = Array.isArray(data?.visualizadores) ? data.visualizadores : []
-          if (!vizs.includes(agente)) {
-            const novos = [...vizs, agente]
-            supabase.from('sos_ativos_db').update({ visualizadores: novos }).eq('id', String(id)).then(() => {}).catch(() => {})
-            channel?.send({ type: 'broadcast', event: 'sos-visualizado', payload: { tipo: 'sos-visualizado', id, visualizadores: novos } })
-          }
-        }).catch(() => {})
-    }
-  }
-
-  if (tipo === 'sos-mensagem') {
-    const { id, agente, texto, ts, audio } = msg as Record<string, unknown>
-    if (id && agente) {
-      supabase.from('sos_ativos_db').select('mensagens').eq('id', String(id)).single()
-        .then(({ data }) => {
-          const msgs = Array.isArray(data?.mensagens) ? data.mensagens : []
-          const nova: Record<string, unknown> = { agente, texto: texto || '', ts: ts || Date.now() }
-          if (audio) nova.audio = audio
-          const novas = [...msgs, nova]
-          supabase.from('sos_ativos_db').update({ mensagens: novas }).eq('id', String(id)).then(() => {}).catch(() => {})
-        }).catch(() => {})
-    }
-  }
-
-  if (channel) {
-    channel.send({ type: 'broadcast', event: tipo, payload: msg }).catch(() => {})
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(msg))
   }
 }
 
 export function wsConnect() {
   connect()
+  loadSosAtivos().catch(() => {})
 }
 
 export function wsAnunciarOnline() {
   connect()
   const id = getMeuId()
   const nome = getMeuNome()
-  if (channel && isOpen) {
-    channel.track({ id, nome }).catch(() => {})
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ tipo: 'online', id, nome }))
   }
 }
 
 export function wsDisconnect() {
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
-  if (channel) {
-    channel.untrack().catch(() => {})
-    supabase.removeChannel(channel)
-    channel = null
+  if (ws) {
+    const id = getMeuId()
+    try { ws.send(JSON.stringify({ tipo: 'offline', id })) } catch { /* ignore */ }
+    ws.close()
+    ws = null
     isOpen = false
   }
 }
 
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
-    try { channel?.untrack() } catch { /* ignore */ }
+    try {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const id = getMeuId()
+        ws.send(JSON.stringify({ tipo: 'offline', id }))
+      }
+    } catch { /* ignore */ }
   })
 }

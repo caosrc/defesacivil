@@ -1285,6 +1285,17 @@ app.post('/api/send-sos-push', async (req, res) => {
   res.json({ enviados: enviados.length, removidos: removidos.length })
 })
 
+// ── SOS Ativos (REST fallback para wsClient) ─────────────────────────────────
+app.get('/api/sos-ativos', async (_req, res) => {
+  try {
+    const limiteTs = Date.now() - SOS_TTL_MS
+    const result = await query('SELECT * FROM sos_ativos_db WHERE timestamp > $1', [limiteTs])
+    res.json(result.rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // ── Tiles proxy ──────────────────────────────────────────────────────────────
 const OSM_SUBDOMAINS = ['a', 'b', 'c']
 let _osmIdx = 0

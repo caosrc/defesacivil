@@ -1,5 +1,5 @@
-export function netlifyFn(name: string): string {
-  return `/.netlify/functions/${name}`
+export function netlifyFn(_name: string): string {
+  return `/api/${_name}`
 }
 
-export const SUPABASE_CONFIGURADO = true
+export const SUPABASE_CONFIGURADO = false

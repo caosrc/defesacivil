@@ -1,9 +1,7 @@
 // ════════════════════════════════════════════════════════════════════════════
 // Defesa Civil Ouro Branco — Push Notifications (Web Push API)
-// Usa Supabase para subscriptions + Netlify Function para envio VAPID.
+// Usa REST API do servidor para subscriptions e envio VAPID.
 // ════════════════════════════════════════════════════════════════════════════
-import { supabase } from './supabaseClient'
-import { netlifyFn } from './config'
 
 const STORAGE_DEVICE_ID = 'defesacivil-device-id'
 const STORAGE_PUSH_PEDIU = 'defesacivil-push-permissao-pedida-v1'
@@ -45,9 +43,17 @@ function arrayBufferToBase64(buffer: ArrayBuffer | null): string {
   return btoa(bin)
 }
 
-function getVapidPublicKey(): string {
+async function getVapidPublicKey(): Promise<string> {
   const envKey = (window as Record<string, unknown>).__VAPID_PUBLIC_KEY__ as string || VAPID_PUBLIC_KEY_ENV
-  return envKey || ''
+  if (envKey) return envKey
+  try {
+    const res = await fetch('/api/vapid-public-key')
+    if (res.ok) {
+      const data = await res.json()
+      return data.publicKey || ''
+    }
+  } catch { /* ignore */ }
+  return ''
 }
 
 export function pushSuportado(): boolean {
@@ -90,15 +96,12 @@ async function salvarInscricao(sub: PushSubscription, agente: string): Promise<v
 
   const id = getMeuId()
   try {
-    const { error } = await supabase.from('push_subscriptions').upsert({
-      id,
-      agente: agente || null,
-      endpoint,
-      p256dh,
-      auth,
-      updated_at: new Date().toISOString(),
+    const res = await fetch('/api/push-subscriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, agente: agente || null, endpoint, p256dh, auth }),
     })
-    if (error) console.warn('[Push] erro ao salvar inscrição:', error.message)
+    if (!res.ok) console.warn('[Push] erro ao salvar inscrição:', res.status)
   } catch (e) {
     console.warn('[Push] erro ao salvar inscrição:', e)
   }
@@ -108,7 +111,7 @@ export async function registrarPushSeNecessario(agente: string): Promise<void> {
   if (!pushSuportado()) return
   if (!agente) return
 
-  const VAPID_PUBLIC_KEY = getVapidPublicKey()
+  const VAPID_PUBLIC_KEY = await getVapidPublicKey()
   if (!VAPID_PUBLIC_KEY) {
     console.warn('[Push] VAPID public key não disponível — push desabilitado.')
     return
@@ -161,9 +164,9 @@ export async function pedirPermissaoEInscrever(agente: string): Promise<'ok' | '
     return 'erro'
   }
 
-  const VAPID_PUBLIC_KEY = getVapidPublicKey()
+  const VAPID_PUBLIC_KEY = await getVapidPublicKey()
   if (!VAPID_PUBLIC_KEY) {
-    console.warn('[Push] VAPID public key não encontrada nas env vars')
+    console.warn('[Push] VAPID public key não encontrada')
     return 'erro'
   }
 
@@ -217,7 +220,7 @@ export async function dispararPushSos(payload: {
   bateria?: number | null
 }): Promise<void> {
   try {
-    await fetch(netlifyFn('send-sos-push'), {
+    await fetch('/api/send-sos-push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

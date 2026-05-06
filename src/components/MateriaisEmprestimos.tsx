@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { getAgenteLogado } from './Login'
 import { parseExcelPatrimonio, type ItemImportado, type ResultadoParse } from '../importarExcelPatrimonio'
-import { supabase } from '../supabaseClient'
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 interface Material {
@@ -180,9 +179,9 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
     setCarregando(true)
     try {
       const [rm, re, rc] = await Promise.all([
-        supabase.from('materiais').select('id, nome, descricao, observacoes, foto_thumb, quantidade, created_at').order('id').then(r => r.data || []),
-        supabase.from('emprestimos').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('equipamentos_campo').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
+        fetch('/api/materiais').then(r => r.ok ? r.json() : []),
+        fetch('/api/emprestimos').then(r => r.ok ? r.json() : []),
+        fetch('/api/equipamentos-campo').then(r => r.ok ? r.json() : []),
       ])
       setMateriais((Array.isArray(rm) ? rm : []) as Material[])
       setEmprestimos((Array.isArray(re) ? re : []) as Emprestimo[])
@@ -485,8 +484,8 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
         onExcluir={async () => {
           if (!confirm(`Excluir definitivamente o material "${materialSelecionado.nome}"?\nIsso apaga TODOS os empréstimos relacionados.`)) return
           try {
-            const { error: delErr } = await supabase.from('materiais').delete().eq('id', materialSelecionado.id)
-            if (delErr) { alert('Erro: ' + delErr.message); return }
+            const delRes = await fetch(`/api/materiais/${materialSelecionado.id}`, { method: 'DELETE' })
+            if (!delRes.ok) { const e = await delRes.json().catch(() => ({})); alert('Erro: ' + (e.error || delRes.statusText)); return }
           } catch (err: unknown) {
             alert('Erro: ' + ((err as Error)?.message || 'falha de rede')); return
           }
@@ -775,8 +774,8 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
         onVoltar={() => { setCampoSelecionado(null); setModo('campo') }}
         onIrParaMapa={onIrParaMapa}
         onDevolver={async () => {
-          const { error: devCampoErr } = await supabase.from('equipamentos_campo').update({ status: 'devolvido' }).eq('id', campoSelecionado.id)
-          if (devCampoErr) { alert('Erro: ' + devCampoErr.message); return }
+          const devRes = await fetch(`/api/equipamentos-campo/${campoSelecionado.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'devolvido' }) })
+          if (!devRes.ok) { const e = await devRes.json().catch(() => ({})); alert('Erro: ' + (e.error || devRes.statusText)); return }
           showToast('✅ Equipamento marcado como devolvido!')
           await carregar()
           setCampoSelecionado(null)
@@ -784,7 +783,7 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
         }}
         onExcluir={async () => {
           if (!confirm('Excluir este registro de equipamento em campo?')) return
-          await supabase.from('equipamentos_campo').delete().eq('id', campoSelecionado.id)
+          await fetch(`/api/equipamentos-campo/${campoSelecionado.id}`, { method: 'DELETE' })
           showToast('🗑️ Registro excluído.')
           await carregar()
           setCampoSelecionado(null)
@@ -819,8 +818,9 @@ function DetalheMaterial({
     async function buscarFotos() {
       setCarregandoFoto(true)
       try {
-        const { data: matData } = await supabase.from('materiais').select('foto, foto_placa').eq('id', material.id).single()
-        if (!matData || cancelado) return
+        const matRes = await fetch(`/api/materiais/${material.id}`)
+        if (!matRes.ok || cancelado) return
+        const matData = await matRes.json()
         if (!cancelado) setFotoCompleta({ foto: matData.foto ?? null, foto_placa: matData.foto_placa ?? null })
       } catch { /* silencioso */ } finally {
         if (!cancelado) setCarregandoFoto(false)
@@ -977,25 +977,35 @@ function FormMaterial({
           patchBody.foto = foto
           patchBody.foto_thumb = fotoThumb
         }
-        const { data: patchData, error: patchErr } = await supabase.from('materiais').update(patchBody).eq('id', materialInicial.id).select('id, nome, descricao, observacoes, foto_thumb, quantidade, created_at').single()
-        if (patchErr) throw new Error(patchErr.message)
+        const patchRes = await fetch(`/api/materiais/${materialInicial.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(patchBody),
+        })
+        if (!patchRes.ok) { const e = await patchRes.json().catch(() => ({})); throw new Error(e.error || 'Falha ao atualizar') }
+        const patchData = await patchRes.json()
         onSalvo(patchData as Material)
       } else {
         const cod = codigo.trim().toUpperCase()
         if (!cod) { setErro('Informe o código do material.'); setSalvando(false); return }
         if (existentes.includes(cod)) { setErro(`Já existe um material com código "${cod}".`); setSalvando(false); return }
-        const { error: postErr } = await supabase.from('materiais').insert([{
-          id: cod,
-          nome: nm,
-          descricao: descricao.trim() || null,
-          observacoes: observacoes.trim() || null,
-          foto,
-          foto_thumb: fotoThumb,
-          quantidade: Math.max(1, quantidade),
-        }])
-        if (postErr) {
-          if (postErr.code === '23505') throw new Error(`Já existe um material com código "${cod}".`)
-          throw new Error(postErr.message)
+        const postRes = await fetch('/api/materiais', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: cod,
+            nome: nm,
+            descricao: descricao.trim() || null,
+            observacoes: observacoes.trim() || null,
+            foto,
+            foto_thumb: fotoThumb,
+            quantidade: Math.max(1, quantidade),
+          }),
+        })
+        if (!postRes.ok) {
+          const e = await postRes.json().catch(() => ({}))
+          if (postRes.status === 409) throw new Error(`Já existe um material com código "${cod}".`)
+          throw new Error(e.error || 'Falha ao criar')
         }
         onSalvo()
       }
@@ -1233,23 +1243,28 @@ function FormNovoEmprestimo({
     setSalvando(true); setErro('')
     try {
       const dataPrev = dataPrevista ? dataPrevista.toISOString().slice(0, 10) : null
-      const { data: empData, error: empErr } = await supabase.from('emprestimos').insert([{
-        material_id: material.id,
-        material_codigo: material.id,
-        material_nome: material.nome,
-        responsavel: responsavel.trim(),
-        cpf: cpf.trim() || null,
-        secretaria: secretaria.trim() || null,
-        prazo_dias: typeof prazoDias === 'number' ? prazoDias : 7,
-        quantidade: Math.max(1, quantidade),
-        data_devolucao_prevista: dataPrev,
-        condicao_equipamento: condicao.trim() || null,
-        observacoes: observacoes.trim() || null,
-        agente_emprestador: agente || null,
-        assinatura_data: assinaturaData,
-        tipo: tipoOperacao,
-      }]).select('*').single()
-      if (empErr) throw new Error(empErr.message)
+      const empRes = await fetch('/api/emprestimos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          material_id: material.id,
+          material_codigo: material.id,
+          material_nome: material.nome,
+          responsavel: responsavel.trim(),
+          cpf: cpf.trim() || null,
+          secretaria: secretaria.trim() || null,
+          prazo_dias: typeof prazoDias === 'number' ? prazoDias : 7,
+          quantidade: Math.max(1, quantidade),
+          data_devolucao_prevista: dataPrev,
+          condicao_equipamento: condicao.trim() || null,
+          observacoes: observacoes.trim() || null,
+          agente_emprestador: agente || null,
+          assinatura_data: assinaturaData,
+          tipo: tipoOperacao,
+        }),
+      })
+      if (!empRes.ok) { const e = await empRes.json().catch(() => ({})); throw new Error(e.error || 'Falha ao salvar') }
+      const empData = await empRes.json()
       onSalvo(empData as Emprestimo)
     } catch (e: any) {
       setErro(`Erro ao salvar: ${e?.message ?? 'tente novamente'}`)
@@ -1472,13 +1487,17 @@ function FormDevolucao({
     if (!recebedor.trim()) { setErro('Informe quem recebeu o equipamento.'); return }
     setSalvando(true); setErro('')
     try {
-      const { error: devolErr } = await supabase.from('emprestimos').update({
-        devolvido_em: new Date(data + 'T12:00:00').toISOString(),
-        devolvido_obs: obs.trim() || null,
-        devolvido_recebedor: recebedor.trim(),
-        devolvido_foto: foto,
-      }).eq('id', emprestimo.id)
-      if (devolErr) throw new Error(devolErr.message)
+      const devolRes = await fetch(`/api/emprestimos/${emprestimo.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          devolvido_em: new Date(data + 'T12:00:00').toISOString(),
+          devolvido_obs: obs.trim() || null,
+          devolvido_recebedor: recebedor.trim(),
+          devolvido_foto: foto,
+        }),
+      })
+      if (!devolRes.ok) { const e = await devolRes.json().catch(() => ({})); throw new Error(e.error || 'Falha ao salvar') }
       onSalvo()
     } catch (e: any) {
       setErro(`Erro ao salvar: ${e?.message ?? 'tente novamente'}`)
@@ -1762,7 +1781,7 @@ function ImportarExcelModal({
 
   // Carrega lista atual de materiais para detectar duplicatas
   useEffect(() => {
-    supabase.from('materiais').select('id').then(({ data }) => {
+    fetch('/api/materiais').then(r => r.ok ? r.json() : []).then((data) => {
       if (Array.isArray(data)) {
         setIdsExistentes(new Set(data.map((m: { id: string }) => m.id)))
       }
@@ -1808,13 +1827,13 @@ function ImportarExcelModal({
 
       try {
         if (!jaExiste) {
-          const { error: rErr } = await supabase.from('materiais').insert([{ id: item.id, nome: item.nome, descricao: item.descricao, observacoes: item.observacoes, foto: item.foto }])
-          if (!rErr) criados++
-          else if (rErr.code === '23505') ignorados++
+          const rRes = await fetch('/api/materiais', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: item.id, nome: item.nome, descricao: item.descricao, observacoes: item.observacoes, foto: item.foto }) })
+          if (rRes.ok) criados++
+          else if (rRes.status === 409) ignorados++
           else falhas++
         } else if (atualizarExistentes) {
-          const { error: rErr } = await supabase.from('materiais').update({ nome: item.nome, descricao: item.descricao, observacoes: item.observacoes, foto: item.foto }).eq('id', item.id)
-          if (!rErr) atualizados++
+          const rRes = await fetch(`/api/materiais/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: item.nome, descricao: item.descricao, observacoes: item.observacoes, foto: item.foto }) })
+          if (rRes.ok) atualizados++
           else falhas++
         } else {
           ignorados++
@@ -2041,23 +2060,27 @@ function FormCampo({
     try {
       const dataRecolha = new Date()
       dataRecolha.setDate(dataRecolha.getDate() + Math.max(1, typeof prazoCampoDias === 'number' ? prazoCampoDias : 1))
-      const { error: campoErr } = await supabase.from('equipamentos_campo').insert([{
-        material_id: materialId,
-        material_nome: materialNome,
-        fotos: fotos.length > 0 ? fotos : null,
-        latitude,
-        longitude,
-        rua: rua.trim() || null,
-        numero: numero.trim() || null,
-        bairro: bairro.trim() || null,
-        observacao: observacao.trim() || null,
-        quantidade: Math.max(1, quantidade),
-        prazo_dias: typeof prazoCampoDias === 'number' ? Math.max(1, prazoCampoDias) : null,
-        data_recolha_prevista: dataRecolha.toISOString().slice(0, 10),
-        status: 'ativo',
-        agente,
-      }])
-      if (campoErr) throw new Error(campoErr.message)
+      const campoRes = await fetch('/api/equipamentos-campo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          material_id: materialId,
+          material_nome: materialNome,
+          fotos: fotos.length > 0 ? fotos : null,
+          latitude,
+          longitude,
+          rua: rua.trim() || null,
+          numero: numero.trim() || null,
+          bairro: bairro.trim() || null,
+          observacao: observacao.trim() || null,
+          quantidade: Math.max(1, quantidade),
+          prazo_dias: typeof prazoCampoDias === 'number' ? Math.max(1, prazoCampoDias) : null,
+          data_recolha_prevista: dataRecolha.toISOString().slice(0, 10),
+          status: 'ativo',
+          agente,
+        }),
+      })
+      if (!campoRes.ok) { const e = await campoRes.json().catch(() => ({})); throw new Error(e.error || 'Falha ao salvar') }
       onSalvo()
     } catch (e: any) {
       setErro('Erro ao salvar: ' + (e?.message ?? 'tente novamente'))

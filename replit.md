@@ -1,106 +1,65 @@
 # Defesa Civil Ouro Branco — App de Gerenciamento de Ocorrências
 
-## Visão Geral
-Aplicativo web mobile-first (PWA) para equipes de campo da Defesa Civil de Ouro Branco - MG. Deploy alvo: **Netlify** (frontend/functions) + **Supabase** (banco de dados + Realtime).
+## Run & Operate
+- `npm run start` — starts both Express server (port 3001) and Vite dev server (port 5000) concurrently
+- `npm run dev` — Vite dev server only (requires separate `npm run server`)
+- `npm run server` — Express API server only (port 3001)
+- `npm run build` — build frontend for production
 
-Funcionalidades principais:
-- Registro e gerenciamento de ocorrências com fotos e GPS
-- Rastreamento em tempo real de equipes via Supabase Realtime (Broadcast + Presence)
-- SOS com push notifications (Web Push / VAPID) via Netlify Function
-- Escala de agentes e banco de horas
-- Checklist de viatura
-- Materiais, empréstimos e equipamentos em campo
-- Geração de relatório de vistoria em DOCX (100% client-side)
-- Exportação KMZ/KML e Excel
-- Modo offline com fila de sincronização
+Required env vars (set in Replit Secrets or `.replit` userenv):
+- `DATABASE_URL` — Replit PostgreSQL (set automatically)
+- `VAPID_PUBLIC_KEY` / `VITE_VAPID_PUBLIC_KEY` — VAPID public key
+- `VAPID_PRIVATE_KEY` — VAPID private key (secret)
+- `VAPID_SUBJECT` — mailto: for VAPID
+- `PORT` — server port (default 3001)
 
-## Arquitetura
+## Stack
+- **Frontend**: React 19 + TypeScript + Vite (port 5000)
+- **Backend**: Express 5 + Node.js 20 + native WebSocket (`ws`) (port 3001)
+- **Database**: Replit PostgreSQL (via `pg` pool, `DATABASE_URL`)
+- **Push Notifications**: Web Push (VAPID) via `web-push` on server
+- **Maps**: Leaflet + react-leaflet (tiles proxied via `/api/tiles`)
 
-### Frontend (Netlify)
-- **React 19 + TypeScript + Vite**
-- PWA com service worker em `public/sw.js`
-- Mapas: Leaflet + react-leaflet (tiles OSM direto, geocode Nominatim direto, rota OSRM direto)
-- Realtime: `src/wsClient.ts` — Supabase Realtime (Broadcast para mensagens, Presence para agentes online)
-- Push notifications: `src/pushNotifications.ts` — salva subscriptions no Supabase, envia via Netlify Function
-- GPS: `src/gpsService.ts`
-- Offline queue/cache: `src/offline.ts`
-- Exportação Excel: `src/exportExcel.ts`
-- Relatório DOCX: `src/relatorioVistoria.ts` (client-side com template `/public/relatorio-vistoria-template.docx`)
+## Where things live
+- `server/index.js` — Express API + WebSocket server + DB init
+- `src/api.ts` — CRUD for ocorrências (REST)
+- `src/wsClient.ts` — native WebSocket client (browser)
+- `src/pushNotifications.ts` — Web Push subscription (uses `/api/push-subscriptions`)
+- `src/components/` — React components per feature
+- `src/offline.ts` — IndexedDB offline queue + cache
+- `public/sw.js` — Service Worker (PWA, map tile cache)
+- `attached_assets/` — report template (.docx)
 
-### Backend (Supabase)
-- **Supabase** (PostgreSQL gerenciado) em `https://sjdpsplbcrlkekdfnnlj.supabase.co`
-- Cliente JS: `src/supabaseClient.ts`
-- CRUD direto via Supabase JS em todos os componentes (sem servidor intermediário)
-- Realtime via Supabase Realtime channel `defesacivil-main`
+## Architecture decisions
+- All data goes through the Express REST API — no direct DB access from the browser
+- Realtime uses a native WebSocket server (`/ws`) — no Supabase Realtime dependency
+- Push notifications use server-side VAPID (Express route `/api/send-sos-push`)
+- DB schema is created/migrated automatically at server startup via `initDb()`
+- Vite proxies `/api` and `/ws` to `localhost:3001` in dev; production serves built frontend from Express
 
-### Netlify Functions
-- `netlify/functions/send-sos-push.js` — Disparo de Web Push VAPID para SOS
-  - Roteado por `/api/send-sos-push` → `/.netlify/functions/send-sos-push`
+## Product
+- Register and manage civil defense incidents with photos and GPS
+- Real-time team tracking via native WebSocket
+- SOS alert system with Web Push notifications
+- Agent schedule and hour bank management
+- Vehicle checklist
+- Materials, loans, and field equipment tracking
+- Inspection report generation (DOCX)
+- KMZ/KML and Excel export
+- Offline mode with sync queue
 
-### Chamadas externas (direto do browser)
-- Tiles: OpenStreetMap direto
-- Geocode: Nominatim direto
-- Rota: OSRM público direto
-- Clima: Open-Meteo direto
+## User preferences
+- Login: `defesacivilob@gmail.com` / `dc-2026`
+- App is mobile-first PWA for field teams
 
-## Estrutura de arquivos
-```
-netlify/
-  functions/
-    send-sos-push.js   — Netlify Function: Web Push SOS
-netlify.toml           — Build config + redirects + headers
-supabase-migration.sql — Schema SQL para rodar no painel Supabase
-src/
-  App.tsx              — Shell principal, navegação por abas
-  main.tsx             — Entry point, registro do SW
-  config.ts            — Helper netlifyFn()
-  supabaseClient.ts    — Cliente Supabase JS
-  api.ts               — CRUD ocorrências via Supabase
-  wsClient.ts          — Supabase Realtime (Broadcast + Presence)
-  gpsService.ts        — Rastreamento GPS
-  pushNotifications.ts — Web Push (SOS) — subscriptions no Supabase
-  offline.ts           — Cache offline e fila pendente
-  exportExcel.ts       — Exportação Excel
-  components/          — Componentes React por funcionalidade
-public/
-  sw.js                — Service Worker PWA
-```
+## Gotchas
+- Server runs on port 3001; Vite dev server on port 5000 with proxy
+- Production deployment: build with `npx vite build`, serve with `node server/index.js`
+- VAPID keys are already set in `.replit` userenv — do not overwrite
+- DB tables auto-created on server startup — no manual migration needed
+- `supabaseClient.ts` kept as stub (not used) to avoid removing unused file
 
-## Variáveis de Ambiente
-
-### netlify.toml (já configuradas, públicas)
-- `VITE_SUPABASE_URL` — URL do projeto Supabase
-- `VITE_SUPABASE_ANON_KEY` — Chave anon Supabase (segura para frontend)
-- `VITE_VAPID_PUBLIC_KEY` — Chave pública VAPID
-
-### Netlify Dashboard → Environment Variables (secretas)
-- `VAPID_PRIVATE_KEY` — Chave privada VAPID (**nunca exposta no frontend**)
-- `VAPID_SUBJECT` — Email para VAPID (ex: `mailto:defesacivil@ourobranco.mg.gov.br`)
-- `SUPABASE_SERVICE_ROLE_KEY` — (opcional) para a Netlify Function; se ausente, usa anon key
-
-## Scripts
-- `npm run dev` — Vite dev server (porta 5000, para desenvolvimento local)
-- `npm run build` — Build de produção do frontend
-
-## Banco de Dados (Supabase)
-Execute `supabase-migration.sql` no SQL Editor do painel Supabase:
-- `ocorrencias` — Registros de ocorrências
-- `escala_estado` — Estado da escala de agentes (linha única id=1)
-- `checklists_viatura` — Checklists de viaturas
-- `materiais` — Catálogo de materiais/patrimônio
-- `emprestimos` — Registros de empréstimos
-- `push_subscriptions` — Inscrições Web Push
-- `equipamentos_campo` — Equipamentos implantados em campo
-- `sos_ativos_db` — Alertas SOS persistidos (TTL manual via DELETE)
-
-RLS desabilitado em todas as tabelas (app não usa Supabase Auth).
-
-## Credenciais de acesso (desenvolvimento)
-- Usuário: `defesacivilob@gmail.com`
-- Senha: `dc-2026`
-
-## Checklist de deploy Netlify
-1. Executar `supabase-migration.sql` no painel Supabase
-2. Adicionar `VAPID_PRIVATE_KEY` nas env vars do Netlify Dashboard
-3. Conectar repositório ao Netlify, build command `npm run build`, publish `dist`
-4. Todas as outras env vars já estão em `netlify.toml`
+## Pointers
+- DB schema: `server/index.js` → `initDb()` function
+- Push flow: `src/pushNotifications.ts` → `/api/push-subscriptions` → `/api/send-sos-push`
+- WS events: `server/index.js` → `wss.on('connection')` handler
