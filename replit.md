@@ -8,6 +8,7 @@
 
 Required env vars (set in Replit Secrets or `.replit` userenv):
 - `DATABASE_URL` — Replit PostgreSQL (set automatically)
+- `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` — Supabase (primary data source)
 - `VAPID_PUBLIC_KEY` / `VITE_VAPID_PUBLIC_KEY` — VAPID public key
 - `VAPID_PRIVATE_KEY` — VAPID private key (secret)
 - `VAPID_SUBJECT` — mailto: for VAPID
@@ -16,34 +17,36 @@ Required env vars (set in Replit Secrets or `.replit` userenv):
 ## Stack
 - **Frontend**: React 19 + TypeScript + Vite (port 5000)
 - **Backend**: Express 5 + Node.js 20 + native WebSocket (`ws`) (port 3001)
-- **Database**: Replit PostgreSQL (via `pg` pool, `DATABASE_URL`)
+- **Database**: Supabase (primary, shared with Netlify) + Replit PostgreSQL (fallback)
 - **Push Notifications**: Web Push (VAPID) via `web-push` on server
 - **Maps**: Leaflet + react-leaflet (tiles proxied via `/api/tiles`)
 
 ## Where things live
 - `server/index.js` — Express API + WebSocket server + DB init
-- `src/api.ts` — CRUD for ocorrências (REST)
-- `src/wsClient.ts` — native WebSocket client (browser)
-- `src/pushNotifications.ts` — Web Push subscription (uses `/api/push-subscriptions`)
+- `src/api.ts` — CRUD for ocorrências (Supabase primary, Express fallback)
+- `src/matApi.ts` — CRUD for materiais/emprestimos/campo (Supabase primary, Express fallback)
+- `src/wsClient.ts` — WebSocket + Supabase Realtime broadcast
+- `src/pushNotifications.ts` — Web Push subscription via Supabase/Express
 - `src/components/` — React components per feature
 - `src/offline.ts` — IndexedDB offline queue + cache
 - `public/sw.js` — Service Worker (PWA, map tile cache)
 - `attached_assets/` — report template (.docx)
 
 ## Architecture decisions
-- All data goes through the Express REST API — no direct DB access from the browser
-- Realtime uses a native WebSocket server (`/ws`) — no Supabase Realtime dependency
-- Push notifications use server-side VAPID (Express route `/api/send-sos-push`)
-- DB schema is created/migrated automatically at server startup via `initDb()`
-- Vite proxies `/api` and `/ws` to `localhost:3001` in dev; production serves built frontend from Express
+- **Supabase is the single source of truth** — all CRUD uses Supabase when `supabaseDisponivel`; Express/PostgreSQL is fallback only
+- Works on both **Netlify** (no Express) and **Replit dev** (Express + Supabase available)
+- `MateriaisEmprestimos` uses `matApi.ts` exclusively — zero direct `fetch('/api/...')` calls
+- `EscalaAgentes` and `ChecklistViatura` also use Supabase first, Express as fallback
+- Realtime uses native WebSocket (`/ws`) + Supabase Realtime broadcast channel
+- Push notifications use server-side VAPID; subscriptions stored in Supabase
 
 ## Product
 - Register and manage civil defense incidents with photos and GPS
-- Real-time team tracking via native WebSocket
+- Real-time team tracking via WebSocket + Supabase Realtime
 - SOS alert system with Web Push notifications
-- Agent schedule and hour bank management
+- Agent schedule and hour bank management (escala)
 - Vehicle checklist
-- Materials, loans, and field equipment tracking
+- Materials, loans, and field equipment tracking (patrimônio)
 - Inspection report generation (DOCX)
 - KMZ/KML and Excel export
 - Offline mode with sync queue
@@ -54,12 +57,14 @@ Required env vars (set in Replit Secrets or `.replit` userenv):
 
 ## Gotchas
 - Server runs on port 3001; Vite dev server on port 5000 with proxy
-- Production deployment: build with `npx vite build`, serve with `node server/index.js`
+- Production deployment (Netlify): only Supabase is used — Express is not available
 - VAPID keys are already set in `.replit` userenv — do not overwrite
-- DB tables auto-created on server startup — no manual migration needed
-- `supabaseClient.ts` kept as stub (not used) to avoid removing unused file
+- DB tables auto-created on server startup via `initDb()` — Replit PostgreSQL only
+- Supabase is the PRIMARY data store; Replit PostgreSQL is only a dev fallback
+- `supabaseDisponivel` = true when VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY are set
 
 ## Pointers
-- DB schema: `server/index.js` → `initDb()` function
-- Push flow: `src/pushNotifications.ts` → `/api/push-subscriptions` → `/api/send-sos-push`
+- DB schema (Replit): `server/index.js` → `initDb()` function
+- matApi methods: `src/matApi.ts` (Supabase primary for all patrimônio CRUD)
+- Push flow: `src/pushNotifications.ts` → Supabase `push_subscriptions` → `/api/send-sos-push`
 - WS events: `server/index.js` → `wss.on('connection')` handler

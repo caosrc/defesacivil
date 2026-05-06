@@ -211,43 +211,45 @@ function respostaExpressValida(res: Response): boolean {
 function salvarDados(data: EscalaData) {
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  const body = JSON.stringify(data)
 
-  fetch('/api/escala', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body })
-    .then(async (res) => {
-      if (respostaExpressValida(res)) { wsSend({ tipo: 'escala_atualizada' }); return }
-      throw new Error('Express não disponível')
-    })
-    .catch(async () => {
-      if (!supabaseDisponivel) { console.warn('Falha ao salvar escala'); return }
-      await supabase.from('escala_estado').upsert({ id: 1, data, updated_at: new Date().toISOString() }, { onConflict: 'id' })
-      wsSend({ tipo: 'escala_atualizada' })
-    })
+  if (supabaseDisponivel) {
+    supabase.from('escala_estado')
+      .upsert({ id: 1, data, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+      .then(() => { wsSend({ tipo: 'escala_atualizada' }) })
+      .catch((e: unknown) => console.warn('Falha ao salvar escala no Supabase:', e))
+    return
+  }
+
+  fetch('/api/escala', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+    .then(() => { wsSend({ tipo: 'escala_atualizada' }) })
+    .catch((e: unknown) => console.warn('Falha ao salvar escala:', e))
 }
 
 // Versão que aguarda confirmação — usada quando precisamos dar feedback visual.
 async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensagem?: string }> {
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  try {
-    const res = await fetch('/api/escala', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    })
-    if (respostaExpressValida(res)) {
-      wsSend({ tipo: 'escala_atualizada' })
-      return { ok: true }
-    }
-    throw new Error('Express não disponível')
-  } catch {
-    if (!supabaseDisponivel) return { ok: false, mensagem: 'Servidor indisponível' }
+
+  if (supabaseDisponivel) {
     const { error } = await supabase
       .from('escala_estado')
       .upsert({ id: 1, data, updated_at: new Date().toISOString() }, { onConflict: 'id' })
     if (error) return { ok: false, mensagem: error.message }
     wsSend({ tipo: 'escala_atualizada' })
     return { ok: true }
+  }
+
+  try {
+    const res = await fetch('/api/escala', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+    if (!res.ok) { const e = await res.json().catch(() => ({})); return { ok: false, mensagem: e.error || 'Falha ao salvar' } }
+    wsSend({ tipo: 'escala_atualizada' })
+    return { ok: true }
+  } catch (e: unknown) {
+    return { ok: false, mensagem: (e as Error)?.message || 'Falha ao salvar escala' }
   }
 }
 
@@ -273,27 +275,26 @@ function parseEscalaRow(p: Partial<EscalaData> & Record<string, unknown>): Escal
 }
 
 async function carregarDadosRemoto(): Promise<EscalaData | null> {
-  // Tenta Express primeiro
+  // Supabase primeiro — fonte de verdade compartilhada entre Netlify e Replit
+  if (supabaseDisponivel) {
+    try {
+      const { data } = await supabase
+        .from('escala_estado')
+        .select('data')
+        .eq('id', 1)
+        .single()
+      if (!data?.data) return null
+      return parseEscalaRow(data.data as Partial<EscalaData> & Record<string, unknown>)
+    } catch { /* cai para Express */ }
+  }
+
+  // Fallback: Express API (Replit sem Supabase)
   try {
     const res = await fetch('/api/escala')
-    if (respostaExpressValida(res)) {
-      const result = await res.json()
-      if (!result) return null
-      return parseEscalaRow(result as Partial<EscalaData> & Record<string, unknown>)
-    }
-  } catch { /* cai para Supabase */ }
-
-  // Fallback: Supabase direto (Netlify)
-  if (!supabaseDisponivel) return null
-  try {
-    const { data } = await supabase
-      .from('escala_estado')
-      .select('data')
-      .eq('id', 1)
-      .single()
-    if (!data?.data) return null
-    const p = data.data as Partial<EscalaData> & Record<string, unknown>
-    return parseEscalaRow(p)
+    if (!respostaExpressValida(res)) return null
+    const result = await res.json()
+    if (!result) return null
+    return parseEscalaRow(result as Partial<EscalaData> & Record<string, unknown>)
   } catch { return null }
 }
 
