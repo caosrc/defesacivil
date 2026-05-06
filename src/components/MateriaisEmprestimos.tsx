@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { getAgenteLogado } from './Login'
 import { parseExcelPatrimonio, type ItemImportado, type ResultadoParse } from '../importarExcelPatrimonio'
+import { matApi } from '../matApi'
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 interface Material {
@@ -179,13 +180,13 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
     setCarregando(true)
     try {
       const [rm, re, rc] = await Promise.all([
-        fetch('/api/materiais').then(r => r.ok ? r.json() : []),
-        fetch('/api/emprestimos').then(r => r.ok ? r.json() : []),
-        fetch('/api/equipamentos-campo').then(r => r.ok ? r.json() : []),
+        matApi.listarMateriais().catch(() => []),
+        matApi.listarEmprestimos().catch(() => []),
+        matApi.listarCampo().catch(() => []),
       ])
-      setMateriais((Array.isArray(rm) ? rm : []) as Material[])
-      setEmprestimos((Array.isArray(re) ? re : []) as Emprestimo[])
-      setEquipamentosCampo((Array.isArray(rc) ? rc : []) as EquipamentoCampo[])
+      setMateriais(rm as unknown as Material[])
+      setEmprestimos(re as unknown as Emprestimo[])
+      setEquipamentosCampo(rc as unknown as EquipamentoCampo[])
     } catch (err) {
       console.warn('[Materiais] erro ao carregar:', err)
     }

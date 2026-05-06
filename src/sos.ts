@@ -33,12 +33,7 @@ async function lerBateria(): Promise<number | null> {
   return null
 }
 
-// Leitura de GPS otimizada para o SOS:
-//   1. Tenta uma leitura RÁPIDA aceitando posição em cache (até 10 s) — assim
-//      o alerta sai com algum ponto mesmo se o GPS demorar para fixar.
-//   2. Em paralelo, dispara uma leitura PRECISA (sem cache) que normalmente
-//      retorna em 2-6 s; quando chega, atualiza o alerta.
-// Quem usa o `lerGps` recebe a melhor coordenada disponível dentro de até 8 s.
+// Leitura de GPS otimizada para o SOS.
 function lerGps(): Promise<{ lat: number; lng: number; precisa: boolean } | null> {
   return new Promise((resolve) => {
     if (!navigator.geolocation) return resolve(null)
@@ -51,22 +46,19 @@ function lerGps(): Promise<{ lat: number; lng: number; precisa: boolean } | null
       resolve(valor)
     }
 
-    // Timer de segurança: nunca segura o SOS por mais de 8 s
     const timerLimite = setTimeout(() => {
       if (melhorCache) finalizar({ ...melhorCache, precisa: false })
       else finalizar(null)
     }, 8000)
 
-    // Tentativa 1 — rápida, aceita cache de até 10 s
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         melhorCache = { lat: pos.coords.latitude, lng: pos.coords.longitude }
       },
-      () => { /* segue para a tentativa 2 */ },
+      () => {},
       { enableHighAccuracy: false, timeout: 2500, maximumAge: 10000 },
     )
 
-    // Tentativa 2 — precisa, sem cache, GPS de hardware
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         clearTimeout(timerLimite)
@@ -82,20 +74,14 @@ function lerGps(): Promise<{ lat: number; lng: number; precisa: boolean } | null
   })
 }
 
-// Handle retornado por `iniciarGravacaoAudio`. Devolve a Promise do áudio
-// (resolve em `durMs` ms) e um `abortar` para cancelar antes da hora.
+// Handle retornado por `iniciarGravacaoAudio`.
 export type GravacaoHandle = {
   audioPromise: Promise<string | null>
   abortar: () => void
 }
 
-// Abre o microfone e começa a gravar. A função SÓ retorna depois que a
-// gravação realmente começou (ou null se faltar permissão/suporte). O
-// chamador então faz `await handle.audioPromise` para receber o áudio em
-// base64 (data URL) quando os `durMs` ms terminarem.
-//
-// Bitrate fixo em 24kbps (qualidade de voz) → 10s de áudio fica em ~30KB,
-// folgado dentro do limite de payload do broadcast Realtime do Supabase.
+// Abre o microfone e começa a gravar.
+// Bitrate fixo em 24kbps (qualidade de voz).
 export async function iniciarGravacaoAudio(durMs = 10000): Promise<GravacaoHandle | null> {
   try {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') return null
@@ -139,18 +125,11 @@ export async function iniciarGravacaoAudio(durMs = 10000): Promise<GravacaoHandl
   }
 }
 
-// Envia o SOS via Supabase Realtime: o `wsSend` faz broadcast em tempo real
-// para todos os agentes conectados E grava o alerta na tabela `sos_ativos`,
-// para que agentes que abrirem o app depois também recebam o alerta. A
-// deduplicação acontece pela chave `id` (UPSERT no banco + dedup local).
 function enviarSosTodosOsCanais(payload: Record<string, unknown>) {
   try { wsSend(payload) } catch { /* ignore */ }
 }
 
-// Status reportado durante o SOS, usado pelo botão para mostrar feedback
-// de gravação ao agente que disparou o alerta.
-//   - gravando      : gravação em andamento (com contagem regressiva)
-//   - audio_falhou  : sem permissão de microfone — alerta vai sem áudio
+// Status reportado durante o SOS.
 export type FaseSos = 'gravando' | 'audio_falhou'
 export interface StatusSos {
   fase: FaseSos
@@ -159,16 +138,18 @@ export interface StatusSos {
 
 const DURACAO_AUDIO_MS = 10_000
 
-// Handle público devolvido por dispararSos.
-// - `alertaEnviado`: resolve assim que o SOS for transmitido (sem áudio), OU null se abortado antes disso.
-// - `alerta`: resolve quando tudo terminar (incluindo gravação de áudio em segundo plano).
-// - `abortar()`: cancela a gravação (mas se o SOS já foi enviado, não cancela para os outros).
 export type DisparoEmCurso = {
   alertaEnviado: Promise<SosAlerta | null>
   alerta: Promise<SosAlerta | null>
   abortar: () => void
 }
 
+// ─── NOVO FLUXO ───────────────────────────────────────────────────────────────
+// 1. Abre microfone IMEDIATAMENTE e mostra contagem regressiva de 10 s.
+// 2. Em paralelo, obtém GPS e bateria enquanto o agente grava.
+// 3. Após 10 s, envia o SOS com áudio + GPS juntos — outros agentes já
+//    recebem o alerta completo na primeira vez.
+// ─────────────────────────────────────────────────────────────────────────────
 export function dispararSos(
   agente: string,
   onStatus?: (s: StatusSos) => void,
@@ -179,33 +160,20 @@ export function dispararSos(
   let abortado = false
   let abortarGravacao: (() => void) | null = null
 
-  // Resolve assim que o SOS é transmitido (sem áudio)
   let resolverEnviado!: (v: SosAlerta | null) => void
   const alertaEnviadoPromise = new Promise<SosAlerta | null>((res) => { resolverEnviado = res })
 
   const alertaFinalPromise = (async (): Promise<SosAlerta | null> => {
-    // 1. Lê GPS e bateria em paralelo — sem esperar microfone
-    const [gps, bateria] = await Promise.all([lerGps(), lerBateria()])
-    if (abortado) { resolverEnviado(null); return null }
-
-    // 2. Envia o alerta IMEDIATAMENTE sem áudio
-    const alertaInicial: SosAlerta = {
-      id, agente,
-      lat: gps?.lat ?? null,
-      lng: gps?.lng ?? null,
-      bateria,
-      audio: null,
-      timestamp,
-    }
-    enviarSosTodosOsCanais({ tipo: 'sos', ...alertaInicial })
-    resolverEnviado(alertaInicial)
-
-    // 3. Grava áudio em segundo plano (sem bloquear a confirmação de envio)
+    // 1. Abre microfone imediatamente
     const gravacao = await iniciarGravacaoAudio(DURACAO_AUDIO_MS)
-    if (abortado) { gravacao?.abortar(); return alertaInicial }
-    abortarGravacao = gravacao?.abortar ?? null
+    if (abortado) { gravacao?.abortar(); resolverEnviado(null); return null }
+
+    let audio: string | null = null
 
     if (gravacao) {
+      abortarGravacao = gravacao.abortar
+
+      // Mostra contagem regressiva a partir do momento que o mic está ativo
       let restantes = Math.ceil(DURACAO_AUDIO_MS / 1000)
       onStatus?.({ fase: 'gravando', segundosRestantes: restantes })
       const tick = setInterval(() => {
@@ -214,18 +182,45 @@ export function dispararSos(
         else onStatus?.({ fase: 'gravando', segundosRestantes: restantes })
       }, 1000)
 
-      const audio = await gravacao.audioPromise
+      // 2. Obtém GPS e bateria EM PARALELO enquanto o agente fala
+      const [gps, bateria] = await Promise.all([lerGps(), lerBateria()])
+
+      // 3. Aguarda o áudio terminar (timer de 10 s interno ao MediaRecorder)
+      audio = await gravacao.audioPromise
       clearInterval(tick)
 
-      if (!abortado && audio) {
-        enviarSosTodosOsCanais({ tipo: 'sos-audio', id, audio })
-        return { ...alertaInicial, audio }
-      }
-    } else {
-      onStatus?.({ fase: 'audio_falhou' })
-    }
+      if (abortado) { resolverEnviado(null); return null }
 
-    return alertaInicial
+      // 4. Envia tudo junto com áudio já incluído
+      const alertaFinal: SosAlerta = {
+        id, agente,
+        lat: gps?.lat ?? null,
+        lng: gps?.lng ?? null,
+        bateria,
+        audio,
+        timestamp,
+      }
+      enviarSosTodosOsCanais({ tipo: 'sos', ...alertaFinal })
+      resolverEnviado(alertaFinal)
+      return alertaFinal
+
+    } else {
+      // Sem microfone: notifica e envia somente com GPS
+      onStatus?.({ fase: 'audio_falhou' })
+      const [gps, bateria] = await Promise.all([lerGps(), lerBateria()])
+      if (abortado) { resolverEnviado(null); return null }
+      const alertaSemAudio: SosAlerta = {
+        id, agente,
+        lat: gps?.lat ?? null,
+        lng: gps?.lng ?? null,
+        bateria,
+        audio: null,
+        timestamp,
+      }
+      enviarSosTodosOsCanais({ tipo: 'sos', ...alertaSemAudio })
+      resolverEnviado(alertaSemAudio)
+      return alertaSemAudio
+    }
   })()
 
   return {
@@ -239,11 +234,6 @@ export function dispararSos(
 }
 
 // ─── Persistência local de SOS já dispensados ──────────────────────────────
-// Quando o agente clica "Dispensar", o SOS continua existindo para os outros
-// agentes (e no banco), mas NÃO deve mais aparecer para ele — nem agora, nem
-// se ele sair e voltar a abrir o app. Guardamos { id: tsExpira } no
-// localStorage; entradas vencidas são limpas a cada leitura (lista nunca cresce
-// indefinidamente).
 const STORAGE_DISPENSADOS = 'sos_dispensados_v1'
 
 function lerDispensados(): Record<string, number> {
@@ -267,7 +257,7 @@ function lerDispensados(): Record<string, number> {
 function marcarDispensado(id: string) {
   try {
     const atual = lerDispensados()
-    atual[id] = Date.now() + TTL_MS // expira junto com o próprio SOS
+    atual[id] = Date.now() + TTL_MS
     localStorage.setItem(STORAGE_DISPENSADOS, JSON.stringify(atual))
   } catch { /* ignore */ }
 }
@@ -292,14 +282,12 @@ export function useSosListener() {
 
   function adicionarAlerta(a: SosAlerta) {
     if (!a?.id) return
-    if (foiDispensado(a.id)) return // já dispensado pelo próprio agente — ignora
+    if (foiDispensado(a.id)) return
     setAlertas((prev) => {
       const idx = prev.findIndex(x => x.id === a.id)
       if (idx >= 0) {
-        // Atualização do mesmo SOS (ex.: coordenada precisa chegou depois) —
-        // mescla campos sem disparar a sirene de novo.
         const atualizado = [...prev]
-        atualizado[idx] = { ...prev[idx], ...a, audio: prev[idx].audio ?? a.audio }
+        atualizado[idx] = { ...prev[idx], ...a, audio: a.audio ?? prev[idx].audio }
         return atualizado
       }
       return [...prev, a]
@@ -347,10 +335,6 @@ export function useSosListener() {
       setAlertas(prev => prev.map(a => a.id === id ? { ...a, mensagens } : a))
     })
 
-    // Sempre que o WS abre (inclusive em reconexões e quando o overlay monta
-    // tarde por causa do lazy-loading), pede o estado atual ao servidor.
-    // O servidor responderá com `sos_persistidos` se houver SOS ativos —
-    // assim, agentes que entram depois de um alerta também o veem.
     const offOpen = wsOnOpen(() => {
       wsSend({ tipo: 'solicitar_estado' })
     })
@@ -375,11 +359,6 @@ export function useSosListener() {
     setAlertas(prev => prev.filter(x => x.id !== id))
   }
 
-  // Dispensar é LOCAL: só some para o agente que clicou. Não cancela para os outros.
-  // Apenas o agente que disparou o SOS (via BotaoSos.cancelarSosEnviado) pode
-  // cancelar para todos enviando "sos-cancelar".
-  // O id fica marcado como "dispensado" no localStorage, então mesmo se o agente
-  // sair e voltar, o alerta não aparece mais para ele (até expirar o TTL).
   function dispensar(id: string) {
     marcarDispensado(id)
     removerLocal(id)
@@ -434,13 +413,8 @@ export function vibrarLongo() {
   } catch {}
 }
 
-// Nome do evento que o App.tsx escuta para abrir o mapa interno e
-// traçar automaticamente a rota até o local do SOS.
 export const EVT_ROTA_RESGATE = 'sos-rota-resgate'
 
 export function rotaParaResgate(lat: number, lng: number) {
-  // Em vez de abrir o Google Maps externo, dispara um evento que faz o
-  // próprio app trocar para a aba do mapa e traçar a rota usando a malha
-  // viária do OpenStreetMap (com suporte offline).
   window.dispatchEvent(new CustomEvent(EVT_ROTA_RESGATE, { detail: { lat, lng } }))
 }
