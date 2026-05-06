@@ -1,8 +1,3 @@
-// Camada de dados para MateriaisEmprestimos usando Supabase diretamente.
-// Funciona em Netlify (sem servidor Express) e em desenvolvimento.
-
-import { supabase } from './supabaseClient'
-
 export interface MatMaterial {
   id: string
   nome: string
@@ -58,30 +53,28 @@ export interface MatEquipamentoCampo {
   created_at: string
 }
 
-function sbErr(error: { message: string } | null, contexto = ''): never {
-  throw new Error((contexto ? `[${contexto}] ` : '') + (error?.message ?? 'Erro desconhecido'))
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+  const res = await fetch(path, options)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    const msg = err?.error || res.statusText
+    if (res.status === 409) {
+      const e = new Error(msg) as Error & { status: number }
+      e.status = 409
+      throw e
+    }
+    throw new Error(msg)
+  }
+  return res.json()
 }
 
 export const matApi = {
-  // ── Materiais ───────────────────────────────────────────────────────────────
-
   async listarMateriais(): Promise<MatMaterial[]> {
-    const { data, error } = await supabase
-      .from('materiais')
-      .select('id, nome, descricao, observacoes, foto_thumb, quantidade, created_at')
-      .order('id', { ascending: true })
-    if (error) sbErr(error, 'listarMateriais')
-    return (data ?? []) as MatMaterial[]
+    return apiFetch<MatMaterial[]>('/api/materiais')
   },
 
   async buscarMaterial(id: string): Promise<MatMaterial> {
-    const { data, error } = await supabase
-      .from('materiais')
-      .select('*')
-      .eq('id', id)
-      .single()
-    if (error) sbErr(error, 'buscarMaterial')
-    return data as MatMaterial
+    return apiFetch<MatMaterial>(`/api/materiais/${encodeURIComponent(id)}`)
   },
 
   async criarMaterial(material: {
@@ -91,22 +84,14 @@ export const matApi = {
     observacoes?: string | null
     foto_thumb?: string | null
     foto?: string | null
+    foto_placa?: string | null
     quantidade?: number
   }): Promise<MatMaterial> {
-    const { data, error } = await supabase
-      .from('materiais')
-      .insert(material)
-      .select()
-      .single()
-    if (error) {
-      if (error.code === '23505') {
-        const e = new Error(`Já existe um material com código "${material.id}".`) as Error & { status: number }
-        e.status = 409
-        throw e
-      }
-      sbErr(error, 'criarMaterial')
-    }
-    return data as MatMaterial
+    return apiFetch<MatMaterial>('/api/materiais', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(material),
+    })
   },
 
   async atualizarMaterial(
@@ -121,30 +106,21 @@ export const matApi = {
       quantidade: number
     }>
   ): Promise<MatMaterial> {
-    const { data, error } = await supabase
-      .from('materiais')
-      .update(campos)
-      .eq('id', id)
-      .select()
-      .single()
-    if (error) sbErr(error, 'atualizarMaterial')
-    return data as MatMaterial
+    return apiFetch<MatMaterial>(`/api/materiais/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(campos),
+    })
   },
 
   async excluirMaterial(id: string): Promise<void> {
-    const { error } = await supabase.from('materiais').delete().eq('id', id)
-    if (error) sbErr(error, 'excluirMaterial')
+    await apiFetch<{ success: boolean }>(`/api/materiais/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
   },
 
-  // ── Empréstimos ─────────────────────────────────────────────────────────────
-
   async listarEmprestimos(): Promise<MatEmprestimo[]> {
-    const { data, error } = await supabase
-      .from('emprestimos')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (error) sbErr(error, 'listarEmprestimos')
-    return (data ?? []) as MatEmprestimo[]
+    return apiFetch<MatEmprestimo[]>('/api/emprestimos')
   },
 
   async criarEmprestimo(emp: {
@@ -163,13 +139,11 @@ export const matApi = {
     assinatura_data?: string | null
     tipo: 'emprestimo' | 'manutencao'
   }): Promise<MatEmprestimo> {
-    const { data, error } = await supabase
-      .from('emprestimos')
-      .insert({ ...emp, data_emprestimo: new Date().toISOString() })
-      .select()
-      .single()
-    if (error) sbErr(error, 'criarEmprestimo')
-    return data as MatEmprestimo
+    return apiFetch<MatEmprestimo>('/api/emprestimos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(emp),
+    })
   },
 
   async registrarDevolucao(
@@ -181,25 +155,15 @@ export const matApi = {
       devolvido_foto?: string | null
     }
   ): Promise<MatEmprestimo> {
-    const { data, error } = await supabase
-      .from('emprestimos')
-      .update(campos)
-      .eq('id', id)
-      .select()
-      .single()
-    if (error) sbErr(error, 'registrarDevolucao')
-    return data as MatEmprestimo
+    return apiFetch<MatEmprestimo>(`/api/emprestimos/${id}/devolver`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(campos),
+    })
   },
 
-  // ── Equipamentos em Campo ───────────────────────────────────────────────────
-
   async listarCampo(): Promise<MatEquipamentoCampo[]> {
-    const { data, error } = await supabase
-      .from('equipamentos_campo')
-      .select('*')
-      .order('created_at', { ascending: false })
-    if (error) sbErr(error, 'listarCampo')
-    return (data ?? []) as MatEquipamentoCampo[]
+    return apiFetch<MatEquipamentoCampo[]>('/api/equipamentos-campo')
   },
 
   async criarCampo(campo: {
@@ -218,25 +182,24 @@ export const matApi = {
     status: 'ativo'
     agente?: string | null
   }): Promise<MatEquipamentoCampo> {
-    const { data, error } = await supabase
-      .from('equipamentos_campo')
-      .insert(campo)
-      .select()
-      .single()
-    if (error) sbErr(error, 'criarCampo')
-    return data as MatEquipamentoCampo
+    return apiFetch<MatEquipamentoCampo>('/api/equipamentos-campo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(campo),
+    })
   },
 
   async devolverCampo(id: number): Promise<void> {
-    const { error } = await supabase
-      .from('equipamentos_campo')
-      .update({ status: 'devolvido' })
-      .eq('id', id)
-    if (error) sbErr(error, 'devolverCampo')
+    await apiFetch<{ success: boolean }>(`/api/equipamentos-campo/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'devolvido' }),
+    })
   },
 
   async excluirCampo(id: number): Promise<void> {
-    const { error } = await supabase.from('equipamentos_campo').delete().eq('id', id)
-    if (error) sbErr(error, 'excluirCampo')
+    await apiFetch<{ success: boolean }>(`/api/equipamentos-campo/${id}`, {
+      method: 'DELETE',
+    })
   },
 }
