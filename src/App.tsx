@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef, Component } from 'react'
+import type { ErrorInfo, ReactNode } from 'react'
 import './App.css'
 import Login, { estaLogado, agenteEscolhido, getAgenteLogado } from './components/Login'
 import type { Ocorrencia, NivelRisco } from './types'
@@ -69,6 +70,37 @@ function NivelBadge({ nivel }: { nivel: NivelRisco }) {
 
 
 const LazyFallback = () => <div className="carregando">⏳ Carregando...</div>
+
+class ErrorBoundary extends Component<
+  { children: ReactNode; fallback?: ReactNode },
+  { erro: string | null }
+> {
+  constructor(props: { children: ReactNode; fallback?: ReactNode }) {
+    super(props)
+    this.state = { erro: null }
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { erro: error?.message ?? 'Erro desconhecido' }
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[ErrorBoundary]', error, info.componentStack)
+  }
+  render() {
+    if (this.state.erro) {
+      return this.props.fallback ?? (
+        <div style={{ padding: '2rem', textAlign: 'center', color: '#c00' }}>
+          <div style={{ fontSize: '2rem' }}>⚠️</div>
+          <strong>Algo deu errado</strong>
+          <p style={{ fontSize: '0.85rem', opacity: 0.7, marginTop: '0.5rem' }}>{this.state.erro}</p>
+          <button onClick={() => this.setState({ erro: null })} style={{ marginTop: '1rem', padding: '0.5rem 1.5rem' }}>
+            Tentar novamente
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>
@@ -180,16 +212,6 @@ export default function App() {
   // Carrega equipamentos em campo para o mapa
   useEffect(() => {
     async function carregarCampo() {
-      try {
-        const res = await fetch('/api/equipamentos-campo')
-        const ct = res.headers.get('content-type') || ''
-        if (res.ok && !ct.includes('text/html')) {
-          const data = await res.json()
-          const ativos = (Array.isArray(data) ? data : []).filter((e: EquipamentoCampoMapa) => e.status === 'ativo')
-          setEquipamentosCampoMapa(ativos as EquipamentoCampoMapa[])
-          return
-        }
-      } catch { /* cai para Supabase */ }
       if (supabaseDisponivel) {
         try {
           const { data } = await supabase
@@ -197,8 +219,18 @@ export default function App() {
             .select('id, material_nome, latitude, longitude, rua, bairro, observacao, status')
             .eq('status', 'ativo')
           setEquipamentosCampoMapa((data ?? []) as EquipamentoCampoMapa[])
-        } catch { /* silencioso */ }
+          return
+        } catch { /* cai para Express */ }
       }
+      try {
+        const res = await fetch('/api/equipamentos-campo')
+        const ct = res.headers.get('content-type') || ''
+        if (res.ok && !ct.includes('text/html')) {
+          const data = await res.json()
+          const ativos = (Array.isArray(data) ? data : []).filter((e: EquipamentoCampoMapa) => e.status === 'ativo')
+          setEquipamentosCampoMapa(ativos as EquipamentoCampoMapa[])
+        }
+      } catch { /* silencioso */ }
     }
     carregarCampo()
     // Recarrega quando o WebSocket indica atualização de campo
