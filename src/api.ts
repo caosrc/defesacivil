@@ -1,5 +1,6 @@
 import type { Ocorrencia } from './types'
 import { savePending, getCachedOcorrencias } from './offline'
+import { supabase, supabaseDisponivel } from './supabaseClient'
 
 function localOffline(dados: Omit<Ocorrencia, 'id' | 'created_at'>, localId: number): Ocorrencia {
   return {
@@ -33,6 +34,13 @@ function buildPayload(dados: Omit<Ocorrencia, 'id' | 'created_at'>) {
   }
 }
 
+// Detecta se a resposta do Express é válida (não é a página HTML do Netlify)
+function respostaExpressValida(res: Response): boolean {
+  if (!res.ok) return false
+  const ct = res.headers.get('content-type') || ''
+  return !ct.includes('text/html')
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message)
@@ -41,33 +49,71 @@ export class ApiError extends Error {
 }
 
 export async function listarOcorrencias(): Promise<Ocorrencia[]> {
+  // Tenta Express primeiro
   try {
     const res = await fetch('/api/ocorrencias')
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
-    return (data || []) as Ocorrencia[]
-  } catch (e) {
-    console.warn('[api] listarOcorrencias falhou — usando cache offline:', e)
-    return (await getCachedOcorrencias()) as Ocorrencia[]
+    if (respostaExpressValida(res)) {
+      const data = await res.json()
+      return (data || []) as Ocorrencia[]
+    }
+  } catch { /* cai para Supabase */ }
+
+  // Fallback: Supabase direto (Netlify)
+  if (supabaseDisponivel) {
+    try {
+      const { data, error } = await supabase
+        .from('ocorrencias')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (error) throw new Error(error.message)
+      return (data || []) as Ocorrencia[]
+    } catch (e) {
+      console.warn('[api] listarOcorrencias Supabase falhou:', e)
+    }
   }
+
+  // Fallback offline
+  console.warn('[api] listarOcorrencias — usando cache offline')
+  return (await getCachedOcorrencias()) as Ocorrencia[]
 }
 
 export async function enviarOcorrenciaServidor(
   dados: Omit<Ocorrencia, 'id' | 'created_at'>
 ): Promise<Ocorrencia> {
   const payload = buildPayload(dados)
-  const res = await fetch('/api/ocorrencias', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new ApiError(res.status, err.error || res.statusText)
+
+  // Tenta Express primeiro
+  try {
+    const res = await fetch('/api/ocorrencias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (respostaExpressValida(res)) {
+      const err = await res.clone().json().catch(() => ({ error: res.statusText }))
+      if (!res.ok) throw new ApiError(res.status, err.error || res.statusText)
+      const data = await res.json()
+      if (!data) throw new Error('Servidor retornou resposta inválida')
+      return data as Ocorrencia
+    }
+  } catch (e) {
+    if (e instanceof ApiError) throw e
+    // Express não disponível — tenta Supabase
   }
-  const data = await res.json()
-  if (!data) throw new Error('Servidor retornou resposta inválida (sem dados)')
-  return data as Ocorrencia
+
+  // Fallback: Supabase direto (Netlify)
+  if (supabaseDisponivel) {
+    const { data, error } = await supabase
+      .from('ocorrencias')
+      .insert(payload)
+      .select()
+      .single()
+    if (error) throw new ApiError(500, error.message)
+    if (!data) throw new Error('Supabase retornou resposta inválida')
+    return data as Ocorrencia
+  }
+
+  throw new ApiError(503, 'Servidor indisponível')
 }
 
 export async function criarOcorrencia(
@@ -88,24 +134,64 @@ export async function atualizarOcorrencia(
 ): Promise<Ocorrencia> {
   const { id: _i, created_at: _c, _offline: _o, _localId: _l, ...payload } = dados as Record<string, unknown>
   void _i; void _c; void _o; void _l
-  const res = await fetch(`/api/ocorrencias/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error || res.statusText)
+
+  // Tenta Express primeiro
+  try {
+    const res = await fetch(`/api/ocorrencias/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    if (respostaExpressValida(res)) {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error || res.statusText)
+      }
+      const data = await res.json()
+      if (!data) throw new Error('Ocorrência não encontrada')
+      return data as Ocorrencia
+    }
+  } catch (e) {
+    if ((e as Error).message && !(e as Error).message.includes('Express')) throw e
   }
-  const data = await res.json()
-  if (!data) throw new Error('Ocorrência não encontrada')
-  return data as Ocorrencia
+
+  // Fallback: Supabase direto (Netlify)
+  if (supabaseDisponivel) {
+    const { data, error } = await supabase
+      .from('ocorrencias')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw new Error(error.message)
+    if (!data) throw new Error('Ocorrência não encontrada')
+    return data as Ocorrencia
+  }
+
+  throw new Error('Servidor indisponível')
 }
 
 export async function deletarOcorrencia(id: number): Promise<void> {
-  const res = await fetch(`/api/ocorrencias/${id}`, { method: 'DELETE' })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error || res.statusText)
+  // Tenta Express primeiro
+  try {
+    const res = await fetch(`/api/ocorrencias/${id}`, { method: 'DELETE' })
+    if (respostaExpressValida(res)) {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }))
+        throw new Error(err.error || res.statusText)
+      }
+      return
+    }
+  } catch (e) {
+    if ((e as Error).message && !(e as Error).message.includes('Express')) throw e
   }
+
+  // Fallback: Supabase direto (Netlify)
+  if (supabaseDisponivel) {
+    const { error } = await supabase.from('ocorrencias').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    return
+  }
+
+  throw new Error('Servidor indisponível')
 }

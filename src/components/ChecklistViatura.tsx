@@ -3,6 +3,7 @@ import { adicionarMarcaDagua } from '../utils'
 import { exportarChecklistExcel, type ChecklistExportData } from '../exportExcel'
 import ModalSenha from './ModalSenha'
 import { wsOn } from '../wsClient'
+import { supabase, supabaseDisponivel } from '../supabaseClient'
 
 const MOTORISTAS = ['Moisés', 'Arthur', 'Gustavo', 'Valteir', 'Dyonathan']
 
@@ -333,15 +334,36 @@ export default function ChecklistViatura() {
     setItens(prev => ({ ...prev, [k]: v }))
   }
 
+  function respostaExpressValida(res: Response): boolean {
+    if (!res.ok) return false
+    const ct = res.headers.get('content-type') || ''
+    return !ct.includes('text/html')
+  }
+
   async function carregar() {
     setCarregando(true)
     try {
       const res = await fetch('/api/checklists')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      setChecklists((Array.isArray(data) ? data : []) as ChecklistData[])
-    } catch (e) {
-      console.warn('[Checklist] erro ao carregar:', e)
+      if (respostaExpressValida(res)) {
+        const data = await res.json()
+        setChecklists((Array.isArray(data) ? data : []) as ChecklistData[])
+        setCarregando(false)
+        return
+      }
+      throw new Error('Express não disponível')
+    } catch { /* cai para Supabase */ }
+    if (supabaseDisponivel) {
+      try {
+        const { data } = await supabase
+          .from('checklists_viatura')
+          .select('*')
+          .order('created_at', { ascending: false })
+        setChecklists((Array.isArray(data) ? data : []) as ChecklistData[])
+      } catch (e) {
+        console.warn('[Checklist] erro ao carregar:', e)
+        setChecklists([])
+      }
+    } else {
       setChecklists([])
     }
     setCarregando(false)
@@ -514,26 +536,42 @@ export default function ChecklistViatura() {
     const nomeMotorista = motorista.trim()
     if (!nomeMotorista) { setErro('Informe o motorista.'); return }
     setSalvando(true); setErro('')
+    const payload = {
+      data_checklist: data,
+      km: km || null,
+      placa: placa || null,
+      motorista: nomeMotorista || null,
+      fotos_avarias: fotosAvarias,
+      foto_frontal: fotoFrontal,
+      foto_traseira: fotoTraseira,
+      foto_direita: fotoDireita,
+      foto_esquerda: fotoEsquerda,
+      itens,
+      observacoes: observacoes || null,
+      assinatura_data: assinaturaData || null,
+    }
     try {
-      const saveRes = await fetch('/api/checklists', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          data_checklist: data,
-          km: km || null,
-          placa: placa || null,
-          motorista: nomeMotorista || null,
-          fotos_avarias: fotosAvarias,
-          foto_frontal: fotoFrontal,
-          foto_traseira: fotoTraseira,
-          foto_direita: fotoDireita,
-          foto_esquerda: fotoEsquerda,
-          itens,
-          observacoes: observacoes || null,
-          assinatura_data: assinaturaData || null,
-        }),
-      })
-      if (!saveRes.ok) { const e = await saveRes.json().catch(() => ({})); throw new Error(e.error || 'Falha ao salvar') }
+      // Tenta Express primeiro
+      let usouExpress = false
+      try {
+        const saveRes = await fetch('/api/checklists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        if (respostaExpressValida(saveRes)) {
+          usouExpress = true
+          if (!saveRes.ok) { const e = await saveRes.json().catch(() => ({})); throw new Error(e.error || 'Falha ao salvar') }
+        }
+      } catch (e) {
+        if ((e as Error)?.message && !(e as Error).message.includes('Express')) throw e
+      }
+      // Fallback: Supabase direto (Netlify)
+      if (!usouExpress) {
+        if (!supabaseDisponivel) throw new Error('Servidor indisponível')
+        const { error } = await supabase.from('checklists_viatura').insert(payload)
+        if (error) throw new Error(error.message)
+      }
       await carregar(); resetForm(); setModo('lista')
     } catch (e: unknown) {
       setErro(`Erro ao salvar: ${(e as Error)?.message ?? 'tente novamente'}`)
@@ -542,9 +580,15 @@ export default function ChecklistViatura() {
   }
 
   async function deletar(id: number) {
+    // Tenta Express primeiro
     try {
-      await fetch(`/api/checklists/${id}`, { method: 'DELETE' })
-    } catch { /* ignore */ }
+      const res = await fetch(`/api/checklists/${id}`, { method: 'DELETE' })
+      if (respostaExpressValida(res)) { setSelecionado(null); setModo('lista'); await carregar(); return }
+    } catch { /* cai para Supabase */ }
+    // Fallback: Supabase direto (Netlify)
+    if (supabaseDisponivel) {
+      await supabase.from('checklists_viatura').delete().eq('id', id).catch(() => {})
+    }
     setSelecionado(null); setModo('lista'); await carregar()
   }
 

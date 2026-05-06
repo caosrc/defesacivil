@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { getAgenteLogado } from './Login'
 import ModalSenha from './ModalSenha'
 import { wsOn, wsSend } from '../wsClient'
+import { supabase, supabaseDisponivel } from '../supabaseClient'
 import './EscalaAgentes.css'
 
 // ── Constantes ────────────────────────────────────────────────────
@@ -201,16 +202,27 @@ function teveEdicaoLocalRecente(janelaMs = 60_000) {
   return _ultimaEdicaoLocalTs > 0 && (Date.now() - _ultimaEdicaoLocalTs) < janelaMs
 }
 
+function respostaExpressValida(res: Response): boolean {
+  if (!res.ok) return false
+  const ct = res.headers.get('content-type') || ''
+  return !ct.includes('text/html')
+}
+
 function salvarDados(data: EscalaData) {
   marcarEdicaoLocal()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-  fetch('/api/escala', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
-    .then(() => { wsSend({ tipo: 'escala_atualizada' }) })
-    .catch((e: unknown) => console.warn('Falha ao salvar escala:', e))
+  const body = JSON.stringify(data)
+
+  fetch('/api/escala', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body })
+    .then(async (res) => {
+      if (respostaExpressValida(res)) { wsSend({ tipo: 'escala_atualizada' }); return }
+      throw new Error('Express não disponível')
+    })
+    .catch(async () => {
+      if (!supabaseDisponivel) { console.warn('Falha ao salvar escala'); return }
+      await supabase.from('escala_estado').upsert({ id: 1, data, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+      wsSend({ tipo: 'escala_atualizada' })
+    })
 }
 
 // Versão que aguarda confirmação — usada quando precisamos dar feedback visual.
@@ -223,42 +235,65 @@ async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensag
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
-    if (!res.ok) { const e = await res.json().catch(() => ({})); return { ok: false, mensagem: e.error || 'Falha ao salvar' } }
+    if (respostaExpressValida(res)) {
+      wsSend({ tipo: 'escala_atualizada' })
+      return { ok: true }
+    }
+    throw new Error('Express não disponível')
+  } catch {
+    if (!supabaseDisponivel) return { ok: false, mensagem: 'Servidor indisponível' }
+    const { error } = await supabase
+      .from('escala_estado')
+      .upsert({ id: 1, data, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+    if (error) return { ok: false, mensagem: error.message }
     wsSend({ tipo: 'escala_atualizada' })
     return { ok: true }
-  } catch (e: unknown) {
-    return { ok: false, mensagem: (e as Error)?.message || 'Falha ao salvar escala' }
+  }
+}
+
+function parseEscalaRow(p: Partial<EscalaData> & Record<string, unknown>): EscalaData {
+  return {
+    adm: (p.adm as EscalaData['adm']) ?? {},
+    sobreaviso: (p.sobreaviso as EscalaData['sobreaviso']) ?? {},
+    sobreavisoSemanal: normalizarSemanal((p.sobreavisoSemanal as Record<string, string | string[]>) ?? {}),
+    folgas: normalizarSemanal((p.folgas as Record<string, string | string[]>) ?? {}),
+    ferias: (p.ferias as EscalaData['ferias']) ?? [],
+    horasSobreaviso: (p.horasSobreaviso as EscalaData['horasSobreaviso']) ?? {},
+    horasTrabalhadasSobreaviso: (p.horasTrabalhadasSobreaviso as EscalaData['horasTrabalhadasSobreaviso']) ?? {},
+    justificativasSobreaviso: (p.justificativasSobreaviso as EscalaData['justificativasSobreaviso']) ?? {},
+    feriadosCustom: (p.feriadosCustom as EscalaData['feriadosCustom']) ?? [],
+    percDomingoFeriado: (p.percDomingoFeriado as number) ?? 100,
+    percSobreaviso: (p.percSobreaviso as number) ?? 50,
+    percSabado: (p.percSabado as number) ?? 50,
+    descontosFolgaBanco: (p.descontosFolgaBanco as EscalaData['descontosFolgaBanco']) ?? {},
+    horasExtrasSimples: (p.horasExtrasSimples as EscalaData['horasExtrasSimples']) ?? {},
+    justificativasExtrasSimples: (p.justificativasExtrasSimples as EscalaData['justificativasExtrasSimples']) ?? {},
+    ajustesBanco: (p.ajustesBanco as EscalaData['ajustesBanco']) ?? {},
   }
 }
 
 async function carregarDadosRemoto(): Promise<EscalaData | null> {
+  // Tenta Express primeiro
   try {
     const res = await fetch('/api/escala')
-    if (!res.ok) return null
-    const result = await res.json()
-    if (!result) return null
-    const row = result
-    if (!row) return null
-    const p = row as (Partial<EscalaData> & Record<string, unknown>) | null
-    if (!p) return null
-    return {
-      adm: (p.adm as EscalaData['adm']) ?? {},
-      sobreaviso: (p.sobreaviso as EscalaData['sobreaviso']) ?? {},
-      sobreavisoSemanal: normalizarSemanal((p.sobreavisoSemanal as Record<string, string | string[]>) ?? {}),
-      folgas: normalizarSemanal((p.folgas as Record<string, string | string[]>) ?? {}),
-      ferias: (p.ferias as EscalaData['ferias']) ?? [],
-      horasSobreaviso: (p.horasSobreaviso as EscalaData['horasSobreaviso']) ?? {},
-      horasTrabalhadasSobreaviso: (p.horasTrabalhadasSobreaviso as EscalaData['horasTrabalhadasSobreaviso']) ?? {},
-      justificativasSobreaviso: (p.justificativasSobreaviso as EscalaData['justificativasSobreaviso']) ?? {},
-      feriadosCustom: (p.feriadosCustom as EscalaData['feriadosCustom']) ?? [],
-      percDomingoFeriado: (p.percDomingoFeriado as number) ?? 100,
-      percSobreaviso: (p.percSobreaviso as number) ?? 50,
-      percSabado: (p.percSabado as number) ?? 50,
-      descontosFolgaBanco: (p.descontosFolgaBanco as EscalaData['descontosFolgaBanco']) ?? {},
-      horasExtrasSimples: (p.horasExtrasSimples as EscalaData['horasExtrasSimples']) ?? {},
-      justificativasExtrasSimples: (p.justificativasExtrasSimples as EscalaData['justificativasExtrasSimples']) ?? {},
-      ajustesBanco: (p.ajustesBanco as EscalaData['ajustesBanco']) ?? {},
+    if (respostaExpressValida(res)) {
+      const result = await res.json()
+      if (!result) return null
+      return parseEscalaRow(result as Partial<EscalaData> & Record<string, unknown>)
     }
+  } catch { /* cai para Supabase */ }
+
+  // Fallback: Supabase direto (Netlify)
+  if (!supabaseDisponivel) return null
+  try {
+    const { data } = await supabase
+      .from('escala_estado')
+      .select('data')
+      .eq('id', 1)
+      .single()
+    if (!data?.data) return null
+    const p = data.data as Partial<EscalaData> & Record<string, unknown>
+    return parseEscalaRow(p)
   } catch { return null }
 }
 

@@ -1,4 +1,5 @@
 import { dispararPushSos } from './pushNotifications'
+import { supabase, supabaseDisponivel } from './supabaseClient'
 
 type WsHandler = (msg: Record<string, unknown>) => void
 type OpenHandler = () => void
@@ -9,6 +10,32 @@ const openHandlers = new Set<OpenHandler>()
 let ws: WebSocket | null = null
 let isOpen = false
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+
+// Mapa local de agentes online para o path Supabase Realtime
+const sbAgentesOnline = new Map<string, { nome: string; ts: number }>()
+const SB_ONLINE_TTL = 75_000
+
+function emitirSbOnlineSync() {
+  const agora = Date.now()
+  const agentes: { id: string; nome: string }[] = []
+  for (const [id, info] of sbAgentesOnline) {
+    if (agora - info.ts <= SB_ONLINE_TTL) agentes.push({ id, nome: info.nome })
+    else sbAgentesOnline.delete(id)
+  }
+  dispatch('online_sync', { tipo: 'online_sync', agentes })
+}
+
+// Deduplicação de mensagens recebidas por ambos os transportes
+const recentMsgIds = new Set<string>()
+function novaMsg(key: string): boolean {
+  if (recentMsgIds.has(key)) return false
+  recentMsgIds.add(key)
+  if (recentMsgIds.size > 200) {
+    const primeiro = recentMsgIds.values().next().value
+    if (primeiro) recentMsgIds.delete(primeiro)
+  }
+  return true
+}
 
 function getMeuId(): string {
   let id = sessionStorage.getItem('defesacivil-device-id')
@@ -61,7 +88,6 @@ function connect() {
     const nome = getMeuNome()
     ws!.send(JSON.stringify({ tipo: 'online', id, nome }))
     openHandlers.forEach(h => { try { h() } catch { /* ignore */ } })
-    loadSosAtivos().catch(() => {})
   }
 
   ws.onmessage = (event) => {
@@ -69,6 +95,8 @@ function connect() {
       const msg = JSON.parse(event.data) as Record<string, unknown>
       const tipo = msg.tipo as string
       if (!tipo) return
+      const dedupKey = `${tipo}-${msg.id ?? msg.ts ?? JSON.stringify(msg).slice(0, 60)}`
+      novaMsg(dedupKey)
       dispatch(tipo, msg)
     } catch { /* ignore */ }
   }
@@ -89,13 +117,117 @@ function connect() {
   }
 }
 
+// ─── Supabase Realtime broadcast (Netlify — sem servidor WS) ─────────────────
+
+let sbChannel: ReturnType<typeof supabase.channel> | null = null
+let sbPresenceTracked = false
+
+function conectarSupabaseRealtime() {
+  if (!supabaseDisponivel) return
+  if (sbChannel) return
+
+  const id = getMeuId()
+  const nome = getMeuNome()
+
+  sbChannel = supabase.channel('defesa-civil', {
+    config: { broadcast: { self: false }, presence: { key: id } },
+  })
+
+  sbChannel
+    .on('broadcast', { event: 'msg' }, ({ payload }: { payload: Record<string, unknown> }) => {
+      const tipo = payload?.tipo as string
+      if (!tipo) return
+
+      // Atualização instantânea de agentes online/offline sem esperar o presence sync
+      if (tipo === 'online' && payload.id) {
+        const agId = String(payload.id)
+        const agNome = String(payload.nome || agId)
+        sbAgentesOnline.set(agId, { nome: agNome, ts: Date.now() })
+        emitirSbOnlineSync()
+        // Não deduplica — também despacha normalmente para outros handlers
+      }
+      if (tipo === 'offline' && payload.id) {
+        sbAgentesOnline.delete(String(payload.id))
+        emitirSbOnlineSync()
+        return
+      }
+      if (tipo === 'remover' && payload.id) {
+        sbAgentesOnline.delete(String(payload.id))
+        emitirSbOnlineSync()
+        return
+      }
+
+      const dedupKey = `${tipo}-${payload.id ?? payload.ts ?? JSON.stringify(payload).slice(0, 60)}`
+      if (!novaMsg(dedupKey)) return
+      dispatch(tipo, payload)
+    })
+    .on('presence', { event: 'sync' }, () => {
+      if (!sbChannel) return
+      const state = sbChannel.presenceState()
+      const agentes: { id: string; nome: string }[] = []
+      sbAgentesOnline.clear()
+      for (const [presId, arr] of Object.entries(state)) {
+        const first = (arr as Array<Record<string, unknown>>)[0] ?? {}
+        const agNome = (first.nome as string) || `Equipe ${presId.slice(0, 4)}`
+        sbAgentesOnline.set(presId, { nome: agNome, ts: Date.now() })
+        agentes.push({ id: presId, nome: agNome })
+      }
+      dispatch('online_sync', { tipo: 'online_sync', agentes })
+    })
+    .on('presence', { event: 'join' }, ({ key, newPresences }: { key: string; newPresences: Array<Record<string, unknown>> }) => {
+      const agNome = (newPresences[0]?.nome as string) || `Equipe ${key.slice(0, 4)}`
+      sbAgentesOnline.set(key, { nome: agNome, ts: Date.now() })
+      emitirSbOnlineSync()
+      dispatch('agente_entrou', { tipo: 'agente_entrou', id: key, nome: agNome })
+    })
+    .on('presence', { event: 'leave' }, ({ key, leftPresences }: { key: string; leftPresences: Array<Record<string, unknown>> }) => {
+      sbAgentesOnline.delete(key)
+      emitirSbOnlineSync()
+      const agNome = (leftPresences[0]?.nome as string) || `Equipe ${key.slice(0, 4)}`
+      dispatch('agente_saiu', { tipo: 'agente_saiu', id: key, nome: agNome })
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED' && sbChannel && !sbPresenceTracked) {
+        sbPresenceTracked = true
+        // Envia broadcast de online imediatamente — mais rápido que o presence sync
+        sbChannel.send({
+          type: 'broadcast',
+          event: 'msg',
+          payload: { tipo: 'online', id, nome },
+        }).catch(() => {})
+        await sbChannel.track({ nome })
+        openHandlers.forEach(h => { try { h() } catch { /* ignore */ } })
+        loadSosAtivos().catch(() => {})
+      }
+    })
+}
+
+function sbBroadcast(msg: Record<string, unknown>) {
+  if (!sbChannel || !supabaseDisponivel) return
+  sbChannel.send({ type: 'broadcast', event: 'msg', payload: msg }).catch(() => {})
+}
+
+// ─── SOS persistidos ─────────────────────────────────────────────────────────
+
 async function loadSosAtivos() {
   try {
     const limiteTs = Date.now() - 60 * 60 * 1000
+    let alertas: Record<string, unknown>[] = []
     const res = await fetch('/api/sos-ativos').catch(() => null)
-    if (!res?.ok) return
-    const data = await res.json()
-    const alertas: Record<string, unknown>[] = Array.isArray(data) ? data : []
+    if (res?.ok) {
+      const ct = res.headers.get('content-type') || ''
+      if (!ct.includes('text/html')) {
+        const data = await res.json()
+        alertas = Array.isArray(data) ? data : []
+      }
+    }
+    if (alertas.length === 0 && supabaseDisponivel) {
+      const { data } = await supabase
+        .from('sos_ativos_db')
+        .select('*')
+        .gt('timestamp', limiteTs)
+      alertas = data ?? []
+    }
     const filtrados = alertas
       .filter((row) => Number(row.timestamp) > limiteTs)
       .map((row) => ({
@@ -118,25 +250,30 @@ async function loadSosAtivos() {
   }
 }
 
+// ─── API pública ──────────────────────────────────────────────────────────────
+
 export function wsOn(tipo: string, handler: WsHandler): () => void {
   if (!handlers.has(tipo)) handlers.set(tipo, new Set())
   handlers.get(tipo)!.add(handler)
   connect()
+  conectarSupabaseRealtime()
   return () => { handlers.get(tipo)?.delete(handler) }
 }
 
 export function wsOnOpen(handler: OpenHandler): () => void {
   openHandlers.add(handler)
-  if (isOpen) {
+  if (isOpen || sbPresenceTracked) {
     queueMicrotask(() => { try { handler() } catch { /* ignore */ } })
   } else {
     connect()
+    conectarSupabaseRealtime()
   }
   return () => { openHandlers.delete(handler) }
 }
 
 export function wsSend(msg: Record<string, unknown>): void {
   connect()
+  conectarSupabaseRealtime()
   const tipo = (msg as { tipo?: string }).tipo
   if (!tipo) return
 
@@ -151,22 +288,34 @@ export function wsSend(msg: Record<string, unknown>): void {
     }).catch(() => {})
   }
 
+  const dedupKey = `${tipo}-${msg.id ?? msg.ts ?? JSON.stringify(msg).slice(0, 60)}`
+  novaMsg(dedupKey)
+
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(msg))
   }
+
+  sbBroadcast(msg)
 }
 
 export function wsConnect() {
   connect()
+  conectarSupabaseRealtime()
   loadSosAtivos().catch(() => {})
 }
 
 export function wsAnunciarOnline() {
   connect()
+  conectarSupabaseRealtime()
   const id = getMeuId()
   const nome = getMeuNome()
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ tipo: 'online', id, nome }))
+  }
+  // Broadcast Supabase imediato para outros verem online sem esperar presence
+  sbBroadcast({ tipo: 'online', id, nome })
+  if (sbChannel && sbPresenceTracked) {
+    sbChannel.track({ nome }).catch(() => {})
   }
 }
 
@@ -179,14 +328,36 @@ export function wsDisconnect() {
     ws = null
     isOpen = false
   }
+  if (sbChannel) {
+    const id = getMeuId()
+    // Broadcast offline imediato — mais rápido que esperar o heartbeat expirar
+    sbChannel.send({
+      type: 'broadcast',
+      event: 'msg',
+      payload: { tipo: 'offline', id },
+    }).catch(() => {})
+    sbChannel.untrack().catch(() => {})
+    sbChannel.unsubscribe().catch(() => {})
+    sbChannel = null
+    sbPresenceTracked = false
+    sbAgentesOnline.clear()
+  }
 }
 
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
     try {
+      const id = getMeuId()
       if (ws && ws.readyState === WebSocket.OPEN) {
-        const id = getMeuId()
         ws.send(JSON.stringify({ tipo: 'offline', id }))
+      }
+      if (sbChannel) {
+        sbChannel.send({
+          type: 'broadcast',
+          event: 'msg',
+          payload: { tipo: 'offline', id },
+        }).catch(() => {})
+        sbChannel.untrack().catch(() => {})
       }
     } catch { /* ignore */ }
   })

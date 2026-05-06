@@ -1,3 +1,5 @@
+import { supabase, supabaseDisponivel } from './supabaseClient'
+
 const STORAGE_DEVICE_ID = 'defesacivil-device-id'
 const STORAGE_PUSH_PEDIU = 'defesacivil-push-permissao-pedida-v1'
 const STORAGE_PUSH_VAPID = 'defesacivil-push-vapid-key'
@@ -44,8 +46,11 @@ async function getVapidPublicKey(): Promise<string> {
   try {
     const res = await fetch('/api/vapid-public-key')
     if (res.ok) {
-      const data = await res.json()
-      return data.publicKey || ''
+      const ct = res.headers.get('content-type') || ''
+      if (!ct.includes('text/html')) {
+        const data = await res.json()
+        return data.publicKey || ''
+      }
     }
   } catch { /* ignore */ }
   return ''
@@ -91,6 +96,21 @@ async function salvarInscricao(sub: PushSubscription, agente: string): Promise<v
 
   const id = getMeuId()
 
+  // Supabase direto (Netlify + Replit dev com Supabase configurado)
+  if (supabaseDisponivel) {
+    try {
+      const { error } = await supabase.from('push_subscriptions').upsert(
+        { id, agente: agente || null, endpoint, p256dh, auth },
+        { onConflict: 'id' }
+      )
+      if (error) console.warn('[Push] Supabase upsert error:', error.message)
+      return
+    } catch (e) {
+      console.warn('[Push] Supabase erro ao salvar inscrição:', e)
+    }
+  }
+
+  // Fallback: Express API (Replit sem Supabase)
   try {
     const res = await fetch('/api/push-subscriptions', {
       method: 'POST',

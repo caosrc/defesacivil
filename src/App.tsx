@@ -5,6 +5,7 @@ import type { Ocorrencia, NivelRisco } from './types'
 import { NATUREZA_ICONE } from './types'
 import { listarOcorrencias, criarOcorrencia, enviarOcorrenciaServidor, ApiError } from './api'
 import { wsOn, wsAnunciarOnline } from './wsClient'
+import { supabase, supabaseDisponivel } from './supabaseClient'
 import { EVT_ROTA_RESGATE } from './sos'
 import { registrarPushSeNecessario, pedirPermissaoEInscrever, getStatusNotificacoes } from './pushNotifications'
 import AgentesOnline from './components/AgentesOnline'
@@ -181,12 +182,23 @@ export default function App() {
     async function carregarCampo() {
       try {
         const res = await fetch('/api/equipamentos-campo')
-        if (res.ok) {
+        const ct = res.headers.get('content-type') || ''
+        if (res.ok && !ct.includes('text/html')) {
           const data = await res.json()
           const ativos = (Array.isArray(data) ? data : []).filter((e: EquipamentoCampoMapa) => e.status === 'ativo')
           setEquipamentosCampoMapa(ativos as EquipamentoCampoMapa[])
+          return
         }
-      } catch { /* silencioso */ }
+      } catch { /* cai para Supabase */ }
+      if (supabaseDisponivel) {
+        try {
+          const { data } = await supabase
+            .from('equipamentos_campo')
+            .select('id, material_nome, latitude, longitude, rua, bairro, observacao, status')
+            .eq('status', 'ativo')
+          setEquipamentosCampoMapa((data ?? []) as EquipamentoCampoMapa[])
+        } catch { /* silencioso */ }
+      }
     }
     carregarCampo()
     // Recarrega quando o WebSocket indica atualização de campo
