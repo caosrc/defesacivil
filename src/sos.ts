@@ -276,13 +276,46 @@ function foiDispensado(id: string): boolean {
   return id in lerDispensados()
 }
 
+async function mostrarNotificacaoSos(a: SosAlerta) {
+  if (typeof window === 'undefined' || !('Notification' in window)) return
+
+  const titulo = `🚨 SOS — ${a.agente}`
+  const corpo = a.lat != null
+    ? 'Localização disponível. Toque para abrir o app.'
+    : 'Agente precisa de socorro!'
+  const opcoes: NotificationOptions = {
+    body: corpo,
+    tag: `sos-${a.id}`,
+    icon: '/icons/icon-192.png',
+    requireInteraction: true,
+  }
+
+  async function disparar() {
+    try {
+      new Notification(titulo, opcoes)
+    } catch {
+      try {
+        const reg = await navigator.serviceWorker.ready
+        await reg.showNotification(titulo, opcoes)
+      } catch { /* ignore */ }
+    }
+  }
+
+  if (Notification.permission === 'granted') {
+    disparar()
+  } else if (Notification.permission === 'default') {
+    Notification.requestPermission().then(p => { if (p === 'granted') disparar() })
+  }
+}
+
 export function useSosListener() {
   const [alertas, setAlertas] = useState<SosAlerta[]>([])
   const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
-  function adicionarAlerta(a: SosAlerta) {
+  function adicionarAlerta(a: SosAlerta, notificar = true) {
     if (!a?.id) return
     if (foiDispensado(a.id)) return
+    const isNovo = !timersRef.current.has(a.id)
     setAlertas((prev) => {
       const idx = prev.findIndex(x => x.id === a.id)
       if (idx >= 0) {
@@ -292,7 +325,8 @@ export function useSosListener() {
       }
       return [...prev, a]
     })
-    if (!timersRef.current.has(a.id)) {
+    if (isNovo) {
+      if (notificar) mostrarNotificacaoSos(a)
       const t = setTimeout(() => removerLocal(a.id), TTL_MS)
       timersRef.current.set(a.id, t)
     }
@@ -306,7 +340,7 @@ export function useSosListener() {
     const offPersistidos = wsOn('sos_persistidos', (msg) => {
       const lista = (msg as any).alertas as SosAlerta[]
       if (!Array.isArray(lista)) return
-      lista.forEach(a => adicionarAlerta(a))
+      lista.forEach(a => adicionarAlerta(a, false))
     })
 
     const offAudio = wsOn('sos-audio', (msg) => {
