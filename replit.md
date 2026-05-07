@@ -7,17 +7,18 @@
 - `npm run build` — build frontend for production
 
 Required env vars (managed via Replit Secrets / env vars):
-- `DATABASE_URL` — Replit PostgreSQL (auto-provisioned)
+- `DATABASE_URL` — Replit PostgreSQL (auto-provisioned; used only by Express for WS/push state)
 - `VAPID_PUBLIC_KEY` / `VITE_VAPID_PUBLIC_KEY` — VAPID public key (set in shared env)
 - `VAPID_PRIVATE_KEY` — VAPID private key (set as Replit Secret)
 - `VAPID_SUBJECT` — mailto: for VAPID (set in shared env)
 - `PORT` — server port, default 3001 (set in shared env)
-- `VITE_USE_SUPABASE` — set to `false` on Replit; Express+PostgreSQL is primary
+- `VITE_USE_SUPABASE` — set to `true` on Replit AND Netlify; Supabase is the unified data store
+- `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` — Supabase credentials (set in shared env)
 
 ## Stack
 - **Frontend**: React 19 + TypeScript + Vite (port 5000 in dev)
 - **Backend**: Express 5 + Node.js 20 + native WebSocket (`ws`) (port 3001)
-- **Database**: Replit PostgreSQL via `pg` (primary on Replit); Supabase as optional fallback for Netlify
+- **Database**: **Supabase** (unified, primary for both Replit and Netlify); Replit PostgreSQL kept only for Express WS/push infra
 - **Push Notifications**: Web Push (VAPID) via `web-push` on Express server
 - **Maps**: Leaflet + react-leaflet (tiles proxied via `/api/tiles`)
 
@@ -25,7 +26,7 @@ Required env vars (managed via Replit Secrets / env vars):
 - `server/index.js` — Express API + WebSocket server + DB init (`initDb`)
 - `src/api.ts` — CRUD for ocorrências (Express primary, Supabase fallback)
 - `src/matApi.ts` — CRUD for materiais/emprestimos/campo (Express primary, Supabase fallback)
-- `src/supabaseClient.ts` — Supabase client; `supabaseDisponivel` is `false` on Replit
+- `src/supabaseClient.ts` — Supabase client; `supabaseDisponivel` is `true` on both Replit and Netlify
 - `src/wsClient.ts` — WebSocket + optional Supabase Realtime broadcast
 - `src/pushNotifications.ts` — Web Push subscription via Express `/api/push-subscriptions`
 - `src/components/` — React components per feature
@@ -34,10 +35,10 @@ Required env vars (managed via Replit Secrets / env vars):
 - `attached_assets/` — report template (.docx)
 
 ## Architecture decisions
-- **Express + Replit PostgreSQL is primary on Replit** — `VITE_USE_SUPABASE=false` disables Supabase path
-- **Supabase fallback preserved** for Netlify deployment compatibility (no Express available there)
-- DB tables auto-created on server startup via `initDb()` in `server/index.js`
-- Realtime uses native WebSocket (`/ws`) on Replit; Supabase Realtime only when Supabase is active
+- **Supabase is the unified database** — `VITE_USE_SUPABASE=true` on both Replit and Netlify; both share the same data
+- Express server remains for WebSocket (`/ws`), push notifications (VAPID), tile proxy — NOT for data storage
+- `api.ts`/`matApi.ts` try Express first (returns valid JSON on Replit), then Supabase — on Netlify, Express returns HTML so Supabase is used directly
+- Realtime: native WS (`/ws`) on Replit + Supabase Realtime broadcast both active when `supabaseDisponivel=true`
 - VAPID private key stored as Replit Secret; public key in shared env vars
 
 ## Product
@@ -58,7 +59,7 @@ Required env vars (managed via Replit Secrets / env vars):
 
 ## Gotchas
 - Server runs on port 3001; Vite dev server on port 5000 with proxy (`/api` and `/ws`)
-- `supabaseDisponivel` is `false` on Replit (controlled by `VITE_USE_SUPABASE=false`)
+- `supabaseDisponivel` is `true` on both Replit and Netlify (`VITE_USE_SUPABASE=true` in shared env)
 - DB tables auto-created on server startup — no separate migration step needed on Replit
 - `concurrently` is a dev dependency — required for `npm run start`
 - Production deployment serves built `/dist` from Express; Vite is not needed
