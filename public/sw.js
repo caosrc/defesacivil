@@ -18,7 +18,7 @@
  *  - LIMPAR_CACHE_MAPA               → apaga todos os tiles cacheados
  */
 
-const VERSION = 'v9-2026-05-icon'
+const VERSION = 'v10-2026-05-netlify'
 const APP_CACHE = `defesacivil-app-${VERSION}`
 const TILES_CACHE = 'defesacivil-tiles-osm'
 const ASSETS_CACHE = `defesacivil-assets-${VERSION}`
@@ -92,12 +92,14 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // 2. APIs dinâmicas (Open-Meteo, Nominatim, etc.) → sempre rede.
+  // 2. APIs dinâmicas (Open-Meteo, Nominatim, Supabase, etc.) → sempre rede.
   //    Não interceptamos: o navegador faz o fetch normalmente.
   if (
     url.host.endsWith('open-meteo.com') ||
     url.host.endsWith('nominatim.openstreetmap.org') ||
-    url.host.startsWith('api.')
+    url.host.startsWith('api.') ||
+    url.host.endsWith('supabase.co') ||
+    url.host.endsWith('supabase.in')
   ) {
     return
   }
@@ -109,12 +111,16 @@ self.addEventListener('fetch', (event) => {
       event.respondWith(servirMalha())
       return
     }
-    // 3b. Navegação (SPA) → network-first, cai para index.html cacheado
+    // 3b. Rotas de API → sempre rede (nunca cachear dados dinâmicos)
+    if (url.pathname.startsWith('/api/')) {
+      return
+    }
+    // 3c. Navegação (SPA) → network-first, cai para index.html cacheado
     if (req.mode === 'navigate') {
       event.respondWith(servirNavegacao(req))
       return
     }
-    // 3c. Assets estáticos (JS/CSS/imagens) → stale-while-revalidate
+    // 3d. Assets estáticos (JS/CSS/imagens) → stale-while-revalidate
     event.respondWith(servirAsset(req))
   }
 })
