@@ -287,6 +287,7 @@ export default function App() {
   }
   const [pendingCount, setPendingCount] = useState(0)
   const [sincronizando, setSincronizando] = useState(false)
+  const [sincronizandoIds, setSincronizandoIds] = useState<Set<number>>(new Set())
   const [toastMsg, setToastMsg] = useState('')
   const [statusNotif, setStatusNotif] = useState<'ativo'|'concedido'|'negado'|'sem-suporte'|'desconhecido'|null>(null)
   const [ativandoNotif, setAtivandoNotif] = useState(false)
@@ -391,6 +392,30 @@ export default function App() {
       showToast(`⚠️ Falha ao sincronizar: ${ultimoErro || 'verifique a conexão e tente novamente'}.`)
     }
   }, [sincronizando, carregar, atualizarPendingCount])
+
+  const sincronizarItem = useCallback(async (localId: number, ocorrencia: Ocorrencia) => {
+    setSincronizandoIds(prev => new Set([...prev, localId]))
+    const { id: _id, _offline: _off, _localId: _li, created_at: _ca, ...data } = ocorrencia as Record<string, unknown>
+    void _id; void _off; void _li; void _ca
+    try {
+      await enviarOcorrenciaServidor(data as Omit<Ocorrencia, 'id' | 'created_at'>)
+      await removePending(localId)
+      await carregar()
+      showToast('✅ Ocorrência sincronizada com sucesso!')
+    } catch (err) {
+      const msg = err instanceof ApiError
+        ? err.message
+        : err instanceof Error ? err.message : 'Verifique a conexão e tente novamente'
+      console.error('[sync-item] Falha ao sincronizar item', localId, ':', err)
+      showToast(`⚠️ Falha ao sincronizar: ${msg}`)
+    } finally {
+      setSincronizandoIds(prev => {
+        const next = new Set(prev)
+        next.delete(localId)
+        return next
+      })
+    }
+  }, [carregar])
 
   useEffect(() => {
     carregar()
@@ -711,32 +736,48 @@ export default function App() {
             ) : (
               <div className="lista">
                 {ocorrenciasFiltradas.map((o) => (
-                  <button key={o.id} className={`oc-card ${o._offline ? 'oc-card-offline' : ''}`} onClick={() => setSelecionada(o)}>
-                    <div className="oc-card-esq">
-                      <span className="oc-emoji">{NATUREZA_ICONE[o.natureza] ?? '📋'}</span>
-                    </div>
-                    <div className="oc-card-corpo">
-                      <div className="oc-card-top">
-                        <span className="oc-natureza">{o.natureza}</span>
-                        {o._offline && <span className="oc-offline-tag">📵</span>}
-                        <span className="oc-seta">›</span>
+                  <div key={o.id} className="oc-card-wrapper">
+                    <button className={`oc-card ${o._offline ? 'oc-card-offline' : ''}`} onClick={() => setSelecionada(o)}>
+                      <div className="oc-card-esq">
+                        <span className="oc-emoji">{NATUREZA_ICONE[o.natureza] ?? '📋'}</span>
                       </div>
-                      <div className="oc-card-badges">
-                        <NivelBadge nivel={o.nivel_risco} />
-                        <span className={`status-badge status-${o.status_oc}`}>
-                          {o.status_oc === 'ativo' ? '🔴 Ativo' : '✅ Resolvido'}
-                        </span>
+                      <div className="oc-card-corpo">
+                        <div className="oc-card-top">
+                          <span className="oc-natureza">{o.natureza}</span>
+                          {o._offline && <span className="oc-offline-tag">📵 Salvo offline</span>}
+                          <span className="oc-seta">›</span>
+                        </div>
+                        <div className="oc-card-badges">
+                          <NivelBadge nivel={o.nivel_risco} />
+                          <span className={`status-badge status-${o.status_oc}`}>
+                            {o.status_oc === 'ativo' ? '🔴 Ativo' : '✅ Resolvido'}
+                          </span>
+                        </div>
+                        <div className="oc-card-meta">
+                          <span>{o.tipo}</span>
+                          {o.endereco && <span>📍 {o.endereco}</span>}
+                          <span>🕐 {new Date(o.created_at).toLocaleDateString('pt-BR')}</span>
+                          {Array.isArray(o.agentes) && o.agentes.length > 0 && (
+                            <span>👤 {o.agentes.join(', ')}</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="oc-card-meta">
-                        <span>{o.tipo}</span>
-                        {o.endereco && <span>📍 {o.endereco}</span>}
-                        <span>🕐 {new Date(o.created_at).toLocaleDateString('pt-BR')}</span>
-                        {Array.isArray(o.agentes) && o.agentes.length > 0 && (
-                          <span>👤 {o.agentes.join(', ')}</span>
-                        )}
+                    </button>
+                    {o._offline && o._localId != null && isOnline && (
+                      <button
+                        className={`btn-sincronizar-item ${sincronizandoIds.has(o._localId) ? 'sincronizando' : ''}`}
+                        onClick={() => sincronizarItem(o._localId!, o)}
+                        disabled={sincronizandoIds.has(o._localId)}
+                      >
+                        {sincronizandoIds.has(o._localId) ? '⏳ Sincronizando...' : '☁️ Sincronizar agora'}
+                      </button>
+                    )}
+                    {o._offline && !isOnline && (
+                      <div className="btn-sincronizar-item btn-sincronizar-offline">
+                        📵 Sem conexão — aguardando rede
                       </div>
-                    </div>
-                  </button>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
