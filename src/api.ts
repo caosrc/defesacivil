@@ -2,6 +2,42 @@ import type { Ocorrencia } from './types'
 import { savePending, getCachedOcorrencias } from './offline'
 import { supabase, supabaseDisponivel } from './supabaseClient'
 
+// Redimensiona e recomprime um base64 para no máximo maxW pixels de largura
+// e qualidade JPEG reduzida. Isso mantém o payload do Supabase abaixo de 10 MB.
+async function comprimirFoto(dataUrl: string, maxW = 1280, qualidade = 0.72): Promise<string> {
+  if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      let { width, height } = img
+      if (width > maxW) {
+        height = Math.round((height * maxW) / width)
+        width = maxW
+      }
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = width
+        canvas.height = height
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { resolve(dataUrl); return }
+        ctx.drawImage(img, 0, 0, width, height)
+        resolve(canvas.toDataURL('image/jpeg', qualidade))
+      } catch {
+        resolve(dataUrl)
+      }
+    }
+    img.onerror = () => resolve(dataUrl)
+    img.src = dataUrl
+  })
+}
+
+async function comprimirFotos(fotos: unknown[]): Promise<string[]> {
+  if (!Array.isArray(fotos) || fotos.length === 0) return []
+  return Promise.all(
+    fotos.map(f => (typeof f === 'string' ? comprimirFoto(f) : Promise.resolve('')))
+  )
+}
+
 function localOffline(dados: Omit<Ocorrencia, 'id' | 'created_at'>, localId: number): Ocorrencia {
   return {
     ...(dados as object),
@@ -80,11 +116,17 @@ export async function listarOcorrencias(): Promise<Ocorrencia[]> {
 export async function enviarOcorrenciaServidor(
   dados: Omit<Ocorrencia, 'id' | 'created_at'>
 ): Promise<Ocorrencia> {
-  const payload = buildPayload(dados)
-
   // Supabase direto quando disponível (Netlify) — não tenta Express para evitar
   // que o redirect catch-all do Netlify sirva HTML antes de chegarmos aqui.
   if (supabaseDisponivel) {
+    // Comprime fotos antes de enviar para manter o payload abaixo do limite de
+    // 10 MB do PostgREST. Uma foto de celular (4000x3000 px) ocupa ~4-7 MB em
+    // base64; com 3+ fotos o INSERT falha com timeout. Comprimimos para ≤1280 px
+    // de largura e qualidade 0.72 (~150-300 KB/foto), mantendo boa qualidade visual.
+    const fotosComprimidas = await comprimirFotos(Array.isArray(dados.fotos) ? dados.fotos : [])
+    const dadosComprimidos = { ...dados, fotos: fotosComprimidas }
+    const payload = buildPayload(dadosComprimidos)
+
     const { data, error } = await supabase
       .from('ocorrencias')
       .insert(payload)
@@ -92,11 +134,15 @@ export async function enviarOcorrenciaServidor(
       .single()
     if (error) {
       console.error('[api] Supabase insert error:', error)
-      throw new ApiError(500, error.message)
+      // Inclui o código do erro para facilitar diagnóstico
+      const detalhe = error.code ? `[${error.code}] ${error.message}` : error.message
+      throw new ApiError(500, detalhe)
     }
     if (!data) throw new ApiError(500, 'Supabase retornou resposta inválida')
     return data as Ocorrencia
   }
+
+  const payload = buildPayload(dados)
 
   // Express (Replit)
   try {

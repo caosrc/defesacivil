@@ -293,13 +293,13 @@ export default function App() {
   const [ativandoNotif, setAtivandoNotif] = useState(false)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function showToast(msg: string) {
+  function showToast(msg: string, duracao = 4000) {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
     setToastMsg(msg)
     toastTimerRef.current = setTimeout(() => {
       setToastMsg('')
       toastTimerRef.current = null
-    }, 4000)
+    }, duracao)
   }
 
   const atualizarPendingCount = useCallback(async () => {
@@ -393,12 +393,22 @@ export default function App() {
     }
   }, [sincronizando, carregar, atualizarPendingCount])
 
-  const sincronizarItem = useCallback(async (localId: number, ocorrencia: Ocorrencia) => {
+  const sincronizarItem = useCallback(async (localId: number) => {
     setSincronizandoIds(prev => new Set([...prev, localId]))
-    const { id: _id, _offline: _off, _localId: _li, created_at: _ca, ...data } = ocorrencia as Record<string, unknown>
-    void _id; void _off; void _li; void _ca
     try {
-      await enviarOcorrenciaServidor(data as Omit<Ocorrencia, 'id' | 'created_at'>)
+      // Lê os dados BRUTOS do IndexedDB — mesma origem que criarOcorrencia usa online.
+      // Evita qualquer diferença introduzida pelo mapeamento em carregar().
+      const pending = await getPending()
+      const item = pending.find(p => p.localId === localId)
+      if (!item) throw new Error('Ocorrência não encontrada na fila de pendentes')
+
+      // Remove campos exclusivos do IDB; mantém exatamente o que o formulário salvou.
+      const { localId: _li, _savedAt: _sa, _offline: _off, _localId: _lid, id: _id, created_at: _ca, ...dados } = item as Record<string, unknown>
+      void _li; void _sa; void _off; void _lid; void _id; void _ca
+
+      // enviarOcorrenciaServidor comprime as fotos automaticamente antes de enviar
+      // ao Supabase, evitando o limite de 10 MB do PostgREST (causa do timeout).
+      await enviarOcorrenciaServidor(dados as Omit<Ocorrencia, 'id' | 'created_at'>)
       await removePending(localId)
       await carregar()
       showToast('✅ Ocorrência sincronizada com sucesso!')
@@ -407,7 +417,8 @@ export default function App() {
         ? err.message
         : err instanceof Error ? err.message : 'Verifique a conexão e tente novamente'
       console.error('[sync-item] Falha ao sincronizar item', localId, ':', err)
-      showToast(`⚠️ Falha ao sincronizar: ${msg}`)
+      // Duração maior (8s) para que o agente leia o motivo do erro no celular
+      showToast(`⚠️ Falha ao sincronizar: ${msg}`, 8000)
     } finally {
       setSincronizandoIds(prev => {
         const next = new Set(prev)
@@ -766,7 +777,7 @@ export default function App() {
                     {o._offline && o._localId != null && isOnline && (
                       <button
                         className={`btn-sincronizar-item ${sincronizandoIds.has(o._localId) ? 'sincronizando' : ''}`}
-                        onClick={() => sincronizarItem(o._localId!, o)}
+                        onClick={() => sincronizarItem(o._localId!)}
                         disabled={sincronizandoIds.has(o._localId)}
                       >
                         {sincronizandoIds.has(o._localId) ? '⏳ Sincronizando...' : '☁️ Sincronizar agora'}
