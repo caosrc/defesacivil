@@ -640,7 +640,7 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
           <button
             className="mat-btn-grande mat-btn-laranja"
             onClick={() => { setTipoOperacao('emprestimo'); setModo('novoEmprestimo') }}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.8rem 1rem', gap: '0.5rem' }}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.8rem 1rem', gap: '0.5rem', width: '100%' }}
           >
             <span style={{ fontSize: '2.5rem' }}>🔄</span>
             <span style={{ fontSize: '1.1rem', fontWeight: 800 }}>Empréstimo</span>
@@ -649,7 +649,7 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
           <button
             className="mat-btn-grande mat-btn-verde"
             onClick={() => { setTipoOperacao('manutencao'); setModo('novoEmprestimo') }}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.8rem 1rem', gap: '0.5rem' }}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.8rem 1rem', gap: '0.5rem', width: '100%' }}
           >
             <span style={{ fontSize: '2.5rem' }}>🔧</span>
             <span style={{ fontSize: '1.1rem', fontWeight: 800 }}>Manutenção</span>
@@ -2195,7 +2195,7 @@ function DetalheCampo({
 }: {
   item: EquipamentoCampo
   onVoltar: () => void
-  onIrParaMapa?: (lat: number, lng: number) => void
+  onIrParaMapa?: (lat: number, lng: number, nome?: string) => void
   onDevolver: () => void
   onExcluir: () => void
 }) {
@@ -2250,7 +2250,7 @@ function DetalheCampo({
                 {item.latitude.toFixed(6)}, {item.longitude.toFixed(6)}
               </span>
               {onIrParaMapa && (
-                <button className="mat-btn-acao mat-btn-acao-gps" onClick={() => onIrParaMapa(item.latitude!, item.longitude!)}>
+                <button className="mat-btn-acao mat-btn-acao-gps" onClick={() => onIrParaMapa(item.latitude!, item.longitude!, item.material_nome || undefined)}>
                   🗺️ Ver no Mapa
                 </button>
               )}

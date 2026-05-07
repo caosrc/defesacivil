@@ -195,7 +195,7 @@ export default function App() {
   // Destino externo enviado pelo botão "Traçar rota de resgate" do SOS.
   // Quando preenchido, o mapa abre com o pino e a rota já calculados.
   const [destinoSos, setDestinoSos] = useState<{ lat: number; lng: number } | null>(null)
-  const [destinoCampo, setDestinoCampo] = useState<{ lat: number; lng: number } | null>(null)
+  const [destinoCampo, setDestinoCampo] = useState<{ lat: number; lng: number; nome?: string; soMostrar?: boolean } | null>(null)
   const [equipamentosCampoMapa, setEquipamentosCampoMapa] = useState<EquipamentoCampoMapa[]>([])
 
   useEffect(() => {
@@ -391,6 +391,22 @@ export default function App() {
   useEffect(() => {
     carregar()
   }, [carregar])
+
+  // Sincroniza pendentes assim que o app carrega (se online e houver itens)
+  useEffect(() => {
+    if (!navigator.onLine) return
+    countPending().then(n => { if (n > 0) sincronizar(true) }).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Sincroniza quando o app volta ao primeiro plano (ex: volta da tela do celular)
+  useEffect(() => {
+    function aoRetomarFoco() {
+      if (navigator.onLine) sincronizar(true)
+    }
+    document.addEventListener('visibilitychange', aoRetomarFoco)
+    return () => document.removeEventListener('visibilitychange', aoRetomarFoco)
+  }, [sincronizar])
 
   // Pré-carrega TODOS os chunks lazy assim que o app abre online,
   // para que o Service Worker cacheie tudo e o app funcione 100% offline
@@ -756,8 +772,8 @@ export default function App() {
         {aba === 'materiais' && (
           <ErrorBoundary>
             <Suspense fallback={<LazyFallback />}>
-              <MateriaisEmprestimos onIrParaMapa={(lat, lng) => {
-                setDestinoCampo({ lat, lng })
+              <MateriaisEmprestimos onIrParaMapa={(lat, lng, nome) => {
+                setDestinoCampo({ lat, lng, nome, soMostrar: true })
                 setAba('mapa')
               }} />
             </Suspense>

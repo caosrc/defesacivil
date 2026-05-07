@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { wsOn, wsSend, wsOnOpen } from './wsClient'
+import { getAgenteLogado } from './components/Login'
 
 export interface SosMensagem {
   agente: string
@@ -315,6 +316,8 @@ export function useSosListener() {
   function adicionarAlerta(a: SosAlerta, notificar = true) {
     if (!a?.id) return
     if (foiDispensado(a.id)) return
+    const meuNome = getAgenteLogado()
+    if (meuNome && a.agente && a.agente === meuNome) return
     const isNovo = !timersRef.current.has(a.id)
     setAlertas((prev) => {
       const idx = prev.findIndex(x => x.id === a.id)

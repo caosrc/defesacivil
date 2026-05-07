@@ -250,8 +250,9 @@ interface Props {
   ocorrencias: Ocorrencia[]
   onSelecionar: (o: Ocorrencia) => void
   /** Destino vindo de fora (ex: "Traçar rota de resgate" do SOS). Quando definido,
-   *  o mapa centraliza no ponto e calcula a rota automaticamente. */
-  destinoExterno?: { lat: number; lng: number; nome?: string } | null
+   *  o mapa centraliza no ponto e calcula a rota automaticamente.
+   *  Quando soMostrar=true, apenas centraliza no ponto sem traçar rota. */
+  destinoExterno?: { lat: number; lng: number; nome?: string; soMostrar?: boolean } | null
   /** Callback chamado depois que o destinoExterno foi consumido — para limpar no pai. */
   onDestinoExternoConsumido?: () => void
   /** Equipamentos em campo para exibir no mapa. */
@@ -814,20 +815,27 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   // Quando o pai envia um destino externo (botão "Traçar rota de resgate" do SOS),
   // posiciona o pino, traça a rota a partir da posição GPS atual (ou do centro de
   // Ouro Branco como fallback) e avisa o pai que já consumiu o destino.
+  // Quando soMostrar=true (botão "Ver no Mapa" de equipamento em campo), apenas
+  // centraliza no ponto sem calcular rota.
   useEffect(() => {
     if (!destinoExterno) return
     const dest = {
       lat: destinoExterno.lat,
       lng: destinoExterno.lng,
-      nome: destinoExterno.nome || 'Local do SOS',
+      nome: destinoExterno.nome || (destinoExterno.soMostrar ? 'Equipamento em Campo' : 'Local do SOS'),
     }
     setDestino(dest)
     setEnderecoBusca(dest.nome)
     setResultadosBusca([])
     buscaTokenRef.current++
     ignorarBuscaRef.current = true
-    const origem: [number, number] = posicaoAtual ?? OURO_BRANCO
-    calcularRota(origem, dest)
+    if (destinoExterno.soMostrar) {
+      setRota([])
+      setRotaInfo(null)
+    } else {
+      const origem: [number, number] = posicaoAtual ?? OURO_BRANCO
+      calcularRota(origem, dest)
+    }
     onDestinoExternoConsumido?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destinoExterno?.lat, destinoExterno?.lng])
