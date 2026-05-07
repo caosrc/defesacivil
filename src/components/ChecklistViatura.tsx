@@ -603,16 +603,23 @@ export default function ChecklistViatura() {
   }
 
   async function deletar(id: number) {
-    // IDs negativos são registros locais (offline)
     if (id < 0) {
       removerChecklistLocal(id)
       setSelecionado(null); setModo('lista'); await carregar()
       return
     }
-    if (supabaseDisponivel) {
-      await supabase.from('checklists_viatura').delete().eq('id', id).catch(() => {})
-    } else {
-      await fetch(`/api/checklists/${id}`, { method: 'DELETE' }).catch(() => {})
+    try {
+      if (supabaseDisponivel) {
+        const { error } = await supabase.from('checklists_viatura').delete().eq('id', id)
+        if (error) throw new Error(error.message)
+      } else {
+        const r = await fetch(`/api/checklists/${id}`, { method: 'DELETE' })
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      }
+    } catch (e) {
+      console.error('[Checklist] erro ao excluir:', e)
+      alert('Erro ao excluir checklist. Verifique sua conexão e tente novamente.')
+      return
     }
     setSelecionado(null); setModo('lista'); await carregar()
   }

@@ -156,6 +156,12 @@ function conectarSupabaseRealtime() {
         emitirSbOnlineSync()
         return
       }
+      if (tipo === 'parar' && payload.id) {
+        sbAgentesOnline.delete(String(payload.id))
+        emitirSbOnlineSync()
+        dispatch('remover', { tipo: 'remover', id: payload.id })
+        return
+      }
 
       const dedupKey = `${tipo}-${payload.id ?? payload.ts ?? JSON.stringify(payload).slice(0, 60)}`
       if (!novaMsg(dedupKey)) return

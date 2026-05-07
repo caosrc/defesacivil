@@ -214,16 +214,27 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
     if (empVencidos.length === 0 && campoVencidos.length === 0) return
     if (!('Notification' in window)) return
 
+    async function mostrarNotificacao(title: string, options: NotificationOptions) {
+      try {
+        new Notification(title, options)
+      } catch {
+        try {
+          const reg = await navigator.serviceWorker.ready
+          await reg.showNotification(title, options)
+        } catch { /* ignore */ }
+      }
+    }
+
     function disparar() {
       empVencidos.forEach(e => {
-        new Notification('📦 Prazo de devolução — Defesa Civil', {
+        mostrarNotificacao('📦 Prazo de devolução — Defesa Civil', {
           body: `${e.material_nome} emprestado a ${e.responsavel} está no prazo de devolução.`,
           tag: `emp-prazo-${e.id}`,
           icon: '/icons/icon-192.png',
         })
       })
       campoVencidos.forEach(c => {
-        new Notification('🚧 Prazo de recolha — Defesa Civil', {
+        mostrarNotificacao('🚧 Prazo de recolha — Defesa Civil', {
           body: `${c.material_nome ?? 'Equipamento'} em campo atingiu o prazo de recolha.`,
           tag: `campo-prazo-${c.id}`,
           icon: '/icons/icon-192.png',

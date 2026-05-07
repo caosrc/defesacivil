@@ -335,6 +335,18 @@ export function useSosListener() {
       setAlertas(prev => prev.map(a => a.id === id ? { ...a, mensagens } : a))
     })
 
+    // Fallback: sos-mensagem direto via Supabase Realtime (sem servidor Express)
+    const offSosMensagemDireto = wsOn('sos-mensagem', (msg) => {
+      const { id, agente, texto, audio, ts } = msg as Record<string, unknown>
+      if (!id) return
+      setAlertas(prev => prev.map(a => {
+        if (a.id !== id) return a
+        const msgs = a.mensagens ?? []
+        if (msgs.some(m => m.ts === (ts as number) && m.agente === agente)) return a
+        return { ...a, mensagens: [...msgs, { agente: agente as string, texto: (texto as string) || '', audio: (audio as string | null) ?? null, ts: ts as number }] }
+      }))
+    })
+
     const offOpen = wsOnOpen(() => {
       wsSend({ tipo: 'solicitar_estado' })
     })
@@ -346,6 +358,7 @@ export function useSosListener() {
       offCancelar()
       offVisualizado()
       offMensagem()
+      offSosMensagemDireto()
       offOpen()
       timersRef.current.forEach(t => clearTimeout(t))
       timersRef.current.clear()

@@ -97,13 +97,23 @@ export default function BotaoSos({ modo = 'fab' }: Props) {
   // Escuta mensagens enviadas pelos receptores
   useEffect(() => {
     if (!idEnviado) return
-    const off = wsOn('sos-nova-mensagem', (msg) => {
+    // sos-nova-mensagem: enviado pelo servidor Express com a lista completa atualizada
+    const offNova = wsOn('sos-nova-mensagem', (msg) => {
       const { id, mensagens } = msg as { id: string; mensagens: {agente: string; texto: string; audio?: string | null; ts: number}[] }
       if (id === idEnviado && Array.isArray(mensagens)) {
         setMensagensRecebidas(mensagens)
       }
     })
-    return off
+    // sos-mensagem: recebido diretamente via Supabase Realtime (sem servidor Express)
+    const offDireto = wsOn('sos-mensagem', (msg) => {
+      const { id, agente, texto, audio, ts } = msg as Record<string, unknown>
+      if (id !== idEnviado) return
+      setMensagensRecebidas(prev => {
+        if (prev.some(m => m.ts === (ts as number) && m.agente === agente)) return prev
+        return [...prev, { agente: agente as string, texto: (texto as string) || '', audio: (audio as string | null) ?? null, ts: ts as number }]
+      })
+    })
+    return () => { offNova(); offDireto() }
   }, [idEnviado])
 
   // Auto-scroll ao chegar nova mensagem
