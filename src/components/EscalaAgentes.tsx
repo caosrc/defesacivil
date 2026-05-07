@@ -133,6 +133,7 @@ interface EscalaData {
 
 // ── Storage ───────────────────────────────────────────────────────
 const STORAGE_KEY = 'escala-data-v3'
+const LOCAL_TS_KEY = 'escala-data-v3-ts'
 
 function normalizarSemanal(raw: Record<string, string | string[]>): Record<string, string[]> {
   const out: Record<string, string[]> = {}
@@ -210,11 +211,13 @@ function respostaExpressValida(res: Response): boolean {
 
 function salvarDados(data: EscalaData) {
   marcarEdicaoLocal()
+  const now = new Date().toISOString()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  localStorage.setItem(LOCAL_TS_KEY, now)
 
   if (supabaseDisponivel) {
     supabase.from('escala_estado')
-      .upsert({ id: 1, data, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+      .upsert({ id: 1, data, updated_at: now }, { onConflict: 'id' })
       .then(() => { wsSend({ tipo: 'escala_atualizada' }) })
       .catch((e: unknown) => console.warn('Falha ao salvar escala no Supabase:', e))
     return
@@ -228,12 +231,14 @@ function salvarDados(data: EscalaData) {
 // Versão que aguarda confirmação — usada quando precisamos dar feedback visual.
 async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensagem?: string }> {
   marcarEdicaoLocal()
+  const now = new Date().toISOString()
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  localStorage.setItem(LOCAL_TS_KEY, now)
 
   if (supabaseDisponivel) {
     const { error } = await supabase
       .from('escala_estado')
-      .upsert({ id: 1, data, updated_at: new Date().toISOString() }, { onConflict: 'id' })
+      .upsert({ id: 1, data, updated_at: now }, { onConflict: 'id' })
     if (error) return { ok: false, mensagem: error.message }
     wsSend({ tipo: 'escala_atualizada' })
     return { ok: true }
@@ -274,17 +279,20 @@ function parseEscalaRow(p: Partial<EscalaData> & Record<string, unknown>): Escal
   }
 }
 
-async function carregarDadosRemoto(): Promise<EscalaData | null> {
+async function carregarDadosRemoto(): Promise<{ dados: EscalaData; updatedAt: string } | null> {
   // Supabase primeiro — fonte de verdade compartilhada entre Netlify e Replit
   if (supabaseDisponivel) {
     try {
       const { data } = await supabase
         .from('escala_estado')
-        .select('data')
+        .select('data, updated_at')
         .eq('id', 1)
         .single()
       if (!data?.data) return null
-      return parseEscalaRow(data.data as Partial<EscalaData> & Record<string, unknown>)
+      return {
+        dados: parseEscalaRow(data.data as Partial<EscalaData> & Record<string, unknown>),
+        updatedAt: (data.updated_at as string) ?? '',
+      }
     } catch { /* cai para Express */ }
   }
 
@@ -294,7 +302,10 @@ async function carregarDadosRemoto(): Promise<EscalaData | null> {
     if (!respostaExpressValida(res)) return null
     const result = await res.json()
     if (!result) return null
-    return parseEscalaRow(result as Partial<EscalaData> & Record<string, unknown>)
+    return {
+      dados: parseEscalaRow(result as Partial<EscalaData> & Record<string, unknown>),
+      updatedAt: (result.updated_at as string) ?? '',
+    }
   } catch { return null }
 }
 
@@ -2160,16 +2171,19 @@ export default function EscalaAgentes() {
     }
   }, [])
 
-  // Sincroniza com API remota ao montar: se houver estado remoto, usa ele
+  // Sincroniza com API remota ao montar: só sobrescreve local se remoto for mais recente.
   useEffect(() => {
     let cancelado = false
     carregarDadosRemoto().then(remoto => {
       if (cancelado || !remoto) return
-      // Não sobrescreve se o usuário já fez uma edição local recente
-      // (proteção contra race condition: edição rápida antes da resposta remota).
+      // Proteção 1: edição feita nesta sessão (race condition)
       if (teveEdicaoLocalRecente()) return
-      setDados(remoto)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(remoto))
+      // Proteção 2: local mais recente que o remoto (edição offline anterior)
+      const localTs = localStorage.getItem(LOCAL_TS_KEY)
+      if (localTs && remoto.updatedAt && remoto.updatedAt <= localTs) return
+      setDados(remoto.dados)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(remoto.dados))
+      if (remoto.updatedAt) localStorage.setItem(LOCAL_TS_KEY, remoto.updatedAt)
     })
     return () => { cancelado = true }
   }, [])
@@ -2180,8 +2194,11 @@ export default function EscalaAgentes() {
       carregarDadosRemoto().then(remoto => {
         if (!remoto) return
         if (teveEdicaoLocalRecente()) return
-        setDados(remoto)
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(remoto))
+        const localTs = localStorage.getItem(LOCAL_TS_KEY)
+        if (localTs && remoto.updatedAt && remoto.updatedAt <= localTs) return
+        setDados(remoto.dados)
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(remoto.dados))
+        if (remoto.updatedAt) localStorage.setItem(LOCAL_TS_KEY, remoto.updatedAt)
       })
     })
     return off

@@ -724,36 +724,44 @@ export default function App() {
         )}
 
         {aba === 'mapa' && (
-          <Suspense fallback={<LazyFallback />}>
-            <MapaOcorrencias
-              ocorrencias={ocorrencias}
-              onSelecionar={(o) => setSelecionada(o)}
-              destinoExterno={destinoSos ?? destinoCampo}
-              onDestinoExternoConsumido={() => { setDestinoSos(null); setDestinoCampo(null) }}
-              equipamentosCampo={equipamentosCampoMapa}
-            />
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
+              <MapaOcorrencias
+                ocorrencias={ocorrencias}
+                onSelecionar={(o) => setSelecionada(o)}
+                destinoExterno={destinoSos ?? destinoCampo}
+                onDestinoExternoConsumido={() => { setDestinoSos(null); setDestinoCampo(null) }}
+                equipamentosCampo={equipamentosCampoMapa}
+              />
+            </Suspense>
+          </ErrorBoundary>
         )}
 
         {aba === 'viatura' && (
-          <Suspense fallback={<LazyFallback />}>
-            <ChecklistViatura />
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
+              <ChecklistViatura />
+            </Suspense>
+          </ErrorBoundary>
         )}
 
         {aba === 'escala' && (
-          <Suspense fallback={<LazyFallback />}>
-            <EscalaAgentes />
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
+              <EscalaAgentes />
+            </Suspense>
+          </ErrorBoundary>
         )}
 
         {aba === 'materiais' && (
-          <Suspense fallback={<LazyFallback />}>
-            <MateriaisEmprestimos onIrParaMapa={(lat, lng) => {
-              setDestinoCampo({ lat, lng })
-              setAba('mapa')
-            }} />
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
+              <MateriaisEmprestimos onIrParaMapa={(lat, lng) => {
+                setDestinoCampo({ lat, lng })
+                setAba('mapa')
+              }} />
+            </Suspense>
+          </ErrorBoundary>
         )}
       </div>
 
@@ -784,23 +792,27 @@ export default function App() {
       </nav>
 
       {selecionada && (
-        <Suspense fallback={null}>
-          <DetalheOcorrencia
-            ocorrencia={selecionada}
-            onFechar={() => setSelecionada(null)}
-            onDeletado={() => { setSelecionada(null); carregar() }}
-            onAtualizado={(atualizado) => {
-              setSelecionada(atualizado)
-              setOcorrencias((prev) => prev.map((o) => o.id === atualizado.id ? atualizado : o))
-            }}
-          />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <DetalheOcorrencia
+              ocorrencia={selecionada}
+              onFechar={() => setSelecionada(null)}
+              onDeletado={() => { setSelecionada(null); carregar() }}
+              onAtualizado={(atualizado) => {
+                setSelecionada(atualizado)
+                setOcorrencias((prev) => prev.map((o) => o.id === atualizado.id ? atualizado : o))
+              }}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )}
 
       {/* Overlay de SOS recebido — visível em qualquer aba */}
-      <Suspense fallback={null}>
-        <SosOverlay />
-      </Suspense>
+      <ErrorBoundary>
+        <Suspense fallback={null}>
+          <SosOverlay />
+        </Suspense>
+      </ErrorBoundary>
     </div>
   )
 }

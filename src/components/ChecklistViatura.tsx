@@ -6,6 +6,28 @@ import { wsOn } from '../wsClient'
 import { supabase, supabaseDisponivel } from '../supabaseClient'
 
 const MOTORISTAS = ['Moisés', 'Arthur', 'Gustavo', 'Valteir', 'Dyonathan']
+const CHECKLIST_LOCAL_KEY = 'checklists-pendentes-v1'
+
+function carregarChecklistsLocais(): ChecklistData[] {
+  try {
+    const raw = localStorage.getItem(CHECKLIST_LOCAL_KEY)
+    if (!raw) return []
+    return JSON.parse(raw) as ChecklistData[]
+  } catch { return [] }
+}
+
+function salvarChecklistLocal(payload: Omit<ChecklistData, 'id' | 'created_at'>) {
+  const pendentes = carregarChecklistsLocais()
+  const item = { ...payload, id: -(Date.now()), created_at: new Date().toISOString(), _local: true } as unknown as ChecklistData
+  pendentes.unshift(item)
+  localStorage.setItem(CHECKLIST_LOCAL_KEY, JSON.stringify(pendentes.slice(0, 50)))
+  return item
+}
+
+function removerChecklistLocal(id: number) {
+  const pendentes = carregarChecklistsLocais().filter(c => (c as unknown as Record<string, unknown>).id !== id)
+  localStorage.setItem(CHECKLIST_LOCAL_KEY, JSON.stringify(pendentes))
+}
 
 type Opc3 = 'bom' | 'medio' | 'ruim' | ''
 type OpcSN = 'sim' | 'nao' | 'na' | ''
@@ -342,16 +364,18 @@ export default function ChecklistViatura() {
 
   async function carregar() {
     setCarregando(true)
+    const locais = carregarChecklistsLocais()
     if (supabaseDisponivel) {
       try {
         const { data } = await supabase
           .from('checklists_viatura')
           .select('*')
           .order('created_at', { ascending: false })
-        setChecklists((Array.isArray(data) ? data : []) as ChecklistData[])
+        const servidor = (Array.isArray(data) ? data : []) as ChecklistData[]
+        setChecklists([...locais, ...servidor])
       } catch (e) {
         console.warn('[Checklist] erro ao carregar:', e)
-        setChecklists([])
+        setChecklists(locais)
       }
       setCarregando(false)
       return
@@ -360,10 +384,11 @@ export default function ChecklistViatura() {
       const res = await fetch('/api/checklists')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      setChecklists((Array.isArray(data) ? data : []) as ChecklistData[])
+      const servidor = (Array.isArray(data) ? data : []) as ChecklistData[]
+      setChecklists([...locais, ...servidor])
     } catch (e) {
       console.warn('[Checklist] erro ao carregar:', e)
-      setChecklists([])
+      setChecklists(locais)
     }
     setCarregando(false)
   }
@@ -563,12 +588,27 @@ export default function ChecklistViatura() {
       }
       await carregar(); resetForm(); setModo('lista')
     } catch (e: unknown) {
-      setErro(`Erro ao salvar: ${(e as Error)?.message ?? 'tente novamente'}`)
+      // Fallback: salvar localmente para não perder o checklist
+      try {
+        salvarChecklistLocal(payload)
+        await carregar()
+        resetForm()
+        setModo('lista')
+        setErro('⚠️ Sem conexão com o servidor — checklist salvo localmente. Aparecerá na lista com marcação pendente.')
+      } catch {
+        setErro(`Erro ao salvar: ${(e as Error)?.message ?? 'tente novamente'}`)
+      }
     }
     setSalvando(false)
   }
 
   async function deletar(id: number) {
+    // IDs negativos são registros locais (offline)
+    if (id < 0) {
+      removerChecklistLocal(id)
+      setSelecionado(null); setModo('lista'); await carregar()
+      return
+    }
     if (supabaseDisponivel) {
       await supabase.from('checklists_viatura').delete().eq('id', id).catch(() => {})
     } else {
@@ -1066,25 +1106,29 @@ export default function ChecklistViatura() {
         </div>
       ) : (
         <div className="lista">
-          {checklists.map((c) => (
-            <button key={c.id} className="oc-card" onClick={() => { setSelecionado(c); setModo('detalhe') }}>
-              <div className="oc-card-esq"><span className="oc-emoji">🚗</span></div>
-              <div className="oc-card-corpo">
-                <div className="oc-card-top">
-                  <span className="oc-natureza">{formatarData(c.data_checklist)}</span>
-                  <span className="oc-seta">›</span>
+          {checklists.map((c) => {
+            const isLocal = (c as unknown as Record<string, unknown>)._local === true
+            return (
+              <button key={c.id} className={`oc-card ${isLocal ? 'oc-card-offline' : ''}`} onClick={() => { setSelecionado(c); setModo('detalhe') }}>
+                <div className="oc-card-esq"><span className="oc-emoji">🚗</span></div>
+                <div className="oc-card-corpo">
+                  <div className="oc-card-top">
+                    <span className="oc-natureza">{formatarData(c.data_checklist)}</span>
+                    {isLocal && <span className="oc-offline-tag" title="Salvo localmente — não sincronizado com servidor">📵</span>}
+                    <span className="oc-seta">›</span>
+                  </div>
+                  <div className="oc-card-meta">
+                    {c.motorista && <span>👤 {c.motorista}</span>}
+                    {c.placa && <span>🚘 {c.placa}</span>}
+                    {c.km && <span>🔢 {c.km} km</span>}
+                    <span>
+                      {[c.foto_frontal, c.foto_traseira, c.foto_direita, c.foto_esquerda].filter(Boolean).length}/4 fotos
+                    </span>
+                  </div>
                 </div>
-                <div className="oc-card-meta">
-                  {c.motorista && <span>👤 {c.motorista}</span>}
-                  {c.placa && <span>🚘 {c.placa}</span>}
-                  {c.km && <span>🔢 {c.km} km</span>}
-                  <span>
-                    {[c.foto_frontal, c.foto_traseira, c.foto_direita, c.foto_esquerda].filter(Boolean).length}/4 fotos
-                  </span>
-                </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>
