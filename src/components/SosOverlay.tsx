@@ -224,18 +224,20 @@ function SosCard({
         <div className="sos-chat">
           <div className="sos-chat-titulo">💬 Responder para {alerta.agente}</div>
 
-          {(alerta.mensagens ?? []).length > 0 && (
+          {(alerta.mensagens ?? []).filter(m => !(m.audio && m.agente === getAgenteLogado())).length > 0 && (
             <div className="sos-chat-msgs" ref={msgsRef}>
-              {(alerta.mensagens ?? []).map((m, i) => (
-                <div key={i} className="sos-chat-msg">
-                  <span className="sos-chat-msg-hora">{formatarHoraMsg(m.ts)}</span>
-                  <strong className="sos-chat-msg-agente">{m.agente}</strong>
-                  {m.audio
-                    ? <audio controls src={m.audio} style={{ height: 32, maxWidth: '100%', marginTop: 4, display: 'block' }} />
-                    : <span className="sos-chat-msg-txt">{m.texto}</span>
-                  }
-                </div>
-              ))}
+              {(alerta.mensagens ?? [])
+                .filter(m => !(m.audio && m.agente === getAgenteLogado()))
+                .map((m, i) => (
+                  <div key={i} className="sos-chat-msg">
+                    <span className="sos-chat-msg-hora">{formatarHoraMsg(m.ts)}</span>
+                    <strong className="sos-chat-msg-agente">{m.agente}</strong>
+                    {m.audio
+                      ? <audio controls src={m.audio} style={{ height: 32, maxWidth: '100%', marginTop: 4, display: 'block' }} />
+                      : <span className="sos-chat-msg-txt">{m.texto}</span>
+                    }
+                  </div>
+                ))}
             </div>
           )}
 

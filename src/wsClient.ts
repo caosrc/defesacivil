@@ -163,7 +163,7 @@ function conectarSupabaseRealtime() {
         return
       }
 
-      const dedupKey = `${tipo}-${payload.id ?? payload.ts ?? JSON.stringify(payload).slice(0, 60)}`
+      const dedupKey = buildDedupKey(tipo, payload)
       if (!novaMsg(dedupKey)) return
       dispatch(tipo, payload)
     })
@@ -294,7 +294,7 @@ export function wsSend(msg: Record<string, unknown>): void {
     }).catch(() => {})
   }
 
-  const dedupKey = `${tipo}-${msg.id ?? msg.ts ?? JSON.stringify(msg).slice(0, 60)}`
+  const dedupKey = buildDedupKey(tipo, msg)
   novaMsg(dedupKey)
 
   if (ws && ws.readyState === WebSocket.OPEN) {
@@ -302,6 +302,16 @@ export function wsSend(msg: Record<string, unknown>): void {
   }
 
   sbBroadcast(msg)
+}
+
+// Chave de deduplicação específica por tipo de mensagem
+function buildDedupKey(tipo: string, payload: Record<string, unknown>): string {
+  // sos-mensagem: cada mensagem é identificada pelo alertaId + timestamp do envio
+  // (evita que mensagens subsequentes ao mesmo alerta sejam descartadas)
+  if (tipo === 'sos-mensagem') {
+    return `sos-mensagem-${payload.id}-${payload.ts}`
+  }
+  return `${tipo}-${payload.id ?? payload.ts ?? JSON.stringify(payload).slice(0, 60)}`
 }
 
 export function wsConnect() {
