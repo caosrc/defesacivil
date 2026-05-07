@@ -70,4 +70,4 @@ VAPID_PUBLIC_KEY = "BDR2WpHgL7IN1NNdJv67HEMbyeUEnDRvgcnyfdWaopzkAOqa6EDYSbkXroYJ
 VAPID_PRIVATE_KEY = "JiMyN_yufPgt4NTnVmm0ImMVx4jG8CfoD_5ENADmsIQ"
 VAPID_SUBJECT = "mailto:defesacivilob@gmail.com"
 PORT = "3001"
-VITE_USE_SUPABASE = "true"
+VITE_USE_SUPABASE = "false"
