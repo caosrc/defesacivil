@@ -351,6 +351,7 @@ export default function App() {
     setSincronizando(true)
     let ok = 0
     let falhas = 0
+    let ultimoErro = ''
     for (const item of pending) {
       const { localId, _savedAt, _offline, _localId, ...data } = item
       void _offline; void _localId; void _savedAt
@@ -361,14 +362,17 @@ export default function App() {
       } catch (err) {
         if (err instanceof ApiError) {
           if (err.status >= 400 && err.status < 500) {
-            console.error(`[sync] Item ${localId} rejeitado pelo servidor (${err.status}): ${err.message} — removendo da fila`)
+            console.error(`[sync] Item ${localId} rejeitado (${err.status}): ${err.message} — removendo da fila`)
             await removePending(localId).catch(() => {})
           } else {
-            console.warn(`[sync] Item ${localId} falhou com erro ${err.status} — vai tentar de novo`)
+            console.warn(`[sync] Item ${localId} falhou (${err.status}): ${err.message}`)
+            ultimoErro = err.message
             falhas++
           }
         } else {
-          console.warn(`[sync] Item ${localId} falhou por erro de rede — vai tentar de novo:`, err)
+          const msg = err instanceof Error ? err.message : String(err)
+          console.warn(`[sync] Item ${localId} falhou por erro de rede:`, err)
+          ultimoErro = msg
           falhas++
         }
       }
@@ -379,12 +383,12 @@ export default function App() {
       await carregar()
       if (!silencioso) {
         showToast(falhas > 0
-          ? `✅ ${ok} sincronizada(s). ${falhas} pendente(s) aguardando.`
+          ? `✅ ${ok} sincronizada(s). ⚠️ ${falhas} pendente(s) — ${ultimoErro || 'verifique a conexão'}.`
           : `✅ ${ok} ocorrência(s) sincronizadas com sucesso!`
         )
       }
-    } else if (falhas > 0 && !silencioso) {
-      showToast(`⚠️ Falha ao sincronizar. Verifique a conexão e tente novamente.`)
+    } else if (falhas > 0) {
+      showToast(`⚠️ Falha ao sincronizar: ${ultimoErro || 'verifique a conexão e tente novamente'}.`)
     }
   }, [sincronizando, carregar, atualizarPendingCount])
 
@@ -561,7 +565,7 @@ export default function App() {
       )}
 
       {isOnline && pendingCount > 0 && (
-        <div className="sync-banner" onClick={sincronizar}>
+        <div className="sync-banner" onClick={() => sincronizar()}>
           {sincronizando
             ? '⏳ Sincronizando...'
             : `🔄 ${pendingCount} ocorrência(s) pendente(s) — toque para sincronizar`}
