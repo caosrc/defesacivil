@@ -296,6 +296,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [camadaMapa, setCamadaMapa] = useState<CamadaMapa>('padrao')
   const [mostrarOcorrencias, setMostrarOcorrencias] = useState(false)
   const [mostrarMateriais, setMostrarMateriais] = useState(false)
+  const [painelMaterialAberto, setPainelMaterialAberto] = useState(false)
   const [submenuFiltroAberto, setSubmenuFiltroAberto] = useState(false)
   const [naturezasOcultas, setNaturezasOcultas] = useState<Set<string>>(new Set())
 
@@ -1118,7 +1119,15 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         </button>
         <button
           className={`mapa-camada-btn ${mostrarMateriais ? 'ativo' : ''}`}
-          onClick={() => setMostrarMateriais(v => !v)}
+          onClick={() => {
+            if (mostrarMateriais) {
+              setMostrarMateriais(false)
+              setPainelMaterialAberto(false)
+            } else {
+              setMostrarMateriais(true)
+              setPainelMaterialAberto(true)
+            }
+          }}
           title={`${equipamentosCampo.filter(c => c.status === 'ativo').length} em campo`}
         >
           🚧 Material{equipamentosCampo.filter(c => c.status === 'ativo').length > 0 ? ` (${equipamentosCampo.filter(c => c.status === 'ativo').length})` : ''}
@@ -1186,11 +1195,11 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
       </div>
 
       {/* Painel de equipamentos em campo — aparece quando o botão Material está ativo */}
-      {mostrarMateriais && (
+      {mostrarMateriais && painelMaterialAberto && (
         <div className="mapa-material-painel">
           <div className="mapa-material-painel-header">
             <span>🚧 Equipamentos em Campo</span>
-            <button className="mapa-material-painel-fechar" onClick={() => setMostrarMateriais(false)}>✕</button>
+            <button className="mapa-material-painel-fechar" onClick={() => setPainelMaterialAberto(false)}>✕</button>
           </div>
           {equipamentosCampo.filter(c => c.status === 'ativo').length === 0 ? (
             <p className="mapa-material-painel-vazio">Nenhum equipamento ativo em campo.</p>
