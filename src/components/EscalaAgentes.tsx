@@ -989,7 +989,6 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
   async function removerLinha(data: string) {
     setSalvando(true)
     await onSalvarHora(data, 0)
-    onSalvarJustificativa(data, '')
     setSalvando(false)
     if (editandoData === data) setEditandoData(null)
   }
@@ -2412,8 +2411,10 @@ export default function EscalaAgentes() {
 
   async function salvarHoraExtraSimples(data: string, horas: number): Promise<{ ok: boolean; mensagem?: string }> {
     const agenteHoras = { ...(dados.horasExtrasSimples[agenteLogado] ?? {}) }
+    const agenteJustifs = { ...(dados.justificativasExtrasSimples?.[agenteLogado] ?? {}) }
     if (horas === 0) {
       delete agenteHoras[data]
+      delete agenteJustifs[data]
     } else {
       agenteHoras[data] = horas
     }
@@ -2422,6 +2423,10 @@ export default function EscalaAgentes() {
       horasExtrasSimples: {
         ...dados.horasExtrasSimples,
         [agenteLogado]: agenteHoras,
+      },
+      justificativasExtrasSimples: {
+        ...(dados.justificativasExtrasSimples ?? {}),
+        [agenteLogado]: agenteJustifs,
       },
     }
     setDados(novos)
