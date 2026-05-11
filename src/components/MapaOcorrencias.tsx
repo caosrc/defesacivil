@@ -1121,7 +1121,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           onClick={() => setMostrarMateriais(v => !v)}
           title={`${equipamentosCampo.filter(c => c.status === 'ativo').length} em campo`}
         >
-          🚧 Material{mostrarMateriais && equipamentosCampo.filter(c => c.status === 'ativo').length > 0 ? ` (${equipamentosCampo.filter(c => c.status === 'ativo').length})` : ''}
+          🚧 Material{equipamentosCampo.filter(c => c.status === 'ativo').length > 0 ? ` (${equipamentosCampo.filter(c => c.status === 'ativo').length})` : ''}
         </button>
         <div className="mapa-ocorr-wrap">
           <button
@@ -1184,6 +1184,38 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           )}
         </div>
       </div>
+
+      {/* Painel de equipamentos em campo — aparece quando o botão Material está ativo */}
+      {mostrarMateriais && (
+        <div className="mapa-material-painel">
+          <div className="mapa-material-painel-header">
+            <span>🚧 Equipamentos em Campo</span>
+            <button className="mapa-material-painel-fechar" onClick={() => setMostrarMateriais(false)}>✕</button>
+          </div>
+          {equipamentosCampo.filter(c => c.status === 'ativo').length === 0 ? (
+            <p className="mapa-material-painel-vazio">Nenhum equipamento ativo em campo.</p>
+          ) : (
+            <div className="mapa-material-painel-lista">
+              {equipamentosCampo.filter(c => c.status === 'ativo').map(c => (
+                <div key={c.id} className="mapa-material-painel-item">
+                  <span className="mapa-material-painel-nome">🚧 {c.material_nome ?? 'Equipamento'}</span>
+                  {(c.rua || c.bairro) ? (
+                    <span className="mapa-material-painel-local">📍 {[c.rua, c.bairro].filter(Boolean).join(' — ')}</span>
+                  ) : (
+                    <span className="mapa-material-painel-sem-gps">📍 Localização não informada</span>
+                  )}
+                  {c.observacao && (
+                    <span className="mapa-material-painel-obs">{c.observacao}</span>
+                  )}
+                  {!(c.latitude && c.longitude) && (
+                    <span className="mapa-material-painel-sem-pin">Sem GPS — não aparece no mapa</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Barra de busca de endereço (estilo Google Maps, com autocomplete) */}
       <div className="mapa-busca">

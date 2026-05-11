@@ -57,6 +57,7 @@ export const NATUREZAS = [
   'Interdição de Imóvel',
   'Interdição de Via',
   'Acidente de Trânsito',
+  'Sinalização de Segurança',
 ]
 
 export const NATUREZA_ICONE: Record<string, string> = {
@@ -79,6 +80,7 @@ export const NATUREZA_ICONE: Record<string, string> = {
   'Interdição de Imóvel': '🚫',
   'Interdição de Via': '🚧',
   'Acidente de Trânsito': '🚗',
+  'Sinalização de Segurança': '🚦',
 }
 
 export const NATUREZA_COR: Record<string, string> = {
@@ -101,4 +103,5 @@ export const NATUREZA_COR: Record<string, string> = {
   'Interdição de Imóvel': '#b91c1c',
   'Interdição de Via': '#c2410c',
   'Acidente de Trânsito': '#ef4444',
+  'Sinalização de Segurança': '#f59e0b',
 }

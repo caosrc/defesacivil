@@ -327,6 +327,13 @@ function hojeStr(): string {
   return chaveData(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
+// Data mínima permitida para lançamento de horas (hoje - 7 dias)
+function prazoLancamentoMin(): string {
+  const d = new Date()
+  d.setDate(d.getDate() - 7)
+  return chaveData(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
 function fmtDataLonga(str: string) {
   const [y, m, d] = str.split('-')
   return `${d}/${m}/${y}`
@@ -708,6 +715,7 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
               const aberta = semanaAberta === seg
               const horasExtras = horasExtrasDaSemana(seg)
               const totalSemana = HORAS_POR_DIA_SOBREAVISO + horasExtras
+              const foraDoPrazo = seg < prazoLancamentoMin()
 
               return (
                 <div key={seg} className="bh-semana-bloco">
@@ -753,22 +761,26 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
                                 {isSabado && <span className="bh-dia-badge sabado">×{(1 + percSabado / 100).toFixed(1)}</span>}
                                 {!isFerOuDom && !isSabado && <span className="bh-dia-badge mult15">×{(1 + percSobreaviso / 100).toFixed(1)}</span>}
                               </div>
-                              <div className="bh-dia-input-wrap">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  max={24}
-                                  step={0.5}
-                                  value={hInput === 0 ? '' : hInput}
-                                  placeholder="0"
-                                  className="bh-dia-input"
-                                  onChange={e => {
-                                    const val = parseFloat(e.target.value) || 0
-                                    onUpdateHoras(data, Math.min(24, Math.max(0, val)))
-                                  }}
-                                />
-                                <span className="bh-dia-input-h">h</span>
-                              </div>
+                              {foraDoPrazo ? (
+                                <span className="bh-dia-prazo-aviso" title="Prazo de 7 dias para lançamento encerrado">🔒 Prazo encerrado</span>
+                              ) : (
+                                <div className="bh-dia-input-wrap">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={24}
+                                    step={0.5}
+                                    value={hInput === 0 ? '' : hInput}
+                                    placeholder="0"
+                                    className="bh-dia-input"
+                                    onChange={e => {
+                                      const val = parseFloat(e.target.value) || 0
+                                      onUpdateHoras(data, Math.min(24, Math.max(0, val)))
+                                    }}
+                                  />
+                                  <span className="bh-dia-input-h">h</span>
+                                </div>
+                              )}
                               {hInput > 0 && (
                                 <span className="bh-dia-calc">
                                   = {fmtH(hCalc)}h
@@ -786,6 +798,7 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
                                   value={justificativasAgente[data] ?? ''}
                                   rows={4}
                                   maxLength={500}
+                                  disabled={foraDoPrazo}
                                   onChange={e => onUpdateJustificativa(data, e.target.value)}
                                 />
                                 {!(justificativasAgente[data] ?? '').trim() && (
@@ -930,6 +943,11 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
   const [erro, setErro] = useState<string>('')
   const [salvando, setSalvando] = useState(false)
   const [feedback, setFeedback] = useState<{ tipo: 'ok' | 'erro'; texto: string } | null>(null)
+  const [editandoData, setEditandoData] = useState<string | null>(null)
+  const [editandoHoras, setEditandoHoras] = useState<string>('')
+
+  const minData = prazoLancamentoMin()
+  const maxData = hojeStr()
 
   const total = Object.values(horasAgente).reduce((acc, h) => acc + h, 0)
   const entradas = Object.entries(horasAgente).sort(([a], [b]) => b.localeCompare(a))
@@ -943,6 +961,14 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
     const h = parseFloat(novasHoras)
     if (!novaData || isNaN(h) || h <= 0) {
       setErro('Informe uma data e uma quantidade de horas válida.')
+      return
+    }
+    if (novaData < minData) {
+      setErro(`Prazo encerrado. Só é possível lançar horas dos últimos 7 dias (a partir de ${fmtDataLonga(minData)}).`)
+      return
+    }
+    if (novaData > maxData) {
+      setErro('Não é possível lançar horas para datas futuras.')
       return
     }
     setErro('')
@@ -965,6 +991,24 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
     await onSalvarHora(data, 0)
     onSalvarJustificativa(data, '')
     setSalvando(false)
+    if (editandoData === data) setEditandoData(null)
+  }
+
+  async function salvarEdicao(data: string) {
+    const h = parseFloat(editandoHoras)
+    if (isNaN(h) || h <= 0) {
+      await removerLinha(data)
+      return
+    }
+    setSalvando(true)
+    const resultado = await onSalvarHora(data, Math.min(24, h))
+    setSalvando(false)
+    setEditandoData(null)
+    if (resultado.ok) {
+      mostrarFeedback('ok', `✅ Entrada de ${fmtDataLonga(data)} atualizada para ${fmtH(h)}h`)
+    } else {
+      mostrarFeedback('erro', `⚠️ Salvo localmente. Falha no servidor: ${resultado.mensagem ?? 'erro desconhecido'}`)
+    }
   }
 
   return (
@@ -990,7 +1034,13 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
           <div className="escala-ferias-datas">
             <div className="escala-ferias-data-campo">
               <label>Data</label>
-              <input type="date" value={novaData} onChange={e => { setNovaData(e.target.value); setErro('') }} />
+              <input
+                type="date"
+                value={novaData}
+                min={minData}
+                max={maxData}
+                onChange={e => { setNovaData(e.target.value); setErro('') }}
+              />
             </div>
             <div className="escala-ferias-data-campo">
               <label>Horas</label>
@@ -1016,6 +1066,7 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
               onChange={e => setNovaJustif(e.target.value)}
             />
           </div>
+          <p className="bh-prazo-aviso-texto">⏰ Prazo: até 7 dias após o dia da atividade (a partir de {fmtDataLonga(minData)})</p>
           {erro && <span className="escala-ferias-erro">{erro}</span>}
           <button className="escala-ferias-add bh-salvar-btn" onClick={salvar} disabled={salvando}>
             {salvando ? '⏳ Salvando no banco de dados…' : '💾 Salvar horas no banco de dados'}
@@ -1036,25 +1087,53 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
               const dow = new Date(y, m - 1, d).getDay()
               const nomeDia = DIAS_SEMANA_NOMES[dow]
               const justif = justifAgente[data]
+              const estaEditando = editandoData === data
               return (
                 <div key={data} className="bh-domfer-row bh-domfer-row--justif">
                   <div className="bh-domfer-row-topo">
                     <span className="bh-domfer-dia">{nomeDia}</span>
                     <span className="bh-domfer-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}/{y}</span>
-                    <span className="bh-domfer-input">{fmtH(h)}h</span>
-                    <span className="bh-domfer-mult">×1,0</span>
-                    <span className="bh-domfer-calc">= {fmtH(h)}h</span>
-                    <button
-                      className="escala-ferias-remover"
-                      onClick={() => removerLinha(data)}
-                      disabled={salvando}
-                      title="Remover"
-                    >✕</button>
+                    {estaEditando ? (
+                      <div className="bh-extra-edit-inline">
+                        <input
+                          type="number"
+                          min={0.5}
+                          max={24}
+                          step={0.5}
+                          className="bh-extra-edit-input"
+                          value={editandoHoras}
+                          autoFocus
+                          onChange={e => setEditandoHoras(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') salvarEdicao(data); if (e.key === 'Escape') setEditandoData(null) }}
+                        />
+                        <span className="bh-domfer-input-h">h</span>
+                        <button className="bh-extra-edit-ok" onClick={() => salvarEdicao(data)} disabled={salvando}>✓</button>
+                        <button className="bh-extra-edit-cancel" onClick={() => setEditandoData(null)}>✕</button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="bh-domfer-input">{fmtH(h)}h</span>
+                        <span className="bh-domfer-mult">×1,0</span>
+                        <span className="bh-domfer-calc">= {fmtH(h)}h</span>
+                        <button
+                          className="bh-extra-edit-btn"
+                          onClick={() => { setEditandoData(data); setEditandoHoras(String(h)) }}
+                          disabled={salvando}
+                          title="Editar horas"
+                        >✏️</button>
+                        <button
+                          className="escala-ferias-remover"
+                          onClick={() => removerLinha(data)}
+                          disabled={salvando}
+                          title="Remover"
+                        >✕</button>
+                      </>
+                    )}
                   </div>
                   {justif && (
                     <div className="bh-domfer-justif">📝 {justif}</div>
                   )}
-                  {!justif && (
+                  {!justif && !estaEditando && (
                     <div className="bh-domfer-justif-input-wrap">
                       <input
                         className="bh-domfer-justif-input"
