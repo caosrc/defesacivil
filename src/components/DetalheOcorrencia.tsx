@@ -418,6 +418,19 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                   <InfoRow icone="📍" label="Localização" valor="Não informada" />
                 )}
 
+                {/* ── Focos de Incêndio ── */}
+                {Array.isArray(o.focos_incendio) && o.focos_incendio.length > 0 && (
+                  <div className="focos-incendio-detalhe">
+                    <div className="detalhe-label-row">🔥 Focos de Incêndio ({o.focos_incendio.length})</div>
+                    {o.focos_incendio.map((foco, idx) => (
+                      <div key={idx} className="foco-detalhe-item">
+                        <span className="foco-detalhe-num">Foco {idx + 1}</span>
+                        <span className="foco-detalhe-coords">{formatarCoordenadas(foco.lat, foco.lng)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {o.proprietario && <InfoRow icone="👤" label="Proprietário / Morador" valor={o.proprietario} />}
                 {o.situacao && <InfoRow icone="📝" label="Situação" valor={o.situacao} />}
                 {o.recomendacao && <InfoRow icone="💡" label="Recomendação" valor={o.recomendacao} />}

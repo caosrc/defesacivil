@@ -11,6 +11,8 @@ interface Props {
   isOnline: boolean
 }
 
+type FocoIncendio = { lat: number | null; lng: number | null; buscando: boolean }
+
 export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const hoje = new Date().toISOString().split('T')[0]
   const [tipo, setTipo] = useState('')
@@ -45,6 +47,9 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const cameraRef = useRef<HTMLInputElement>(null)
   const galeriaRef = useRef<HTMLInputElement>(null)
 
+  // ── Focos de incêndio (apenas para Incêndio em Área Urbana/Rural) ──────────
+  const [focosIncendio, setFocosIncendio] = useState<FocoIncendio[]>([{ lat: null, lng: null, buscando: false }])
+
   useEffect(() => {
     function fechar(e: MouseEvent) {
       if (tipoRef.current && !tipoRef.current.contains(e.target as Node)) setTipoAberto(false)
@@ -56,6 +61,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
 
   const precisaSubnatureza = natureza === 'Queda de Estrutura' || natureza === 'Apreensão e Captura de Animal'
   const labelSubnatureza = natureza === 'Queda de Estrutura' ? 'Qual é a estrutura?' : 'Qual é o animal?'
+  const ehIncendio = natureza === 'Incêndio em Área Urbana' || natureza === 'Incêndio em Área Rural'
 
   function obterGps() {
     if (!navigator.geolocation) { setErro('Geolocalização não disponível.'); return }
@@ -79,6 +85,34 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
     )
+  }
+
+  function obterGpsFoco(idx: number) {
+    if (!navigator.geolocation) { setErro('Geolocalização não disponível.'); return }
+    setErro('')
+    setFocosIncendio(prev => prev.map((f, i) => i === idx ? { ...f, buscando: true } : f))
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const novoLat = parseFloat(pos.coords.latitude.toFixed(6))
+        const novoLng = parseFloat(pos.coords.longitude.toFixed(6))
+        setFocosIncendio(prev => prev.map((f, i) => i === idx ? { lat: novoLat, lng: novoLng, buscando: false } : f))
+        // Foco 1 também define a localização principal da ocorrência
+        if (idx === 0) { setLat(novoLat); setLng(novoLng) }
+      },
+      (err) => {
+        setFocosIncendio(prev => prev.map((f, i) => i === idx ? { ...f, buscando: false } : f))
+        setErro(mensagemErroGps(err))
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
+    )
+  }
+
+  function adicionarFoco() {
+    setFocosIncendio(prev => [...prev, { lat: null, lng: null, buscando: false }])
+  }
+
+  function removerFoco(idx: number) {
+    setFocosIncendio(prev => prev.filter((_, i) => i !== idx))
   }
 
   async function localizarEndereco() {
@@ -139,6 +173,11 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
 
     const tipoFinal = tipo === 'Outro' ? (tipoOutro.trim() || 'Outro') : tipo
 
+    // Monta lista de focos válidos (com coordenadas) para incêndios
+    const focosValidos = ehIncendio
+      ? focosIncendio.filter(f => f.lat != null && f.lng != null).map(f => ({ lat: f.lat!, lng: f.lng! }))
+      : null
+
     const payload = {
       tipo: tipoFinal,
       natureza,
@@ -156,6 +195,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       conclusao: conclusao || null,
       agentes,
       responsavel_registro: sessionStorage.getItem('defesacivil-agente-sessao') || null,
+      focos_incendio: focosValidos && focosValidos.length > 0 ? focosValidos : null,
     }
 
     try {
@@ -378,18 +418,61 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
           <div className="campo">
             <label className="campo-label">7 — Localização</label>
 
-            {/* GPS */}
-            <div className="gps-row">
-              <div className="gps-info">
-                <span>📍</span>
-                {lat
-                  ? <span className="gps-val">{formatarCoordenadas(lat, lng)}</span>
-                  : <span className="gps-vazio">Sem GPS</span>}
+            {/* Focos de Incêndio — seção condicional */}
+            {ehIncendio && (
+              <div className="focos-incendio-section">
+                <div className="focos-incendio-titulo">🔥 Focos de Incêndio</div>
+                {focosIncendio.map((foco, idx) => (
+                  <div key={idx} className="foco-row">
+                    <div className="foco-header">
+                      <span className="foco-label">Foco {idx + 1}</span>
+                      {idx > 0 && (
+                        <button
+                          type="button"
+                          className="btn-remover-foco"
+                          onClick={() => removerFoco(idx)}
+                          title="Remover foco"
+                        >✕</button>
+                      )}
+                    </div>
+                    <div className="gps-row">
+                      <div className="gps-info">
+                        <span>📍</span>
+                        {foco.lat != null
+                          ? <span className="gps-val">{formatarCoordenadas(foco.lat, foco.lng)}</span>
+                          : <span className="gps-vazio">Sem GPS</span>}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn-gps"
+                        onClick={() => obterGpsFoco(idx)}
+                        disabled={foco.buscando}
+                      >
+                        {foco.buscando ? '⏳' : 'Obter GPS'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <button type="button" className="btn-adicionar-foco" onClick={adicionarFoco}>
+                  + Foco
+                </button>
               </div>
-              <button className="btn-gps" onClick={obterGps} disabled={buscandoGps}>
-                {buscandoGps ? '⏳' : 'Obter GPS'}
-              </button>
-            </div>
+            )}
+
+            {/* GPS principal (exibido apenas quando não é incêndio, ou como fallback) */}
+            {!ehIncendio && (
+              <div className="gps-row">
+                <div className="gps-info">
+                  <span>📍</span>
+                  {lat
+                    ? <span className="gps-val">{formatarCoordenadas(lat, lng)}</span>
+                    : <span className="gps-vazio">Sem GPS</span>}
+                </div>
+                <button className="btn-gps" onClick={obterGps} disabled={buscandoGps}>
+                  {buscandoGps ? '⏳' : 'Obter GPS'}
+                </button>
+              </div>
+            )}
 
             {/* Address + geocode button */}
             <div className="endereco-row">

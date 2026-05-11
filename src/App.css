@@ -2081,6 +2081,65 @@ input, select, textarea { font-family: inherit; }
 .btn-gps:hover:not(:disabled) { background: #1a6bbf; }
 .btn-gps:disabled { opacity: 0.6; cursor: default; }
 
+/* ── Focos de Incêndio — formulário ── */
+.focos-incendio-section {
+  border: 1.5px solid #fca5a5;
+  border-radius: 10px;
+  background: #fff7f7;
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.focos-incendio-titulo {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #b91c1c;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 0.1rem;
+}
+.foco-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.foco-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.foco-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #dc2626;
+}
+.btn-remover-foco {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+.btn-remover-foco:hover { color: #ef4444; }
+.btn-adicionar-foco {
+  align-self: flex-start;
+  background: #fef2f2;
+  border: 1.5px dashed #fca5a5;
+  color: #dc2626;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.35rem 0.85rem;
+  border-radius: 7px;
+  cursor: pointer;
+  margin-top: 0.2rem;
+  transition: background 0.15s;
+}
+.btn-adicionar-foco:hover { background: #fee2e2; }
+
 .erro-msg {
   background: #fef2f2; border: 1px solid #fca5a5;
   color: #991b1b; padding: 0.6rem 0.85rem;
@@ -2172,6 +2231,34 @@ input, select, textarea { font-family: inherit; }
 
 .fotos-detalhe { display: flex; flex-direction: column; gap: 0.4rem; }
 .detalhe-label-row { font-size: 0.72rem; font-weight: 700; color: #1a4b8c; text-transform: uppercase; letter-spacing: 0.3px; }
+
+/* ── Focos de Incêndio — detalhe ── */
+.focos-incendio-detalhe {
+  background: #fff7f7;
+  border: 1.5px solid #fca5a5;
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.focos-incendio-detalhe .detalhe-label-row { color: #b91c1c; }
+.foco-detalhe-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.84rem;
+}
+.foco-detalhe-num {
+  font-weight: 700;
+  color: #dc2626;
+  min-width: 52px;
+}
+.foco-detalhe-coords {
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: #374151;
+}
 .fotos-grid { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 
 .foto-btn {

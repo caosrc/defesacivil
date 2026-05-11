@@ -67,6 +67,7 @@ function buildPayload(dados: Omit<Ocorrencia, 'id' | 'created_at'>) {
     agentes: Array.isArray(dados.agentes) ? dados.agentes : [],
     responsavel_registro: dados.responsavel_registro ?? null,
     vistorias: Array.isArray(dados.vistorias) ? dados.vistorias : [],
+    focos_incendio: Array.isArray((dados as any).focos_incendio) ? (dados as any).focos_incendio : null,
   }
 }
 

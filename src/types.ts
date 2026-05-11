@@ -29,6 +29,7 @@ export interface Ocorrencia {
   agentes: string[]
   responsavel_registro: string | null
   vistorias: VistoriaAdicional[] | null
+  focos_incendio?: { lat: number; lng: number }[] | null
   _offline?: boolean
   _localId?: number
 }
