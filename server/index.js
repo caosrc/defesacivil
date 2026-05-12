@@ -1186,12 +1186,21 @@ app.post('/api/equipamentos-campo', async (req, res) => {
 app.patch('/api/equipamentos-campo/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10)
   if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' })
-  const { status } = req.body || {}
+  const { status, latitude, longitude } = req.body || {}
   try {
-    const result = await query(
-      'UPDATE equipamentos_campo SET status=$1 WHERE id=$2 RETURNING *',
-      [status || 'devolvido', id]
-    )
+    let result
+    if (latitude !== undefined || longitude !== undefined) {
+      // Atualização de GPS
+      result = await query(
+        'UPDATE equipamentos_campo SET latitude=$1, longitude=$2 WHERE id=$3 RETURNING *',
+        [latitude ?? null, longitude ?? null, id]
+      )
+    } else {
+      result = await query(
+        'UPDATE equipamentos_campo SET status=$1 WHERE id=$2 RETURNING *',
+        [status || 'devolvido', id]
+      )
+    }
     if (!result.rows[0]) return res.status(404).json({ error: 'Registro não encontrado' })
     broadcastParaTodos({ tipo: 'campo_atualizado' })
     res.json(result.rows[0])

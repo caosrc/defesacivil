@@ -205,7 +205,7 @@ export type ProgressoMapa = {
 // Por padrão cobre raio de 10 km e zooms 11..17 (cidade + entorno imediato).
 export function baixarMapaOffline(
   onProgresso: (p: ProgressoMapa) => void,
-  zooms = [11, 12, 13, 14, 15, 16, 17],
+  zooms = [11, 12, 13, 14, 15, 16],
   raioKm = 10
 ): Promise<void> {
   return new Promise((resolve, reject) => {

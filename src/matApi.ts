@@ -293,6 +293,22 @@ export const matApi = {
     })
   },
 
+  async atualizarGpsCampo(id: number, latitude: number | null, longitude: number | null): Promise<void> {
+    if (supabaseDisponivel) {
+      const { error } = await supabase
+        .from('equipamentos_campo')
+        .update({ latitude, longitude })
+        .eq('id', id)
+      if (error) sbErr(error, 'atualizarGpsCampo')
+      return
+    }
+    await apiFetch<unknown>(`/api/equipamentos-campo/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ latitude, longitude }),
+    })
+  },
+
   async excluirCampo(id: number): Promise<void> {
     if (supabaseDisponivel) {
       const { error } = await supabase.from('equipamentos_campo').delete().eq('id', id)

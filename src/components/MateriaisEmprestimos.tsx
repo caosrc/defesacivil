@@ -803,6 +803,11 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
           setCampoSelecionado(null)
           setModo('campo')
         }}
+        onGpsAtualizado={(lat, lng) => {
+          setCampoSelecionado(prev => prev ? { ...prev, latitude: lat, longitude: lng } : prev)
+          showToast('📡 Coordenadas GPS atualizadas!')
+          carregar()
+        }}
       />
     )
   }
@@ -1981,6 +1986,48 @@ function ImportarExcelModal({
   )
 }
 
+// ─── DMS GPS helpers (Graus, Minutos, Segundos) ─────────────────────────────
+type DmsEdicao = { graus: string; minutos: string; segundos: string; direcao: string }
+
+const DMS_LAT_VAZIO: DmsEdicao = { graus: '', minutos: '', segundos: '', direcao: 'S' }
+const DMS_LNG_VAZIO: DmsEdicao = { graus: '', minutos: '', segundos: '', direcao: 'O' }
+
+function decimalParaPartesGms(valor: number | null, positivo: string, negativo: string): DmsEdicao {
+  if (valor == null) return { graus: '', minutos: '', segundos: '', direcao: negativo }
+  const abs = Math.abs(valor)
+  let g = Math.floor(abs)
+  const mf = (abs - g) * 60
+  let m = Math.floor(mf)
+  let sn = Math.round((mf - m) * 6000) / 100
+  if (sn >= 60) { sn = 0; m += 1 }
+  if (m >= 60) { m = 0; g += 1 }
+  return {
+    graus: String(g),
+    minutos: String(m),
+    segundos: sn.toFixed(2).replace('.', ','),
+    direcao: valor >= 0 ? positivo : negativo,
+  }
+}
+
+function partesGmsParaDecimal(
+  partes: DmsEdicao,
+  negativo: string,
+  limiteGraus: number,
+  label: string
+): number | null {
+  const temValor = partes.graus.trim() || partes.minutos.trim() || partes.segundos.trim()
+  if (!temValor) return null
+  const g = Number(partes.graus.replace(',', '.'))
+  const m = Number((partes.minutos || '0').replace(',', '.'))
+  const s = Number((partes.segundos || '0').replace(',', '.'))
+  if (!Number.isFinite(g) || !Number.isFinite(m) || !Number.isFinite(s))
+    throw new Error(`${label}: informe apenas números em graus, minutos e segundos.`)
+  if (!Number.isInteger(g) || !Number.isInteger(m) || g < 0 || g > limiteGraus || m < 0 || m >= 60 || s < 0 || s >= 60)
+    throw new Error(`${label}: confira os valores de graus, minutos e segundos.`)
+  const sinal = partes.direcao === negativo ? -1 : 1
+  return parseFloat((sinal * (g + m / 60 + s / 3600)).toFixed(6))
+}
+
 // ─── FORM CAMPO ─────────────────────────────────────────────────────────────
 function FormCampo({
   materiais,
@@ -1997,8 +2044,8 @@ function FormCampo({
   const [quantidade, setQuantidade] = useState(1)
   const [prazoCampoDias, setPrazoCampoDias] = useState<number | ''>('' )
   const [fotos, setFotos] = useState<string[]>([])
-  const [latitude, setLatitude] = useState<number | null>(null)
-  const [longitude, setLongitude] = useState<number | null>(null)
+  const [latDms, setLatDms] = useState<DmsEdicao>(DMS_LAT_VAZIO)
+  const [lngDms, setLngDms] = useState<DmsEdicao>(DMS_LNG_VAZIO)
   const [obtendoGps, setObtendoGps] = useState(false)
   const [erroGps, setErroGps] = useState('')
   const [rua, setRua] = useState('')
@@ -2008,6 +2055,8 @@ function FormCampo({
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const fotoInputRef = useRef<HTMLInputElement>(null)
+
+  const temGps = !!(latDms.graus.trim() || lngDms.graus.trim())
 
   function handleMaterial(id: string) {
     setMaterialId(id)
@@ -2033,8 +2082,8 @@ function FormCampo({
     setErroGps('')
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLatitude(pos.coords.latitude)
-        setLongitude(pos.coords.longitude)
+        setLatDms(decimalParaPartesGms(pos.coords.latitude, 'N', 'S'))
+        setLngDms(decimalParaPartesGms(pos.coords.longitude, 'L', 'O'))
         setObtendoGps(false)
       },
       (err) => {
@@ -2049,6 +2098,16 @@ function FormCampo({
     if (!materialId) { setErro('Selecione o material.'); return }
     setSalvando(true); setErro('')
     try {
+      let latitude: number | null = null
+      let longitude: number | null = null
+      try {
+        latitude = partesGmsParaDecimal(latDms, 'S', 90, 'Latitude')
+        longitude = partesGmsParaDecimal(lngDms, 'O', 180, 'Longitude')
+      } catch (e: any) {
+        setErro(e?.message ?? 'Coordenadas inválidas')
+        setSalvando(false)
+        return
+      }
       const dataRecolha = new Date()
       dataRecolha.setDate(dataRecolha.getDate() + Math.max(1, typeof prazoCampoDias === 'number' ? prazoCampoDias : 1))
       await matApi.criarCampo({
@@ -2148,17 +2207,95 @@ function FormCampo({
 
         <div className="campo">
           <label className="campo-label">Localização GPS</label>
-          {latitude && longitude ? (
-            <div className="campo-gps-ok">
-              <span>📡 GPS obtido: {latitude.toFixed(6)}, {longitude.toFixed(6)}</span>
-              <button className="mat-btn-acao" onClick={() => { setLatitude(null); setLongitude(null) }}>Limpar</button>
-            </div>
-          ) : (
-            <button className="mat-btn-acao mat-btn-acao-gps" onClick={obterGps} disabled={obtendoGps}>
-              {obtendoGps ? '⏳ Obtendo GPS...' : '📡 Obter localização GPS'}
-            </button>
-          )}
+          <button className="mat-btn-acao mat-btn-acao-gps" onClick={obterGps} disabled={obtendoGps} style={{ marginBottom: '0.6rem' }}>
+            {obtendoGps ? '⏳ Obtendo GPS automático...' : '📡 Obter GPS pelo celular'}
+          </button>
           {erroGps && <div className="campo-erro">{erroGps}</div>}
+
+          <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.35rem', marginTop: '0.1rem' }}>
+            Ou informe manualmente em Graus, Minutos e Segundos (GMS):
+          </div>
+
+          {/* Latitude */}
+          <div style={{ marginBottom: '0.4rem' }}>
+            <div style={{ fontSize: '0.72rem', color: '#374151', marginBottom: '0.2rem', fontWeight: 600 }}>Latitude</div>
+            <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                className="campo-input" type="number" placeholder="G" min={0} max={90} style={{ width: '3.8rem', flex: 'none' }}
+                value={latDms.graus}
+                onChange={e => setLatDms(p => ({ ...p, graus: e.target.value }))}
+              />
+              <span style={{ color: '#374151' }}>°</span>
+              <input
+                className="campo-input" type="number" placeholder="M" min={0} max={59} style={{ width: '3.8rem', flex: 'none' }}
+                value={latDms.minutos}
+                onChange={e => setLatDms(p => ({ ...p, minutos: e.target.value }))}
+              />
+              <span style={{ color: '#374151' }}>'</span>
+              <input
+                className="campo-input" type="text" placeholder="S" style={{ width: '4.8rem', flex: 'none' }}
+                value={latDms.segundos}
+                onChange={e => setLatDms(p => ({ ...p, segundos: e.target.value }))}
+              />
+              <span style={{ color: '#374151' }}>"</span>
+              <select
+                className="campo-select" style={{ width: '3.5rem', flex: 'none', padding: '0.4rem 0.2rem' }}
+                value={latDms.direcao}
+                onChange={e => setLatDms(p => ({ ...p, direcao: e.target.value }))}
+              >
+                <option value="S">S</option>
+                <option value="N">N</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Longitude */}
+          <div>
+            <div style={{ fontSize: '0.72rem', color: '#374151', marginBottom: '0.2rem', fontWeight: 600 }}>Longitude</div>
+            <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <input
+                className="campo-input" type="number" placeholder="G" min={0} max={180} style={{ width: '3.8rem', flex: 'none' }}
+                value={lngDms.graus}
+                onChange={e => setLngDms(p => ({ ...p, graus: e.target.value }))}
+              />
+              <span style={{ color: '#374151' }}>°</span>
+              <input
+                className="campo-input" type="number" placeholder="M" min={0} max={59} style={{ width: '3.8rem', flex: 'none' }}
+                value={lngDms.minutos}
+                onChange={e => setLngDms(p => ({ ...p, minutos: e.target.value }))}
+              />
+              <span style={{ color: '#374151' }}>'</span>
+              <input
+                className="campo-input" type="text" placeholder="S" style={{ width: '4.8rem', flex: 'none' }}
+                value={lngDms.segundos}
+                onChange={e => setLngDms(p => ({ ...p, segundos: e.target.value }))}
+              />
+              <span style={{ color: '#374151' }}>"</span>
+              <select
+                className="campo-select" style={{ width: '3.5rem', flex: 'none', padding: '0.4rem 0.2rem' }}
+                value={lngDms.direcao}
+                onChange={e => setLngDms(p => ({ ...p, direcao: e.target.value }))}
+              >
+                <option value="O">O</option>
+                <option value="L">L</option>
+              </select>
+            </div>
+          </div>
+
+          {temGps && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <span style={{ fontSize: '0.78rem', color: '#15803d', fontWeight: 600 }}>
+                📡 GPS informado
+              </span>
+              <button
+                className="mat-btn-acao"
+                style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                onClick={() => { setLatDms(DMS_LAT_VAZIO); setLngDms(DMS_LNG_VAZIO); setErroGps('') }}
+              >
+                Limpar
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="campo">
@@ -2192,15 +2329,69 @@ function DetalheCampo({
   onIrParaMapa,
   onDevolver,
   onExcluir,
+  onGpsAtualizado,
 }: {
   item: EquipamentoCampo
   onVoltar: () => void
   onIrParaMapa?: (lat: number, lng: number, nome?: string) => void
   onDevolver: () => void
   onExcluir: () => void
+  onGpsAtualizado?: (lat: number | null, lng: number | null) => void
 }) {
   const [fotoIdx, setFotoIdx] = useState(0)
   const fotos = item.fotos ?? []
+
+  // GPS editing state
+  const [editandoGps, setEditandoGps] = useState(false)
+  const [latDms, setLatDms] = useState<DmsEdicao>(() => decimalParaPartesGms(item.latitude ?? null, 'N', 'S'))
+  const [lngDms, setLngDms] = useState<DmsEdicao>(() => decimalParaPartesGms(item.longitude ?? null, 'L', 'O'))
+  const [obtendoGps, setObtendoGps] = useState(false)
+  const [erroGps, setErroGps] = useState('')
+  const [salvandoGps, setSalvandoGps] = useState(false)
+
+  function abrirEdicaoGps() {
+    setLatDms(decimalParaPartesGms(item.latitude ?? null, 'N', 'S'))
+    setLngDms(decimalParaPartesGms(item.longitude ?? null, 'L', 'O'))
+    setErroGps('')
+    setEditandoGps(true)
+  }
+
+  function obterGpsAtual() {
+    setObtendoGps(true)
+    setErroGps('')
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLatDms(decimalParaPartesGms(pos.coords.latitude, 'N', 'S'))
+        setLngDms(decimalParaPartesGms(pos.coords.longitude, 'L', 'O'))
+        setObtendoGps(false)
+      },
+      (err) => {
+        setErroGps('Não foi possível obter o GPS: ' + err.message)
+        setObtendoGps(false)
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    )
+  }
+
+  async function salvarGps() {
+    setSalvandoGps(true)
+    setErroGps('')
+    try {
+      const lat = partesGmsParaDecimal(latDms, 'S', 90, 'Latitude')
+      const lng = partesGmsParaDecimal(lngDms, 'O', 180, 'Longitude')
+      await matApi.atualizarGpsCampo(item.id, lat, lng)
+      onGpsAtualizado?.(lat, lng)
+      setEditandoGps(false)
+    } catch (e: any) {
+      setErroGps(e?.message ?? 'Erro ao salvar GPS')
+    }
+    setSalvandoGps(false)
+  }
+
+  // Helper: formata decimal para GMS legível
+  function fmtGms(lat: number, lng: number) {
+    return `${decimalParaPartesGms(lat, 'N', 'S').graus}°${decimalParaPartesGms(lat, 'N', 'S').minutos}'${decimalParaPartesGms(lat, 'N', 'S').segundos}"${decimalParaPartesGms(lat, 'N', 'S').direcao}  ${decimalParaPartesGms(lng, 'L', 'O').graus}°${decimalParaPartesGms(lng, 'L', 'O').minutos}'${decimalParaPartesGms(lng, 'L', 'O').segundos}"${decimalParaPartesGms(lng, 'L', 'O').direcao}`
+  }
 
   return (
     <div className="mat-tela">
@@ -2242,21 +2433,111 @@ function DetalheCampo({
           </div>
         )}
 
-        {item.latitude && item.longitude && (
-          <div className="mat-detalhe-bloco">
-            <span className="mat-detalhe-label">GPS</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', marginTop: '0.2rem' }}>
-              <span className="mat-detalhe-valor" style={{ flex: 1 }}>
-                {item.latitude.toFixed(6)}, {item.longitude.toFixed(6)}
-              </span>
-              {onIrParaMapa && (
-                <button className="mat-btn-acao mat-btn-acao-gps" onClick={() => onIrParaMapa(item.latitude!, item.longitude!, item.material_nome || undefined)}>
-                  🗺️ Ver no Mapa
-                </button>
-              )}
-            </div>
+        {/* GPS — exibição em GMS com edição */}
+        <div className="mat-detalhe-bloco">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+            <span className="mat-detalhe-label" style={{ margin: 0 }}>GPS</span>
+            {!editandoGps && (
+              <button
+                className="mat-btn-acao"
+                style={{ fontSize: '0.72rem', padding: '0.15rem 0.5rem' }}
+                onClick={abrirEdicaoGps}
+              >
+                ✏️ Editar
+              </button>
+            )}
           </div>
-        )}
+
+          {!editandoGps ? (
+            item.latitude && item.longitude ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flexWrap: 'wrap' }}>
+                <div>
+                  <div className="mat-detalhe-valor" style={{ fontSize: '0.82rem' }}>
+                    {fmtGms(item.latitude, item.longitude)}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
+                    {item.latitude.toFixed(6)}, {item.longitude.toFixed(6)}
+                  </div>
+                </div>
+                {onIrParaMapa && (
+                  <button className="mat-btn-acao mat-btn-acao-gps" onClick={() => onIrParaMapa(item.latitude!, item.longitude!, item.material_nome || undefined)}>
+                    🗺️ Ver no Mapa
+                  </button>
+                )}
+              </div>
+            ) : (
+              <span className="mat-detalhe-valor" style={{ color: '#9ca3af', fontSize: '0.82rem' }}>Sem GPS registrado</span>
+            )
+          ) : (
+            <div style={{ marginTop: '0.3rem' }}>
+              <button
+                className="mat-btn-acao mat-btn-acao-gps"
+                onClick={obterGpsAtual}
+                disabled={obtendoGps}
+                style={{ marginBottom: '0.6rem', fontSize: '0.8rem' }}
+              >
+                {obtendoGps ? '⏳ Obtendo...' : '📡 Obter GPS pelo celular'}
+              </button>
+
+              <div style={{ fontSize: '0.72rem', color: '#6b7280', marginBottom: '0.4rem' }}>
+                Ou informe manualmente em GMS:
+              </div>
+
+              {/* Latitude DMS */}
+              <div style={{ marginBottom: '0.4rem' }}>
+                <div style={{ fontSize: '0.7rem', color: '#374151', fontWeight: 600, marginBottom: '0.15rem' }}>Latitude</div>
+                <div style={{ display: 'flex', gap: '0.2rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input className="campo-input" type="number" placeholder="G" min={0} max={90} style={{ width: '3.5rem', flex: 'none' }}
+                    value={latDms.graus} onChange={e => setLatDms(p => ({ ...p, graus: e.target.value }))} />
+                  <span>°</span>
+                  <input className="campo-input" type="number" placeholder="M" min={0} max={59} style={{ width: '3.5rem', flex: 'none' }}
+                    value={latDms.minutos} onChange={e => setLatDms(p => ({ ...p, minutos: e.target.value }))} />
+                  <span>'</span>
+                  <input className="campo-input" type="text" placeholder="S" style={{ width: '4.5rem', flex: 'none' }}
+                    value={latDms.segundos} onChange={e => setLatDms(p => ({ ...p, segundos: e.target.value }))} />
+                  <span>"</span>
+                  <select className="campo-select" style={{ width: '3.2rem', flex: 'none', padding: '0.3rem 0.2rem' }}
+                    value={latDms.direcao} onChange={e => setLatDms(p => ({ ...p, direcao: e.target.value }))}>
+                    <option value="S">S</option>
+                    <option value="N">N</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Longitude DMS */}
+              <div style={{ marginBottom: '0.5rem' }}>
+                <div style={{ fontSize: '0.7rem', color: '#374151', fontWeight: 600, marginBottom: '0.15rem' }}>Longitude</div>
+                <div style={{ display: 'flex', gap: '0.2rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input className="campo-input" type="number" placeholder="G" min={0} max={180} style={{ width: '3.5rem', flex: 'none' }}
+                    value={lngDms.graus} onChange={e => setLngDms(p => ({ ...p, graus: e.target.value }))} />
+                  <span>°</span>
+                  <input className="campo-input" type="number" placeholder="M" min={0} max={59} style={{ width: '3.5rem', flex: 'none' }}
+                    value={lngDms.minutos} onChange={e => setLngDms(p => ({ ...p, minutos: e.target.value }))} />
+                  <span>'</span>
+                  <input className="campo-input" type="text" placeholder="S" style={{ width: '4.5rem', flex: 'none' }}
+                    value={lngDms.segundos} onChange={e => setLngDms(p => ({ ...p, segundos: e.target.value }))} />
+                  <span>"</span>
+                  <select className="campo-select" style={{ width: '3.2rem', flex: 'none', padding: '0.3rem 0.2rem' }}
+                    value={lngDms.direcao} onChange={e => setLngDms(p => ({ ...p, direcao: e.target.value }))}>
+                    <option value="O">O</option>
+                    <option value="L">L</option>
+                  </select>
+                </div>
+              </div>
+
+              {erroGps && <div className="campo-erro" style={{ marginBottom: '0.4rem' }}>{erroGps}</div>}
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button className="mat-btn-confirmar" style={{ flex: 1, padding: '0.5rem' }} onClick={salvarGps} disabled={salvandoGps}>
+                  {salvandoGps ? 'Salvando…' : '💾 Salvar GPS'}
+                </button>
+                <button className="mat-btn-acao" style={{ padding: '0.5rem 0.8rem' }} onClick={() => { setEditandoGps(false); setErroGps('') }}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         {item.observacao && (
           <div className="mat-detalhe-bloco">

@@ -416,8 +416,8 @@ async function cachearMapaOuroBranco(zooms, raioKm, source) {
 
   notificar('iniciando')
 
-  // Baixa em lotes pequenos para não sobrecarregar nem o navegador nem o servidor de tiles
-  const lote = 6
+  // Baixa em lotes para não sobrecarregar nem o navegador nem o servidor de tiles
+  const lote = 16
   for (let i = 0; i < tiles.length; i += lote) {
     const slice = tiles.slice(i, i + lote)
     await Promise.all(

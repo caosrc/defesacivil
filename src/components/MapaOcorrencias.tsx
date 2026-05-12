@@ -338,16 +338,20 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [climaCarregando, setClimaCarregando] = useState(false)
   const [climaAberto, setClimaAberto] = useState(false)
 
-  // Mapa offline
+  // Mapa offline — inicializa tiles do localStorage para mostrar status imediatamente
   const [statusOffline, setStatusOffline] = useState<StatusOffline>('idle')
   const [progressoMapa, setProgressoMapa] = useState<ProgressoMapa | null>(null)
-  const [tilesCacheados, setTilesCacheados] = useState<number>(0)
+  const [tilesCacheados, setTilesCacheados] = useState<number>(() => {
+    try { return parseInt(localStorage.getItem('dc_tiles_count') || '0') || 0 } catch { return 0 }
+  })
   const [painelOfflineAberto, setPainelOfflineAberto] = useState(false)
 
-  // Malha viária offline (ruas + roteamento local)
-  const [malhaInfo, setMalhaInfo] = useState<{ baixada: boolean; bytes: number }>({
-    baixada: false,
-    bytes: 0,
+  // Malha viária offline (ruas + roteamento local) — inicializa do localStorage
+  const [malhaInfo, setMalhaInfo] = useState<{ baixada: boolean; bytes: number }>(() => {
+    try {
+      const s = localStorage.getItem('dc_malha_info')
+      return s ? JSON.parse(s) : { baixada: false, bytes: 0 }
+    } catch { return { baixada: false, bytes: 0 } }
   })
   const [statusMalha, setStatusMalha] = useState<'idle' | 'baixando' | 'concluido' | 'erro'>('idle')
   const [progressoMalha, setProgressoMalha] = useState<ProgressoMalha | null>(null)
@@ -391,9 +395,37 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const comGeo = useMemo(() => ocorrencias.filter((o) => o.lat && o.lng), [ocorrencias])
   const semGeo = ocorrencias.length - comGeo.length
 
+  // Persiste contagem de tiles no localStorage para mostrar status entre recargas
+  useEffect(() => {
+    try { localStorage.setItem('dc_tiles_count', String(tilesCacheados)) } catch { /* ignora */ }
+  }, [tilesCacheados])
+
+  // Persiste info da malha no localStorage
+  useEffect(() => {
+    try { localStorage.setItem('dc_malha_info', JSON.stringify(malhaInfo)) } catch { /* ignora */ }
+  }, [malhaInfo])
+
+  // Verifica tiles: ao mudar statusOffline e também quando o SW ficar pronto
   useEffect(() => {
     obterInfoCacheMapa().then(setTilesCacheados).catch(() => {})
   }, [statusOffline])
+
+  // Verifica ao montar — aguarda SW controller disponível para leitura correta
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const verificar = () => {
+      obterInfoCacheMapa().then(n => { if (n > 0) setTilesCacheados(n) }).catch(() => {})
+      obterInfoMalhaViaria().then(info => {
+        if (info.baixada) setMalhaInfo(info)
+      }).catch(() => {})
+    }
+    if (navigator.serviceWorker.controller) {
+      verificar()
+    } else {
+      navigator.serviceWorker.ready.then(verificar).catch(() => {})
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Carrega info da malha viária (e pré-aquece em segundo plano)
   useEffect(() => {
