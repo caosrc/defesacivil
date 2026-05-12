@@ -1,8 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import type { Ocorrencia, NivelRisco, StatusOc, VistoriaAdicional } from '../types'
 import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES, getSenhaAgente } from '../types'
-import { deletarOcorrencia, atualizarOcorrencia } from '../api'
+import { deletarOcorrencia, atualizarOcorrencia, buscarOcorrenciaCompleta } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
 import { formatarCoordenadas, parseDateLocal, mensagemErroGps, adicionarMarcaDagua } from '../utils'
@@ -67,6 +67,21 @@ function partesGmsParaDecimal(partes: DmsEdicao, negativo: string, limiteGraus: 
 
 export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado, onAtualizado }: Props) {
   const [o, setO] = useState<Ocorrencia>(oc)
+
+  // Busca fotos e vistorias sob demanda — a listagem não as carrega para reduzir egress
+  useEffect(() => {
+    if (oc._offline) return
+    if (Array.isArray(oc.fotos) && oc.fotos.length > 0) return
+    buscarOcorrenciaCompleta(oc.id).then((completa) => {
+      if (!completa) return
+      setO((prev) => ({
+        ...prev,
+        fotos: completa.fotos ?? prev.fotos ?? [],
+        vistorias: completa.vistorias ?? prev.vistorias ?? [],
+      }))
+    }).catch(() => {})
+  }, [oc.id])
+
   const [editando, setEditando] = useState(false)
   const [pedindoSenha, setPedindoSenha] = useState<'editar' | 'deletar' | null>(null)
   const [salvando, setSalvando] = useState(false)

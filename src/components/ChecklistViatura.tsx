@@ -383,6 +383,7 @@ export default function ChecklistViatura() {
           .from('checklists_viatura')
           .select('*')
           .order('created_at', { ascending: false })
+          .limit(100)
         const servidor = (Array.isArray(data) ? data : []) as ChecklistData[]
         setChecklists([...locais, ...servidor])
       } catch (e) {

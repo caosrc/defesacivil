@@ -169,6 +169,7 @@ export const matApi = {
         .from('emprestimos')
         .select('*')
         .order('created_at', { ascending: false })
+        .limit(500)
       if (error) sbErr(error, 'listarEmprestimos')
       return (data ?? []) as MatEmprestimo[]
     }
@@ -239,6 +240,7 @@ export const matApi = {
         .from('equipamentos_campo')
         .select('*')
         .order('created_at', { ascending: false })
+        .limit(300)
       if (error) sbErr(error, 'listarCampo')
       return (data ?? []) as MatEquipamentoCampo[]
     }

@@ -85,14 +85,19 @@ export class ApiError extends Error {
   }
 }
 
+// Campos leves para listagem/mapa — exclui fotos e vistorias (base64 pesado)
+const CAMPOS_LISTA_OCORRENCIA =
+  'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,agentes,responsavel_registro,focos_incendio,created_at'
+
 export async function listarOcorrencias(): Promise<Ocorrencia[]> {
   // Supabase direto quando disponível (Netlify)
   if (supabaseDisponivel) {
     try {
       const { data, error } = await supabase
         .from('ocorrencias')
-        .select('*')
+        .select(CAMPOS_LISTA_OCORRENCIA)
         .order('created_at', { ascending: false })
+        .limit(500)
       if (error) throw new Error(error.message)
       return (data || []) as Ocorrencia[]
     } catch (e) {
@@ -112,6 +117,27 @@ export async function listarOcorrencias(): Promise<Ocorrencia[]> {
   // Fallback offline
   console.warn('[api] listarOcorrencias — usando cache offline')
   return (await getCachedOcorrencias()) as Ocorrencia[]
+}
+
+// Busca dados completos de uma ocorrência (incluindo fotos e vistorias)
+// Chamado pelo DetalheOcorrencia ao abrir, para não sobrecarregar o select da listagem
+export async function buscarOcorrenciaCompleta(id: number): Promise<Ocorrencia | null> {
+  if (supabaseDisponivel) {
+    try {
+      const { data, error } = await supabase
+        .from('ocorrencias')
+        .select('fotos,vistorias')
+        .eq('id', id)
+        .single()
+      if (error) return null
+      return data as unknown as Ocorrencia
+    } catch { return null }
+  }
+  try {
+    const res = await fetch(`/api/ocorrencias/${id}`)
+    if (respostaExpressValida(res)) return await res.json()
+  } catch { /* ignore */ }
+  return null
 }
 
 export async function enviarOcorrenciaServidor(

@@ -230,8 +230,9 @@ async function loadSosAtivos() {
     if (alertas.length === 0 && supabaseDisponivel) {
       const { data } = await supabase
         .from('sos_ativos_db')
-        .select('*')
+        .select('id,agente,lat,lng,bateria,timestamp,visualizadores,mensagens')
         .gt('timestamp', limiteTs)
+        .limit(20)
       alertas = data ?? []
     }
     const filtrados = alertas
