@@ -36,6 +36,14 @@ export interface Ocorrencia {
 
 export const AGENTES = ['Moisés', 'Valteir', 'Arthur', 'Gustavo', 'Vânia', 'Graça', 'Talita', 'Cristiane', 'Dyonathan', 'Sócrates']
 
+export const AGENTE_SENHAS: Record<string, string> = {
+  'Sócrates': '3004',
+}
+
+export function getSenhaAgente(nome: string): string | null {
+  return AGENTE_SENHAS[nome] ?? null
+}
+
 export const TIPOS_OCORRENCIA = ['Diligência', 'Vistoria de Engenharia', 'Vistoria Ambiental', 'Apoio', 'Outro']
 
 export const NATUREZAS = [

@@ -4,6 +4,7 @@ import { exportarChecklistExcel, type ChecklistExportData } from '../exportExcel
 import ModalSenha from './ModalSenha'
 import { wsOn } from '../wsClient'
 import { supabase, supabaseDisponivel } from '../supabaseClient'
+import { getSenhaAgente } from '../types'
 
 const MOTORISTAS = ['Moisés', 'Arthur', 'Gustavo', 'Valteir', 'Dyonathan']
 const CHECKLIST_LOCAL_KEY = 'checklists-pendentes-v1'
@@ -348,6 +349,17 @@ export default function ChecklistViatura() {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [pedindoSenhaDeletar, setPedindoSenhaDeletar] = useState<number | null>(null)
+  const agenteLogadoCk = (sessionStorage.getItem('defesacivil-agente-sessao') || '').trim()
+  const senhaAgenteCk = getSenhaAgente(agenteLogadoCk)
+
+  function solicitarDeletar(id: number) {
+    if (senhaAgenteCk) {
+      setPedindoSenhaDeletar(id)
+    } else {
+      deletar(id)
+    }
+  }
+
   const avariaRef = useRef<HTMLInputElement>(null)
   const assinaturaRef = useRef<HTMLCanvasElement>(null)
   const assinandoRef = useRef(false)
@@ -934,7 +946,7 @@ export default function ChecklistViatura() {
             <span style={{ fontSize: '1.3rem' }}>🚗</span>
             <span className="header-titulo-texto">Checklist #{c.id}</span>
           </div>
-          <button className="btn-deletar-header" onClick={() => setPedindoSenhaDeletar(c.id)}>🗑️</button>
+          <button className="btn-deletar-header" onClick={() => solicitarDeletar(c.id)}>🗑️</button>
         </header>
 
         <div className="form-scroll">
@@ -1073,9 +1085,10 @@ export default function ChecklistViatura() {
           </div>
         </div>
       </div>
-      {pedindoSenhaDeletar !== null && (
+      {pedindoSenhaDeletar !== null && senhaAgenteCk && (
         <ModalSenha
           titulo="Excluir Checklist"
+          senhaCorreta={senhaAgenteCk}
           onCancelar={() => setPedindoSenhaDeletar(null)}
           onConfirmar={() => { const id = pedindoSenhaDeletar!; setPedindoSenhaDeletar(null); deletar(id) }}
         />

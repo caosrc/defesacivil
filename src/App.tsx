@@ -53,6 +53,7 @@ function formatarDataExibicao(yyyymmdd: string): string {
 const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
 function formatarItemData(d: string): string {
+  if (d === 'todas') return 'Todas as datas'
   if (d.length === 7) {
     const [y, m] = d.split('-')
     return `${MESES_PT[parseInt(m) - 1]} ${y}`
@@ -529,7 +530,7 @@ export default function App() {
     const mesAtual = hojeStr().slice(0, 7)
     const diasUnicos = new Set(ocorrencias.map((o) => dataLocal(o.created_at)))
     diasUnicos.add(hojeStr())
-    const resultado: string[] = []
+    const resultado: string[] = ['todas']
     const mesesPassados = new Set<string>()
     for (const d of Array.from(diasUnicos).sort((a, b) => b.localeCompare(a))) {
       const mes = d.slice(0, 7)
@@ -546,11 +547,13 @@ export default function App() {
   }, [ocorrencias])
 
   const ocorrenciasFiltradas = useMemo(() => ocorrencias.filter((o) => {
-    const dOc = dataLocal(o.created_at)
-    if (filtroData.length === 10) {
-      if (dOc !== filtroData) return false
-    } else {
-      if (!dOc.startsWith(filtroData + '-')) return false
+    if (filtroData !== 'todas') {
+      const dOc = dataLocal(o.created_at)
+      if (filtroData.length === 10) {
+        if (dOc !== filtroData) return false
+      } else {
+        if (!dOc.startsWith(filtroData + '-')) return false
+      }
     }
     if (filtroNivel !== 'todos' && o.nivel_risco !== filtroNivel) return false
     if (filtroStatus !== 'todos' && o.status_oc !== filtroStatus) return false
@@ -694,6 +697,11 @@ export default function App() {
                 {filtroData !== hojeStr() && (
                   <button className="btn-hoje" onClick={() => setFiltroData(hojeStr())}>Hoje</button>
                 )}
+                {filtroData === 'todas' && (
+                  <span style={{ fontSize: '0.72rem', color: '#6b7280', marginLeft: '0.2rem' }}>
+                    ({ocorrencias.length} total)
+                  </span>
+                )}
               </div>
               <input
                 className="busca-input"
@@ -738,6 +746,8 @@ export default function App() {
                 <div>
                   {filtroData === hojeStr()
                     ? 'Nenhuma ocorrência registrada hoje.'
+                    : filtroData === 'todas'
+                    ? 'Nenhuma ocorrência registrada.'
                     : `Nenhuma ocorrência em ${formatarItemData(filtroData)}.`}
                 </div>
                 {filtroData === hojeStr() && (

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import JSZip from 'jszip'
 import type { Ocorrencia, NivelRisco, StatusOc, VistoriaAdicional } from '../types'
-import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES } from '../types'
+import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES, getSenhaAgente } from '../types'
 import { deletarOcorrencia, atualizarOcorrencia } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
@@ -81,6 +81,17 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const responsavel = (o.responsavel_registro || '').trim()
   // Se a ocorrência não tem responsável registrado (legado), libera para todos.
   const podeEditar = !responsavel || agenteLogado === responsavel
+  // Senha individual do agente logado (null = sem senha, acesso direto)
+  const senhaAgenteLogado = getSenhaAgente(agenteLogado)
+
+  function solicitarOuExecutar(acao: 'editar' | 'deletar') {
+    if (senhaAgenteLogado) {
+      setPedindoSenha(acao)
+    } else {
+      if (acao === 'editar') iniciarEdicao()
+      else confirmarDelete()
+    }
+  }
 
   // ── Nova Vistoria (Interdição de Imóvel) ──
   const [novaVistoriaAberta, setNovaVistoriaAberta] = useState(false)
@@ -378,7 +389,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
             </div>
             <div className="modal-header-acoes">
               {!editando && podeEditar && (
-                <button className="btn-editar-header" onClick={() => setPedindoSenha('editar')} title="Editar ocorrência">
+                <button className="btn-editar-header" onClick={() => solicitarOuExecutar('editar')} title="Editar ocorrência">
                   ✏️
                 </button>
               )}
@@ -828,7 +839,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                   </button>
                 )}
                 {podeEditar && (
-                  <button className="btn-editar" onClick={() => setPedindoSenha('editar')}>✏️ Editar</button>
+                  <button className="btn-editar" onClick={() => solicitarOuExecutar('editar')}>✏️ Editar</button>
                 )}
                 <button className="btn-relatorio" onClick={salvarRelatorio} disabled={gerandoRelatorio}>
                   {gerandoRelatorio ? '⏳ Salvando...' : '📄 Salvar relatório'}
@@ -836,7 +847,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                 <button className="btn-excel" onClick={() => exportarOcorrenciaExcel(o)}>📊 Excel</button>
                 <button className="btn-kmz" onClick={exportarKMZ}>🌍 KMZ</button>
                 {podeEditar && (
-                  <button className="btn-deletar" onClick={() => setPedindoSenha('deletar')}>🗑️</button>
+                  <button className="btn-deletar" onClick={() => solicitarOuExecutar('deletar')}>🗑️</button>
                 )}
                 {!podeEditar && responsavel && (
                   <span className="btn-bloqueado-info" title={`Apenas ${responsavel} pode editar ou excluir esta ocorrência.`}>
@@ -914,9 +925,10 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         )
       })()}
 
-      {pedindoSenha && (
+      {pedindoSenha && senhaAgenteLogado && (
         <ModalSenha
           titulo={pedindoSenha === 'editar' ? 'Editar Ocorrência' : 'Excluir Ocorrência'}
+          senhaCorreta={senhaAgenteLogado}
           onCancelar={() => setPedindoSenha(null)}
           onConfirmar={() => {
             setPedindoSenha(null)
