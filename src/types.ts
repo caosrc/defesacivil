@@ -34,10 +34,13 @@ export interface Ocorrencia {
   _localId?: number
 }
 
-export const AGENTES = ['Moisés', 'Valteir', 'Arthur', 'Gustavo', 'Vânia', 'Graça', 'Talita', 'Cristiane', 'Dyonathan', 'Sócrates']
+export const AGENTES = ['Moisés', 'Valteir', 'Arthur', 'Gustavo', 'Vânia', 'Graça', 'Talita', 'Cristiane', 'Cristiano', 'Dyonathan', 'Sócrates']
 
 export const AGENTE_SENHAS: Record<string, string> = {
   'Sócrates': '3004',
+  'Moisés': '301067',
+  'Gustavo': 'defesa2026',
+  'Cristiano': 'pmobcris',
 }
 
 export function getSenhaAgente(nome: string): string | null {
