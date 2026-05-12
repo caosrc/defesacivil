@@ -3,6 +3,7 @@ import { getAgenteLogado } from './Login'
 import ModalSenha from './ModalSenha'
 import { wsOn, wsSend } from '../wsClient'
 import { supabase, supabaseDisponivel } from '../supabaseClient'
+import { getSenhaAgente } from '../types'
 import './EscalaAgentes.css'
 
 // ── Constantes ────────────────────────────────────────────────────
@@ -2493,7 +2494,7 @@ export default function EscalaAgentes() {
       {pedirSenha && (
         <ModalSenha
           titulo="Editar Escala"
-          senhaCorreta="2026"
+          senhaCorreta={getSenhaAgente(agenteLogado) ?? '2026'}
           onConfirmar={() => { setPedirSenha(false); setEditando(true) }}
           onCancelar={() => setPedirSenha(false)}
         />
