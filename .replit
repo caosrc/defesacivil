@@ -55,9 +55,9 @@ build = ["npx", "vite", "build"]
 [userenv]
 
 [userenv.shared]
-VITE_VAPID_PUBLIC_KEY = "BDR2WpHgL7IN1NNdJv67HEMbyeUEnDRvgcnyfdWaopzkAOqa6EDYSbkXroYJ8CC_kaPjGEm8q5CCEn0KUqt3kmE"
-VAPID_PUBLIC_KEY = "BDR2WpHgL7IN1NNdJv67HEMbyeUEnDRvgcnyfdWaopzkAOqa6EDYSbkXroYJ8CC_kaPjGEm8q5CCEn0KUqt3kmE"
+VITE_VAPID_PUBLIC_KEY = "BDU73Faya2LI4ETSfbHXpIbFvrWeg2P4nxd7PRBw-tm9TWsoC-tmdMQMxkK648RqkAG_A3R6oqD04Cd87uspVds"
+VAPID_PUBLIC_KEY = "BDU73Faya2LI4ETSfbHXpIbFvrWeg2P4nxd7PRBw-tm9TWsoC-tmdMQMxkK648RqkAG_A3R6oqD04Cd87uspVds"
 VAPID_SUBJECT = "mailto:defesacivilob@gmail.com"
 PORT = "3001"
 VITE_USE_SUPABASE = "false"
-NODE_ENV = "production"
+NODE_ENV = "development"
