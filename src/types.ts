@@ -40,8 +40,8 @@ export const AGENTE_SENHAS: Record<string, string> = {
   'Sócrates': '3004',
   'Moisés': '301067',
   'Gustavo': 'defesa2026',
-  'Cristiane': 'pmobcris',
-  'Vânia': 'nick',
+  'Cristiane': '1950',
+  'Vânia': '1210',
   'Valteir': '1234',
 }
 
