@@ -2339,6 +2339,7 @@ function DetalheCampo({
   onGpsAtualizado?: (lat: number | null, lng: number | null) => void
 }) {
   const [fotoIdx, setFotoIdx] = useState(0)
+  const [lightboxAberto, setLightboxAberto] = useState(false)
   const fotos = item.fotos ?? []
 
   // GPS editing state
@@ -2404,7 +2405,13 @@ function DetalheCampo({
       <div className="mat-detalhe">
         {fotos.length > 0 && (
           <div className="mat-campo-fotos-wrap">
-            <img src={fotos[fotoIdx]} alt="" className="mat-campo-foto-principal" />
+            <img
+              src={fotos[fotoIdx]}
+              alt=""
+              className="mat-campo-foto-principal"
+              onClick={() => setLightboxAberto(true)}
+              title="Clique para ampliar"
+            />
             {fotos.length > 1 && (
               <div className="mat-campo-fotos-miniaturas">
                 {fotos.map((f, i) => (
@@ -2414,6 +2421,13 @@ function DetalheCampo({
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {lightboxAberto && fotos.length > 0 && (
+          <div className="mat-lightbox-overlay" onClick={() => setLightboxAberto(false)}>
+            <button className="mat-lightbox-fechar" onClick={() => setLightboxAberto(false)}>✕</button>
+            <img src={fotos[fotoIdx]} alt="" onClick={e => e.stopPropagation()} />
           </div>
         )}
 
