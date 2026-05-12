@@ -280,6 +280,14 @@ input, select, textarea { font-family: inherit; }
   align-items: stretch;
 }
 .endereco-input { flex: 1; margin-top: 0 !important; }
+
+/* ── Campos de endereço (Rua / Nº / Bairro) ─────────────────── */
+.endereco-campos { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.3rem; }
+.endereco-rua-row { display: flex; gap: 0.4rem; align-items: stretch; }
+.endereco-rua-row .campo-input { flex: 1; margin-top: 0 !important; }
+.endereco-num-bairro-row { display: flex; gap: 0.4rem; }
+.endereco-num { width: 4.5rem; flex-shrink: 0; margin-top: 0 !important; }
+.endereco-bairro { flex: 1; margin-top: 0 !important; }
 .btn-geocode {
   background: #1a4b8c;
   color: white;

@@ -26,7 +26,10 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const [fotoAmpliada, setFotoAmpliada] = useState<number | null>(null)
   const [lat, setLat] = useState<number | null>(null)
   const [lng, setLng] = useState<number | null>(null)
-  const [endereco, setEndereco] = useState('')
+  const [rua, setRua] = useState('')
+  const [numero, setNumero] = useState('')
+  const [bairro, setBairro] = useState('')
+  const endereco = [rua, numero, bairro].filter(Boolean).join(', ')
   const [proprietario, setProprietario] = useState('')
   const [situacao, setSituacao] = useState('')
   const [recomendacao, setRecomendacao] = useState('')
@@ -475,23 +478,40 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
             )}
 
             {/* Address + geocode button */}
-            <div className="endereco-row">
-              <input
-                className="campo-input endereco-input"
-                type="text"
-                placeholder="Rua, nº, Bairro... (Ouro Branco)"
-                value={endereco}
-                onChange={(e) => { setEndereco(e.target.value); setGeoMsg('') }}
-                onKeyDown={(e) => { if (e.key === 'Enter') localizarEndereco() }}
-              />
-              <button
-                className="btn-geocode"
-                onClick={localizarEndereco}
-                disabled={geocodificando || !endereco.trim()}
-                title="Localizar endereço no mapa"
-              >
-                {geocodificando ? '⏳' : '🗺️'}
-              </button>
+            <div className="endereco-campos">
+              <div className="endereco-rua-row">
+                <input
+                  className="campo-input"
+                  type="text"
+                  placeholder="Rua / Logradouro"
+                  value={rua}
+                  onChange={(e) => { setRua(e.target.value); setGeoMsg('') }}
+                />
+                <button
+                  className="btn-geocode"
+                  onClick={localizarEndereco}
+                  disabled={geocodificando || !endereco.trim()}
+                  title="Localizar endereço no mapa"
+                >
+                  {geocodificando ? '⏳' : '🗺️'}
+                </button>
+              </div>
+              <div className="endereco-num-bairro-row">
+                <input
+                  className="campo-input endereco-num"
+                  type="text"
+                  placeholder="Nº"
+                  value={numero}
+                  onChange={(e) => { setNumero(e.target.value); setGeoMsg('') }}
+                />
+                <input
+                  className="campo-input endereco-bairro"
+                  type="text"
+                  placeholder="Bairro"
+                  value={bairro}
+                  onChange={(e) => { setBairro(e.target.value); setGeoMsg('') }}
+                />
+              </div>
             </div>
             {geoMsg && (
               <div className={`geo-msg ${geoMsg.startsWith('✅') ? 'geo-ok' : 'geo-warn'}`}>

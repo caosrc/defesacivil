@@ -118,7 +118,11 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [eNivel, setENivel] = useState<NivelRisco>(o.nivel_risco)
   const [eStatus, setEStatus] = useState<StatusOc>(o.status_oc)
   const [eDataOcorrencia, setEDataOcorrencia] = useState(o.data_ocorrencia ?? '')
-  const [eEndereco, setEEndereco] = useState(o.endereco ?? '')
+  const _endParts = (o.endereco ?? '').split(', ')
+  const [eRua, setERua] = useState(_endParts[0] ?? '')
+  const [eNumero, setENumero] = useState(_endParts[1] ?? '')
+  const [eBairro, setEBairro] = useState(_endParts.slice(2).join(', ') ?? '')
+  const eEndereco = [eRua, eNumero, eBairro].filter(Boolean).join(', ')
   const [eLatDms, setELatDms] = useState<DmsEdicao>(decimalParaPartesGms(o.lat, 'N', 'S'))
   const [eLngDms, setELngDms] = useState<DmsEdicao>(decimalParaPartesGms(o.lng, 'L', 'O'))
   const [eProprietario, setEProprietario] = useState(o.proprietario ?? '')
@@ -142,7 +146,10 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setENivel(o.nivel_risco)
     setEStatus(o.status_oc)
     setEDataOcorrencia(o.data_ocorrencia ?? '')
-    setEEndereco(o.endereco ?? '')
+    const partes = (o.endereco ?? '').split(', ')
+    setERua(partes[0] ?? '')
+    setENumero(partes[1] ?? '')
+    setEBairro(partes.slice(2).join(', '))
     setELatDms(decimalParaPartesGms(o.lat, 'N', 'S'))
     setELngDms(decimalParaPartesGms(o.lng, 'L', 'O'))
     setEProprietario(o.proprietario ?? '')
@@ -673,18 +680,35 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                 {/* Endereço */}
                 <div className="campo campo-edit">
                   <label className="campo-label">📍 Endereço</label>
-                  <div className="endereco-row">
-                    <input
-                      className="campo-input endereco-input"
-                      type="text"
-                      placeholder="Rua, nº, Bairro..."
-                      value={eEndereco}
-                      onChange={(e) => { setEEndereco(e.target.value); setGeoMsg('') }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') localizarEndereco() }}
-                    />
-                    <button className="btn-geocode" onClick={localizarEndereco} disabled={geocodificando || !eEndereco.trim()} title="Localizar no mapa">
-                      {geocodificando ? '⏳' : '🗺️'}
-                    </button>
+                  <div className="endereco-campos">
+                    <div className="endereco-rua-row">
+                      <input
+                        className="campo-input"
+                        type="text"
+                        placeholder="Rua / Logradouro"
+                        value={eRua}
+                        onChange={(e) => { setERua(e.target.value); setGeoMsg('') }}
+                      />
+                      <button className="btn-geocode" onClick={localizarEndereco} disabled={geocodificando || !eEndereco.trim()} title="Localizar no mapa">
+                        {geocodificando ? '⏳' : '🗺️'}
+                      </button>
+                    </div>
+                    <div className="endereco-num-bairro-row">
+                      <input
+                        className="campo-input endereco-num"
+                        type="text"
+                        placeholder="Nº"
+                        value={eNumero}
+                        onChange={(e) => { setENumero(e.target.value); setGeoMsg('') }}
+                      />
+                      <input
+                        className="campo-input endereco-bairro"
+                        type="text"
+                        placeholder="Bairro"
+                        value={eBairro}
+                        onChange={(e) => { setEBairro(e.target.value); setGeoMsg('') }}
+                      />
+                    </div>
                   </div>
                   {geoMsg && (
                     <div className={`geo-msg ${geoMsg.startsWith('✅') ? 'geo-ok' : 'geo-warn'}`}>{geoMsg}</div>
