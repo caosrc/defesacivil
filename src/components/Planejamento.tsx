@@ -143,6 +143,13 @@ interface ItemMapa {
   obs?: string
 }
 
+interface PontoExtra {
+  id: string
+  lat: number
+  lng: number
+  label: string
+}
+
 interface Plano {
   id: string
   tipo: TipoPlano
@@ -152,11 +159,13 @@ interface Plano {
   dataInicio: string
   dataFim: string
   horario: string
+  horarioFim: string
   publicoEstimado: string
   status: StatusPlano
   equipe: string[]
   materiais: MaterialPlano[]
   itensMapa: ItemMapa[]
+  pontosExtras: PontoExtra[]
   lat: number | null
   lng: number | null
   observacoes: string
@@ -425,35 +434,55 @@ function MapaDetalhe({
   onRemoverItem: (id: string) => void
 }) {
   const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
+  const [abaItens, setAbaItens] = useState<'icones' | 'orgaos' | 'materiais'>('icones')
   const centro: [number, number] = plano.lat && plano.lng ? [plano.lat, plano.lng] : OURO_BRANCO_CENTER
 
   function handleCliqueMapa(lat: number, lng: number) {
     if (!itemSelecionado) return
-    const cfg = ITENS_POSICIONAR.find(i => i.tipo === itemSelecionado)
-    if (!cfg) return
-    onAdicionarItem({
-      id: gerarId(),
-      tipo: cfg.tipo,
-      emoji: cfg.emoji,
-      lat,
-      lng,
-      obs: cfg.label,
-    })
-    setItemSelecionado(null)
+    // Check in ITENS_POSICIONAR
+    const cfgIcon = ITENS_POSICIONAR.find(i => i.tipo === itemSelecionado)
+    if (cfgIcon) {
+      onAdicionarItem({ id: gerarId(), tipo: cfgIcon.tipo, emoji: cfgIcon.emoji, lat, lng, obs: cfgIcon.label })
+      setItemSelecionado(null)
+      return
+    }
+    // Check as organ (tipo starts with 'orgao:')
+    if (itemSelecionado.startsWith('orgao:')) {
+      const nomeOrgao = itemSelecionado.slice(6)
+      const orgaoInfo = ORGAOS_EMPENHO.flatMap(c => c.orgaos).find(o => `${o.emoji} ${o.nome}` === nomeOrgao)
+      const emoji = orgaoInfo?.emoji ?? '🏛️'
+      onAdicionarItem({ id: gerarId(), tipo: 'orgao', emoji, lat, lng, obs: nomeOrgao })
+      setItemSelecionado(null)
+      return
+    }
+    // Check as material (tipo starts with 'mat:')
+    if (itemSelecionado.startsWith('mat:')) {
+      const nomeMat = itemSelecionado.slice(4)
+      onAdicionarItem({ id: gerarId(), tipo: 'material', emoji: '📦', lat, lng, obs: nomeMat })
+      setItemSelecionado(null)
+      return
+    }
   }
+
+  const labelSelecionado = (() => {
+    if (!itemSelecionado) return ''
+    if (itemSelecionado.startsWith('orgao:')) return itemSelecionado.slice(6)
+    if (itemSelecionado.startsWith('mat:')) return itemSelecionado.slice(4)
+    return ITENS_POSICIONAR.find(i => i.tipo === itemSelecionado)?.label ?? ''
+  })()
 
   return (
     <div className="plan-mapa-container" style={{ borderRadius: 12, overflow: 'hidden' }}>
       {itemSelecionado && (
         <div className="plan-mapa-picker-info">
-          {ITENS_POSICIONAR.find(i => i.tipo === itemSelecionado)?.emoji} Toque no mapa para posicionar
+          📍 Toque no mapa para posicionar: <strong>{labelSelecionado}</strong>
           <button onClick={() => setItemSelecionado(null)}>Cancelar</button>
         </div>
       )}
       <MapContainer
         center={centro}
         zoom={plano.lat && plano.lng ? 15 : 13}
-        style={{ height: 300, width: '100%' }}
+        style={{ height: 460, width: '100%' }}
         zoomControl={true}
         attributionControl={false}
       >
@@ -461,9 +490,14 @@ function MapaDetalhe({
         <MapClickHandler ativo={!!itemSelecionado} onClique={handleCliqueMapa} />
         {plano.lat && plano.lng && (
           <Marker position={[plano.lat, plano.lng]} icon={criarIconePrincipal()}>
-            <Popup><strong>{plano.nome}</strong><br />Local principal</Popup>
+            <Popup><strong>{plano.nome}</strong><br />📍 Local principal</Popup>
           </Marker>
         )}
+        {(plano.pontosExtras ?? []).map(p => (
+          <Marker key={p.id} position={[p.lat, p.lng]} icon={criarIconeEmoji('📌')}>
+            <Popup><strong>📌 {p.label || 'Ponto extra'}</strong><br />{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</Popup>
+          </Marker>
+        ))}
         {plano.itensMapa.map(item => (
           <Marker key={item.id} position={[item.lat, item.lng]} icon={criarIconeEmoji(item.emoji)}>
             <Popup>
@@ -484,20 +518,85 @@ function MapaDetalhe({
 
       <div style={{ background: '#f8fafc', borderTop: '1px solid #e5e7eb', padding: '0.5rem 0.85rem' }}>
         <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a4b8c', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          🗺️ Posicionar no mapa
+          🗺️ Clique num item e toque no mapa para posicionar
         </div>
-        <div className="plan-itens-grid">
-          {ITENS_POSICIONAR.map(item => (
+        {/* Abas */}
+        <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.45rem' }}>
+          {([['icones', '🗺️ Ícones'], ['orgaos', '🏛️ Órgãos'], ['materiais', '📦 Materiais']] as const).map(([aba, label]) => (
             <button
-              key={item.tipo}
-              className={`plan-item-btn ${itemSelecionado === item.tipo ? 'ativo' : ''}`}
-              onClick={() => setItemSelecionado(itemSelecionado === item.tipo ? null : item.tipo)}
+              key={aba}
+              onClick={() => setAbaItens(aba)}
+              style={{ background: abaItens === aba ? '#1a4b8c' : '#e0e7ff', color: abaItens === aba ? 'white' : '#1e3a8a', border: 'none', borderRadius: 20, padding: '0.22rem 0.6rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
             >
-              <span className="pi-emoji">{item.emoji}</span>
-              {item.label}
+              {label}
             </button>
           ))}
         </div>
+
+        {abaItens === 'icones' && (
+          <div className="plan-itens-grid">
+            {ITENS_POSICIONAR.map(item => (
+              <button
+                key={item.tipo}
+                className={`plan-item-btn ${itemSelecionado === item.tipo ? 'ativo' : ''}`}
+                onClick={() => setItemSelecionado(itemSelecionado === item.tipo ? null : item.tipo)}
+              >
+                <span className="pi-emoji">{item.emoji}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {abaItens === 'orgaos' && (
+          <div>
+            {plano.equipe.length === 0 ? (
+              <div style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', padding: '0.5rem' }}>Nenhum órgão empenhado neste plano</div>
+            ) : (
+              <div className="plan-itens-grid">
+                {plano.equipe.map(orgao => {
+                  const key = `orgao:${orgao}`
+                  const orgaoInfo = ORGAOS_EMPENHO.flatMap(c => c.orgaos).find(o => `${o.emoji} ${o.nome}` === orgao)
+                  const emoji = orgaoInfo?.emoji ?? '🏛️'
+                  return (
+                    <button
+                      key={orgao}
+                      className={`plan-item-btn ${itemSelecionado === key ? 'ativo' : ''}`}
+                      onClick={() => setItemSelecionado(itemSelecionado === key ? null : key)}
+                    >
+                      <span className="pi-emoji">{orgaoInfo?.nome === 'Defesa Civil' ? <img src="/logo-dc.png" style={{ width: 20, height: 20, objectFit: 'contain', verticalAlign: 'middle' }} /> : emoji}</span>
+                      {orgaoInfo?.nome ?? orgao}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {abaItens === 'materiais' && (
+          <div>
+            {plano.materiais.length === 0 ? (
+              <div style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', padding: '0.5rem' }}>Nenhum material cadastrado neste plano</div>
+            ) : (
+              <div className="plan-itens-grid">
+                {plano.materiais.map(mat => {
+                  const key = `mat:${mat.nome}`
+                  return (
+                    <button
+                      key={mat.id}
+                      className={`plan-item-btn ${itemSelecionado === key ? 'ativo' : ''}`}
+                      onClick={() => setItemSelecionado(itemSelecionado === key ? null : key)}
+                    >
+                      <span className="pi-emoji">📦</span>
+                      {mat.nome}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -717,7 +816,11 @@ function OrgaosPanel({ selecionados, onChange }: { selecionados: string[]; onCha
                       onClick={() => toggle(k)}
                       style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: sel ? '#1e40af' : '#f1f5ff', color: sel ? 'white' : '#1e3a8a', border: sel ? '1.5px solid #1e40af' : '1.5px solid #dbeafe', borderRadius: 8, padding: '0.38rem 0.55rem', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
                     >
-                      <span style={{ fontSize: '1rem', lineHeight: 1, flexShrink: 0 }}>{o.emoji}</span>
+                      {o.nome === 'Defesa Civil' ? (
+                        <img src="/logo-dc.png" style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0, borderRadius: 3 }} />
+                      ) : (
+                        <span style={{ fontSize: '1rem', lineHeight: 1, flexShrink: 0 }}>{o.emoji}</span>
+                      )}
                       <span style={{ flex: 1, lineHeight: 1.2 }}>{o.nome}</span>
                       {sel && <span style={{ fontSize: '0.7rem', opacity: 0.9 }}>✓</span>}
                     </button>
@@ -872,7 +975,8 @@ function exportarPDF(plano: Plano) {
     ${plano.lat && plano.lng ? linhaInfo('Coordenadas', localizacao) : ''}
     ${linhaInfo('Data início', plano.dataInicio ? new Date(plano.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR') : '')}
     ${plano.dataFim && plano.dataFim !== plano.dataInicio ? linhaInfo('Data fim', new Date(plano.dataFim + 'T12:00:00').toLocaleDateString('pt-BR')) : ''}
-    ${linhaInfo('Horário', plano.horario)}
+    ${plano.horario ? linhaInfo('Horário início', plano.horario) : ''}
+    ${plano.horarioFim ? linhaInfo('Horário fim', plano.horarioFim) : ''}
     ${plano.publicoEstimado ? linhaInfo('Público estimado', plano.publicoEstimado + ' pessoas') : ''}
     ${linhaInfo('Criado por', plano.criadoPor + ' em ' + new Date(plano.criadoEm).toLocaleDateString('pt-BR'))}
   </table>
@@ -889,7 +993,7 @@ function exportarPDF(plano: Plano) {
 </div>
 
 ${plano.itensMapa.length > 0 ? `<div class="section">
-  <h2>🗺️ Itens no mapa (${plano.itensMapa.length})</h2>
+  <h2>🗺️ Itens posicionados (${plano.itensMapa.length})</h2>
   ${itensMapaHtml}
 </div>` : ''}
 
@@ -903,7 +1007,51 @@ ${plano.observacoes ? `<div class="section">
   <span>Emitido em ${dataEmissao}</span>
 </div>
 
-<script>setTimeout(()=>window.print(),400)</script>
+${(plano.lat && plano.lng) || plano.itensMapa.length > 0 || (plano.pontosExtras ?? []).length > 0 ? `
+<!-- ── FOLHA DO MAPA ── -->
+<div style="page-break-before:always">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
+<div style="padding:20px 24px 12px">
+  <div style="border-bottom:3px solid #1a4b8c;padding-bottom:10px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <div style="font-size:16px;font-weight:800;color:#1a4b8c">🗺️ Mapa de Planejamento Operacional</div>
+      <div style="font-size:11px;color:#6b7280">${plano.nome} — Defesa Civil Ouro Branco</div>
+    </div>
+    <div style="font-size:10px;color:#9ca3af">Emitido em ${dataEmissao}</div>
+  </div>
+</div>
+<div id="map-pdf" style="height:calc(100vh - 120px);width:100%;margin:0"></div>
+<script>
+(function(){
+  var map = L.map('map-pdf');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+  var bounds = [];
+  ${plano.lat && plano.lng ? `
+  L.circleMarker([${plano.lat},${plano.lng}],{radius:10,color:'#1a4b8c',fillColor:'#1a4b8c',fillOpacity:1,weight:3}).addTo(map)
+    .bindPopup('<strong>📍 Local principal</strong><br>${plano.nome.replace(/'/g, "\\'")}');
+  bounds.push([${plano.lat},${plano.lng}]);
+  ` : ''}
+  ${(plano.pontosExtras ?? []).map(p => `
+  L.marker([${p.lat},${p.lng}]).addTo(map)
+    .bindPopup('<strong>📌 ${p.label.replace(/'/g, "\\'")}</strong>');
+  bounds.push([${p.lat},${p.lng}]);
+  `).join('')}
+  ${plano.itensMapa.map(it => `
+  L.marker([${it.lat},${it.lng}], {icon: L.divIcon({html:'<div style="font-size:1.4rem;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">${it.emoji}</div>',className:'',iconAnchor:[12,12]})}).addTo(map)
+    .bindPopup('<strong>${it.emoji} ${(it.obs || it.tipo).replace(/'/g, "\\'")}</strong>');
+  bounds.push([${it.lat},${it.lng}]);
+  `).join('')}
+  if(bounds.length > 0) {
+    if(bounds.length === 1) { map.setView(bounds[0], 15); }
+    else { map.fitBounds(bounds, {padding:[40,40]}); }
+  } else { map.setView([-20.5195,-43.6983], 13); }
+})();
+<\/script>
+</div>
+` : ''}
+
+<script>setTimeout(()=>window.print(),2000)</script>
 </body></html>`
 
   const w = window.open('', '_blank')
@@ -933,13 +1081,19 @@ function FormularioPlano({
   const [dataInicio, setDataInicio] = useState(planoEditando?.dataInicio ?? '')
   const [dataFim, setDataFim] = useState(planoEditando?.dataFim ?? '')
   const [horario, setHorario] = useState(planoEditando?.horario ?? '')
+  const [horarioFim, setHorarioFim] = useState(planoEditando?.horarioFim ?? '')
   const [publicoEstimado, setPublicoEstimado] = useState(planoEditando?.publicoEstimado ?? '')
-  const [risco, setRisco] = useState<'baixo' | 'medio' | 'alto'>(planoEditando?.risco ?? 'baixo')
+  const [risco] = useState<'baixo' | 'medio' | 'alto'>(planoEditando?.risco ?? 'baixo')
   const [equipe, setEquipe] = useState<string[]>(planoEditando?.equipe ?? [])
   const [materiais, setMateriais] = useState<MaterialPlano[]>(planoEditando?.materiais ?? [])
   const [observacoes, setObservacoes] = useState(planoEditando?.observacoes ?? '')
   const [lat, setLat] = useState<number | null>(planoEditando?.lat ?? null)
   const [lng, setLng] = useState<number | null>(planoEditando?.lng ?? null)
+  const [pontosExtras, setPontosExtras] = useState<PontoExtra[]>(planoEditando?.pontosExtras ?? [])
+  const [novoPontoLat, setNovoPontoLat] = useState('')
+  const [novoPontoLng, setNovoPontoLng] = useState('')
+  const [novoPontoLabel, setNovoPontoLabel] = useState('')
+  const [clickandoPonto, setClickandoPonto] = useState(false)
 
   const [novoMat, setNovoMat] = useState('')
   const [novoMatQtd, setNovoMatQtd] = useState('1')
@@ -985,8 +1139,10 @@ function FormularioPlano({
       publicoEstimado,
       status: planoEditando?.status ?? 'planejado',
       equipe,
+      horarioFim,
       materiais,
       itensMapa: planoEditando?.itensMapa ?? [],
+      pontosExtras,
       lat,
       lng,
       observacoes: observacoes.trim(),
@@ -1054,51 +1210,112 @@ function FormularioPlano({
 
           <div className="plan-form-row">
             <div className="plan-form-group">
-              <label className="plan-form-label">Horário</label>
+              <label className="plan-form-label">Horário início</label>
               <input className="plan-form-input" type="time" value={horario} onChange={e => setHorario(e.target.value)} />
             </div>
-            {tipo === 'evento' && (
-              <div className="plan-form-group">
-                <label className="plan-form-label">Público estimado</label>
-                <input className="plan-form-input" placeholder="Ex: 5.000" value={publicoEstimado} onChange={e => setPublicoEstimado(e.target.value)} />
-              </div>
-            )}
-          </div>
-
-          <div className="plan-form-group">
-            <label className="plan-form-label">Nível de risco</label>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              {(['baixo', 'medio', 'alto'] as const).map(r => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRisco(r)}
-                  style={{
-                    flex: 1,
-                    padding: '0.5rem',
-                    border: `2px solid ${risco === r ? RISCO_CONFIG[r].cor : '#e5e7eb'}`,
-                    borderRadius: 8,
-                    background: risco === r ? RISCO_CONFIG[r].bg : '#f9fafb',
-                    color: risco === r ? RISCO_CONFIG[r].cor : '#6b7280',
-                    fontWeight: 700,
-                    fontSize: '0.8rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  {RISCO_CONFIG[r].label}
-                </button>
-              ))}
+            <div className="plan-form-group">
+              <label className="plan-form-label">Horário fim</label>
+              <input className="plan-form-input" type="time" value={horarioFim} onChange={e => setHorarioFim(e.target.value)} />
             </div>
           </div>
 
-          <div className="plan-form-secao">📍 Localização no mapa</div>
-          <MapaPicker lat={lat} lng={lng} onChange={(la, ln) => { setLat(la); setLng(ln) }} />
-          {lat && lng && (
-            <div style={{ fontSize: '0.75rem', color: '#6b7280', textAlign: 'center', marginTop: -4 }}>
-              📍 {lat.toFixed(5)}, {lng.toFixed(5)}
-              <button style={{ marginLeft: 8, background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer' }} onClick={() => { setLat(null); setLng(null) }}>Remover</button>
+          {tipo === 'evento' && (
+            <div className="plan-form-group">
+              <label className="plan-form-label">Público estimado</label>
+              <input className="plan-form-input" placeholder="Ex: 5.000" value={publicoEstimado} onChange={e => setPublicoEstimado(e.target.value)} />
             </div>
           )}
+
+          <div className="plan-form-secao">📍 Localização no mapa</div>
+          {/* Mapa principal */}
+          <MapaPicker lat={lat} lng={lng} onChange={(la, ln) => { setLat(la); setLng(ln) }} />
+          {lat && lng && (
+            <div style={{ fontSize: '0.75rem', color: '#6b7280', textAlign: 'center', marginTop: -4, marginBottom: '0.4rem' }}>
+              📍 {lat.toFixed(5)}, {lng.toFixed(5)}
+              <button style={{ marginLeft: 8, background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer' }} onClick={() => { setLat(null); setLng(null) }}>Remover ponto principal</button>
+            </div>
+          )}
+
+          {/* Pontos extras */}
+          <div style={{ background: '#f0f4ff', border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '0.6rem 0.7rem', marginBottom: '0.3rem' }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1e40af', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              📌 Pontos adicionais de referência
+            </div>
+
+            {/* Campo clique-no-mapa para ponto extra */}
+            {clickandoPonto && (
+              <div style={{ background: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 8, padding: '0.4rem 0.7rem', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: 600, color: '#92400e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>📍 Toque no mapa acima para definir o ponto</span>
+                <button type="button" onClick={() => setClickandoPonto(false)} style={{ background: 'none', border: 'none', color: '#b45309', cursor: 'pointer', fontWeight: 800 }}>✕</button>
+              </div>
+            )}
+
+            {/* Formulário manual */}
+            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
+              <div style={{ flex: '1 1 120px' }}>
+                <div style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 600, marginBottom: 2 }}>Nome/referência</div>
+                <input
+                  type="text"
+                  placeholder="Ex: Portão A"
+                  value={novoPontoLabel}
+                  onChange={e => setNovoPontoLabel(e.target.value)}
+                  style={{ width: '100%', padding: '0.38rem 0.5rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', outline: 'none' }}
+                />
+              </div>
+              <div style={{ flex: '0 1 110px' }}>
+                <div style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 600, marginBottom: 2 }}>Latitude</div>
+                <input
+                  type="text"
+                  placeholder="-20.51950"
+                  value={novoPontoLat}
+                  onChange={e => setNovoPontoLat(e.target.value)}
+                  style={{ width: '100%', padding: '0.38rem 0.5rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', outline: 'none' }}
+                />
+              </div>
+              <div style={{ flex: '0 1 110px' }}>
+                <div style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 600, marginBottom: 2 }}>Longitude</div>
+                <input
+                  type="text"
+                  placeholder="-43.69830"
+                  value={novoPontoLng}
+                  onChange={e => setNovoPontoLng(e.target.value)}
+                  style={{ width: '100%', padding: '0.38rem 0.5rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', outline: 'none' }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const la = parseFloat(novoPontoLat.replace(',', '.'))
+                  const ln = parseFloat(novoPontoLng.replace(',', '.'))
+                  if (isNaN(la) || isNaN(ln)) return
+                  setPontosExtras(prev => [...prev, { id: gerarId(), lat: la, lng: ln, label: novoPontoLabel.trim() || `Ponto ${prev.length + 1}` }])
+                  setNovoPontoLat(''); setNovoPontoLng(''); setNovoPontoLabel('')
+                }}
+                style={{ background: '#1e40af', color: 'white', border: 'none', borderRadius: 7, padding: '0.38rem 0.8rem', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', flexShrink: 0 }}
+              >+</button>
+            </div>
+
+            {/* Lista de pontos extras */}
+            {pontosExtras.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                {pontosExtras.map(p => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'white', borderRadius: 7, padding: '0.3rem 0.55rem', border: '1px solid #e0e7ff' }}>
+                    <span style={{ fontSize: '0.9rem' }}>📌</span>
+                    <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#1e40af', flex: 1 }}>{p.label}</span>
+                    <span style={{ fontSize: '0.7rem', color: '#6b7280', fontFamily: 'monospace' }}>{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</span>
+                    <button
+                      type="button"
+                      onClick={() => setPontosExtras(prev => prev.filter(x => x.id !== p.id))}
+                      style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: 900, fontSize: '0.8rem', padding: 0 }}
+                    >✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {pontosExtras.length === 0 && (
+              <div style={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center' }}>Nenhum ponto adicional. Preencha os campos acima para adicionar.</div>
+            )}
+          </div>
 
           <div className="plan-form-secao">🏛️ Órgãos Empenhados</div>
           <OrgaosPanel selecionados={equipe} onChange={setEquipe} />
@@ -1265,7 +1482,7 @@ function DetalheP({
                 <span className="plan-detalhe-info-val">
                   {formatarData(planoLocal.dataInicio)}
                   {planoLocal.dataFim && planoLocal.dataFim !== planoLocal.dataInicio && ` → ${formatarData(planoLocal.dataFim)}`}
-                  {planoLocal.horario && ` às ${planoLocal.horario}`}
+                  {planoLocal.horario && ` · ${planoLocal.horario}${planoLocal.horarioFim ? ` – ${planoLocal.horarioFim}` : ''}`}
                 </span>
               </div>
             )}
