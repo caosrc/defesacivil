@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Circle } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getAgenteLogado } from './Login'
 import { AGENTES } from '../types'
+import { wsOn, wsSend } from '../wsClient'
+import { ativarGps, desativarGps, subscribeGps, getEstadoGps, getDispositivoIdGlobal, getNomeAgenteGlobal } from '../gpsService'
 
 const ORGAOS_EMPENHO: { categoria: string; emoji: string; orgaos: { emoji: string; nome: string }[] }[] = [
   { categoria: 'Segurança Pública', emoji: '🚔', orgaos: [
@@ -362,6 +364,32 @@ function criarIconeCentro(): L.DivIcon {
 }
 
 // ── Componente de clique no mapa ────────────────────────────────────────
+function criarIconeAgente(nome: string): L.DivIcon {
+  const iniciais = nome.split(' ').map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('') || '?'
+  return L.divIcon({
+    className: '',
+    html: `<div style="position:relative;">
+      <div style="
+        background:#059669;width:36px;height:36px;border-radius:50%;
+        border:2.5px solid white;
+        box-shadow:0 0 0 2.5px #059669,0 3px 10px rgba(0,0,0,0.4);
+        display:flex;align-items:center;justify-content:center;
+        color:white;font-weight:800;font-size:12px;font-family:sans-serif;
+        letter-spacing:-0.02em;
+      ">${iniciais}</div>
+      <div style="position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);
+        background:rgba(5,150,105,0.92);color:white;font-size:7px;padding:1px 5px;
+        border-radius:3px;white-space:nowrap;font-family:sans-serif;max-width:64px;
+        overflow:hidden;text-overflow:ellipsis;font-weight:700;line-height:1.4;">
+        ${nome.split(' ')[0]}
+      </div>
+    </div>`,
+    iconSize: [36, 54],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -40],
+  })
+}
+
 function MapClickHandler({ onClique, ativo }: { onClique: (lat: number, lng: number) => void; ativo: boolean }) {
   useMapEvents({
     click(e) {
@@ -436,6 +464,82 @@ function MapaDetalhe({
   const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
   const [abaItens, setAbaItens] = useState<'icones' | 'orgaos' | 'materiais'>('icones')
   const centro: [number, number] = plano.lat && plano.lng ? [plano.lat, plano.lng] : OURO_BRANCO_CENTER
+
+  // ── Prontidão: rastreia quem está de prontidão + posições GPS ──────────
+  const [agProntidao, setAgProntidao] = useState<Map<string, string>>(new Map()) // id → nome
+  const [posicoesPront, setPosicoesPront] = useState<Map<string, { nome: string; lat: number; lng: number; precisao: number; ts: number }>>(new Map())
+  const agProntRef = useRef(agProntidao)
+  useEffect(() => { agProntRef.current = agProntidao }, [agProntidao])
+
+  useEffect(() => {
+    const planoId = plano.id
+    const meuId = getDispositivoIdGlobal()
+
+    const offIniciais = wsOn('prontidao_iniciais', (msg) => {
+      const lista = Array.isArray(msg.agentes) ? msg.agentes as { id: string; nome: string; planoId: string }[] : []
+      setAgProntidao(prev => {
+        const m = new Map(prev)
+        for (const ag of lista) {
+          if (ag.planoId === planoId) m.set(ag.id, ag.nome || ag.id)
+        }
+        return m
+      })
+    })
+
+    const offPront = wsOn('prontidao', (msg) => {
+      if (String(msg.planoId) !== planoId) return
+      const id = String(msg.id)
+      setAgProntidao(prev => { const m = new Map(prev); m.set(id, String(msg.nome || id)); return m })
+    })
+
+    const offSair = wsOn('prontidao_sair', (msg) => {
+      if (String(msg.planoId) !== planoId) return
+      const id = String(msg.id)
+      setAgProntidao(prev => { const m = new Map(prev); m.delete(id); return m })
+      setPosicoesPront(prev => { const m = new Map(prev); m.delete(id); return m })
+    })
+
+    const offPosicao = wsOn('posicao', (msg) => {
+      const id = String(msg.id)
+      if (id === meuId) return
+      if (!agProntRef.current.has(id)) return
+      setPosicoesPront(prev => {
+        const m = new Map(prev)
+        m.set(id, { nome: String(msg.nome || id), lat: Number(msg.lat), lng: Number(msg.lng), precisao: Number(msg.precisao || 0), ts: Date.now() })
+        return m
+      })
+    })
+
+    const offPosIniciais = wsOn('posicoes_iniciais', (msg) => {
+      const lista = Array.isArray(msg.posicoes) ? msg.posicoes as { id: string; nome: string; lat: number; lng: number; precisao: number }[] : []
+      setPosicoesPront(prev => {
+        const m = new Map(prev)
+        for (const p of lista) {
+          if (agProntRef.current.has(p.id) && p.id !== meuId) {
+            m.set(p.id, { nome: p.nome, lat: p.lat, lng: p.lng, precisao: p.precisao || 0, ts: Date.now() })
+          }
+        }
+        return m
+      })
+    })
+
+    const offRemover = wsOn('remover', (msg) => {
+      const id = String(msg.id)
+      setPosicoesPront(prev => { const m = new Map(prev); m.delete(id); return m })
+    })
+
+    const ttl = setInterval(() => {
+      const limite = Date.now() - 15_000
+      setPosicoesPront(prev => {
+        let mudou = false
+        const m = new Map(prev)
+        for (const [id, p] of m) { if (p.ts < limite) { m.delete(id); mudou = true } }
+        return mudou ? m : prev
+      })
+    }, 5000)
+
+    return () => { offIniciais(); offPront(); offSair(); offPosicao(); offPosIniciais(); offRemover(); clearInterval(ttl) }
+  }, [plano.id])
 
   function handleCliqueMapa(lat: number, lng: number) {
     if (!itemSelecionado) return
@@ -514,7 +618,38 @@ function MapaDetalhe({
             </Popup>
           </Marker>
         ))}
+
+        {/* Agentes em prontidão com GPS ativo */}
+        {Array.from(posicoesPront.entries()).map(([id, p]) => (
+          <Marker key={`ag-${id}`} position={[p.lat, p.lng]} icon={criarIconeAgente(p.nome)}>
+            <Popup>
+              <div style={{ textAlign: 'center', minWidth: 120 }}>
+                <div style={{ fontSize: '1.2rem' }}>🧑‍🚒</div>
+                <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{p.nome}</div>
+                <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: 2 }}>✅ Em prontidão · GPS ativo</div>
+                {p.precisao < 200 && <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 1 }}>±{Math.round(p.precisao)}m</div>}
+              </div>
+            </Popup>
+            {p.precisao > 0 && p.precisao < 300 && (
+              <Circle center={[p.lat, p.lng]} radius={p.precisao} pathOptions={{ color: '#059669', fillColor: '#059669', fillOpacity: 0.1, weight: 1.5 }} />
+            )}
+          </Marker>
+        ))}
       </MapContainer>
+
+      {agProntidao.size > 0 && (
+        <div style={{ background: '#f0fdf4', borderTop: '1px solid #bbf7d0', padding: '0.4rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669' }}>🛡️ Em prontidão:</span>
+          {Array.from(agProntidao.entries()).map(([id, nome]) => {
+            const temGps = posicoesPront.has(id)
+            return (
+              <span key={id} style={{ background: temGps ? '#dcfce7' : '#f3f4f6', color: temGps ? '#166534' : '#6b7280', borderRadius: 12, padding: '0.15rem 0.5rem', fontSize: '0.72rem', fontWeight: 600 }}>
+                {temGps ? '📡' : '📵'} {nome.split(' ')[0]}
+              </span>
+            )
+          })}
+        </div>
+      )}
 
       <div style={{ background: '#f8fafc', borderTop: '1px solid #e5e7eb', padding: '0.5rem 0.85rem' }}>
         <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a4b8c', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
@@ -1401,6 +1536,61 @@ function DetalheP({
   const [editando, setEditando] = useState(false)
   const [planoLocal, setPlanoLocal] = useState(plano)
 
+  // ── Prontidão ───────────────────────────────────────────────────────────
+  const chaveLocal = `dc-prontidao-${plano.id}`
+  const [emProntidao, setEmProntidao] = useState<boolean>(() => localStorage.getItem(chaveLocal) === '1')
+  const [estadoGps, setEstadoGps] = useState(() => getEstadoGps())
+  const [outrosProntidao, setOutrosProntidao] = useState<{ id: string; nome: string }[]>([])
+
+  useEffect(() => {
+    const unsub = subscribeGps(setEstadoGps)
+    return unsub
+  }, [])
+
+  useEffect(() => {
+    const planoId = plano.id
+    const meuId = getDispositivoIdGlobal()
+
+    const offIniciais = wsOn('prontidao_iniciais', (msg) => {
+      const lista = Array.isArray(msg.agentes) ? msg.agentes as { id: string; nome: string; planoId: string }[] : []
+      setOutrosProntidao(lista.filter(a => a.planoId === planoId && a.id !== meuId))
+    })
+    const offPront = wsOn('prontidao', (msg) => {
+      if (String(msg.planoId) !== planoId) return
+      const id = String(msg.id)
+      if (id === meuId) return
+      setOutrosProntidao(prev => prev.some(a => a.id === id) ? prev : [...prev, { id, nome: String(msg.nome || id) }])
+    })
+    const offSair = wsOn('prontidao_sair', (msg) => {
+      if (String(msg.planoId) !== planoId) return
+      const id = String(msg.id)
+      setOutrosProntidao(prev => prev.filter(a => a.id !== id))
+    })
+    const offRemover = wsOn('remover', (msg) => {
+      const id = String(msg.id)
+      setOutrosProntidao(prev => prev.filter(a => a.id !== id))
+    })
+
+    return () => { offIniciais(); offPront(); offSair(); offRemover() }
+  }, [plano.id])
+
+  function toggleProntidao() {
+    const meuId = getDispositivoIdGlobal()
+    const meuNome = getNomeAgenteGlobal()
+    if (emProntidao) {
+      wsSend({ tipo: 'prontidao_sair', id: meuId, planoId: plano.id })
+      localStorage.removeItem(chaveLocal)
+      setEmProntidao(false)
+    } else {
+      wsSend({ tipo: 'prontidao', id: meuId, nome: meuNome, planoId: plano.id, ativo: true })
+      localStorage.setItem(chaveLocal, '1')
+      setEmProntidao(true)
+      if (estadoGps.status === 'inativo' || estadoGps.status === 'erro') {
+        ativarGps()
+      }
+    }
+  }
+
   function mudarStatus(status: StatusPlano) {
     const atualizado = { ...planoLocal, status }
     setPlanoLocal(atualizado)
@@ -1503,6 +1693,78 @@ function DetalheP({
               <span className="plan-detalhe-info-val">{planoLocal.criadoPor} · {new Date(planoLocal.criadoEm).toLocaleDateString('pt-BR')}</span>
             </div>
           </div>
+        </div>
+
+        {/* Prontidão */}
+        <div className="plan-detalhe-card" style={{ overflow: 'hidden' }}>
+          <div style={{
+            background: emProntidao ? 'linear-gradient(135deg,#065f46,#059669)' : 'linear-gradient(135deg,#374151,#4b5563)',
+            color: 'white', padding: '0.6rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem'
+          }}>
+            <span style={{ fontSize: '1.1rem' }}>🛡️</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: '0.88rem' }}>
+                {emProntidao ? 'Você está em prontidão' : 'Prontidão'}
+              </div>
+              <div style={{ fontSize: '0.72rem', opacity: 0.85, marginTop: 1 }}>
+                {emProntidao
+                  ? estadoGps.status === 'ativo' ? '📡 GPS ativo — sua posição é visível no mapa' : '📵 GPS inativo — ative para aparecer no mapa'
+                  : 'Declare prontidão para aparecer no mapa tático em tempo real'}
+              </div>
+            </div>
+            <button
+              onClick={toggleProntidao}
+              style={{
+                background: emProntidao ? '#fee2e2' : '#dcfce7',
+                color: emProntidao ? '#b91c1c' : '#166534',
+                border: 'none', borderRadius: 20, padding: '0.35rem 0.85rem',
+                fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.2)'
+              }}
+            >
+              {emProntidao ? '🔴 Sair' : '🟢 Entrar'}
+            </button>
+          </div>
+
+          {emProntidao && (estadoGps.status === 'inativo' || estadoGps.status === 'erro') && (
+            <div style={{ background: '#fef3c7', padding: '0.45rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.8rem' }}>⚠️</span>
+              <span style={{ fontSize: '0.78rem', color: '#92400e', fontWeight: 600 }}>GPS desativado</span>
+              <button
+                onClick={() => ativarGps()}
+                style={{ marginLeft: 'auto', background: '#f59e0b', color: 'white', border: 'none', borderRadius: 12, padding: '0.22rem 0.7rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Ativar GPS
+              </button>
+            </div>
+          )}
+
+          {emProntidao && estadoGps.status === 'aguardando' && (
+            <div style={{ background: '#eff6ff', padding: '0.4rem 0.85rem', fontSize: '0.78rem', color: '#1d4ed8', fontWeight: 600 }}>
+              🔄 Aguardando sinal de GPS…
+            </div>
+          )}
+
+          {outrosProntidao.length > 0 && (
+            <div style={{ padding: '0.55rem 0.85rem', borderTop: '1px solid #e5e7eb' }}>
+              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
+                Outros agentes em prontidão ({outrosProntidao.length})
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                {outrosProntidao.map(ag => (
+                  <span key={ag.id} style={{ background: '#dcfce7', color: '#166534', borderRadius: 12, padding: '0.2rem 0.6rem', fontSize: '0.78rem', fontWeight: 600 }}>
+                    🧑‍🚒 {ag.nome}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {outrosProntidao.length === 0 && !emProntidao && (
+            <div style={{ padding: '0.5rem 0.85rem', fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center' }}>
+              Nenhum agente em prontidão neste evento
+            </div>
+          )}
         </div>
 
         {/* Mapa tático */}

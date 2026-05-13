@@ -72,7 +72,9 @@ const wss = new WebSocketServer({ server: httpServer, path: '/ws' })
 const todosConectados = new Set()
 const dispositivosOnline = new Map()
 const agentesOnline = new Map()
+const prontidaoAtivos = new Map() // id → { nome, planoId, ts }
 const ONLINE_TTL_MS = 60 * 1000
+const PRONTIDAO_TTL_MS = 5 * 60 * 1000 // 5 min sem renovar → expirar
 
 // Endpoint REST para leitura inicial da lista de agentes online
 // (independente de timing do WebSocket)
@@ -345,8 +347,41 @@ wss.on('connection', (ws) => {
       if (msg.tipo === 'sos-mensagem') {
         processarSosMensagem(msg).catch(() => {})
       }
+
+      if (msg.tipo === 'prontidao') {
+        const pid = String(msg.id || '')
+        const pNome = String(msg.nome || `Equipe ${pid.slice(0, 4)}`)
+        const pPlanoId = String(msg.planoId || '')
+        if (pid && pPlanoId) {
+          prontidaoAtivos.set(pid, { nome: pNome, planoId: pPlanoId, ts: Date.now() })
+          broadcastParaTodos({ tipo: 'prontidao', id: pid, nome: pNome, planoId: pPlanoId, ativo: true }, ws)
+        }
+      }
+
+      if (msg.tipo === 'prontidao_sair') {
+        const pid = String(msg.id || '')
+        if (pid && prontidaoAtivos.has(pid)) {
+          const info = prontidaoAtivos.get(pid)
+          prontidaoAtivos.delete(pid)
+          broadcastParaTodos({ tipo: 'prontidao_sair', id: pid, planoId: info.planoId }, ws)
+        }
+      }
     } catch { /* ignora mensagens malformadas */ }
   })
+
+  // Envia prontidões ativas para o novo cliente
+  const prontidoesAtuais = []
+  const agoraPront = Date.now()
+  for (const [id, d] of prontidaoAtivos) {
+    if (agoraPront - d.ts <= PRONTIDAO_TTL_MS) {
+      prontidoesAtuais.push({ id, nome: d.nome, planoId: d.planoId })
+    } else {
+      prontidaoAtivos.delete(id)
+    }
+  }
+  if (prontidoesAtuais.length > 0) {
+    ws.send(JSON.stringify({ tipo: 'prontidao_iniciais', agentes: prontidoesAtuais }))
+  }
 
   ws.on('close', () => {
     todosConectados.delete(ws)
@@ -358,12 +393,21 @@ wss.on('connection', (ws) => {
       agentesOnline.delete(onlineId)
       emitirOnlineSync()
     }
+    // Remove prontidão ao desconectar
+    if (dispositivoId && prontidaoAtivos.has(dispositivoId)) {
+      const info = prontidaoAtivos.get(dispositivoId)
+      prontidaoAtivos.delete(dispositivoId)
+      broadcastParaTodos({ tipo: 'prontidao_sair', id: dispositivoId, planoId: info.planoId })
+    }
   })
 
   ws.on('error', () => {
     todosConectados.delete(ws)
     if (dispositivoId) dispositivosOnline.delete(dispositivoId)
     if (onlineId) agentesOnline.delete(onlineId)
+    if (dispositivoId && prontidaoAtivos.has(dispositivoId)) {
+      prontidaoAtivos.delete(dispositivoId)
+    }
   })
 })
 
