@@ -4,6 +4,113 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getAgenteLogado } from './Login'
 import { AGENTES } from '../types'
+
+const ORGAOS_EMPENHO: { categoria: string; emoji: string; orgaos: { emoji: string; nome: string }[] }[] = [
+  { categoria: 'Segurança Pública', emoji: '🚔', orgaos: [
+    { emoji: '🚓', nome: 'Polícia Militar' },
+    { emoji: '🚔', nome: 'Polícia Rodoviária' },
+    { emoji: '👮', nome: 'Guarda Municipal' },
+    { emoji: '🚨', nome: 'Polícia Civil' },
+    { emoji: '🛡️', nome: 'Defesa Social' },
+    { emoji: '🎖️', nome: 'Exército Brasileiro' },
+    { emoji: '🛰️', nome: 'Inteligência/NIA' },
+    { emoji: '🐕', nome: 'Canil Operacional' },
+    { emoji: '🚁', nome: 'Apoio Aéreo' },
+  ]},
+  { categoria: 'Resgate e Emergência', emoji: '🚒', orgaos: [
+    { emoji: '🚒', nome: 'Corpo de Bombeiros' },
+    { emoji: '🚑', nome: 'SAMU' },
+    { emoji: '🧯', nome: 'Brigada de Incêndio' },
+    { emoji: '⛑️', nome: 'Defesa Civil' },
+    { emoji: '🏥', nome: 'Equipe Médica' },
+    { emoji: '🩺', nome: 'Vigilância Sanitária' },
+    { emoji: '🛟', nome: 'Resgate Aquático' },
+  ]},
+  { categoria: 'Prefeitura', emoji: '🏛️', orgaos: [
+    { emoji: '🏛️', nome: 'Prefeitura Municipal' },
+    { emoji: '🚧', nome: 'Secretaria de Obras' },
+    { emoji: '🌳', nome: 'Meio Ambiente' },
+    { emoji: '🚦', nome: 'Trânsito' },
+    { emoji: '💡', nome: 'Iluminação Pública' },
+    { emoji: '🚛', nome: 'Limpeza Urbana' },
+    { emoji: '🏠', nome: 'Habitação' },
+    { emoji: '👨‍👩‍👧', nome: 'Assistência Social' },
+    { emoji: '🏫', nome: 'Educação' },
+    { emoji: '🩹', nome: 'Secretaria de Saúde' },
+  ]},
+  { categoria: 'Infraestrutura', emoji: '🏗️', orgaos: [
+    { emoji: '💧', nome: 'COPASA' },
+    { emoji: '⚡', nome: 'CEMIG' },
+    { emoji: '📡', nome: 'Telecomunicações' },
+    { emoji: '🛣️', nome: 'DER' },
+    { emoji: '🚜', nome: 'Máquinas Pesadas' },
+    { emoji: '🏗️', nome: 'Engenharia Municipal' },
+    { emoji: '🌉', nome: 'Infraestrutura' },
+  ]},
+  { categoria: 'Empresas Privadas', emoji: '🏭', orgaos: [
+    { emoji: '🏭', nome: 'Empresa Privada' },
+    { emoji: '🚛', nome: 'Transportadora' },
+    { emoji: '⛏️', nome: 'Mineração' },
+    { emoji: '🏗️', nome: 'Construtora' },
+    { emoji: '🚜', nome: 'Terraplanagem' },
+    { emoji: '🛠️', nome: 'Manutenção Industrial' },
+    { emoji: '🔌', nome: 'Energia Privada' },
+  ]},
+  { categoria: 'Apoio Operacional', emoji: '📦', orgaos: [
+    { emoji: '🍞', nome: 'Alimentação' },
+    { emoji: '🥤', nome: 'Distribuição Água' },
+    { emoji: '⛺', nome: 'Apoio Logístico' },
+    { emoji: '📦', nome: 'Almoxarifado' },
+    { emoji: '🔋', nome: 'Geradores' },
+    { emoji: '📢', nome: 'Comunicação' },
+    { emoji: '📻', nome: 'Rádio Operação' },
+  ]},
+  { categoria: 'Eventos', emoji: '🎪', orgaos: [
+    { emoji: '🎪', nome: 'Organização Evento' },
+    { emoji: '🎤', nome: 'Produção Evento' },
+    { emoji: '🎫', nome: 'Controle Acesso' },
+    { emoji: '🧍', nome: 'Segurança Privada' },
+    { emoji: '🚧', nome: 'Equipe Montagem' },
+    { emoji: '🎵', nome: 'Apoio Técnico' },
+  ]},
+  { categoria: 'Trânsito e Mobilidade', emoji: '🚦', orgaos: [
+    { emoji: '🚦', nome: 'Agentes de Trânsito' },
+    { emoji: '🚌', nome: 'Transporte Público' },
+    { emoji: '🚕', nome: 'Apoio Mobilidade' },
+    { emoji: '🚧', nome: 'Interdição Viária' },
+    { emoji: '🛣️', nome: 'Rotas Alternativas' },
+  ]},
+  { categoria: 'Ambiental', emoji: '🌱', orgaos: [
+    { emoji: '🌧️', nome: 'Monitoramento Climático' },
+    { emoji: '🌊', nome: 'Recursos Hídricos' },
+    { emoji: '⛰️', nome: 'Geologia' },
+    { emoji: '🌱', nome: 'Defesa Ambiental' },
+    { emoji: '🪨', nome: 'Monitoramento Encostas' },
+  ]},
+  { categoria: 'Apoio Humanitário', emoji: '🤝', orgaos: [
+    { emoji: '🏠', nome: 'Abrigos' },
+    { emoji: '🍲', nome: 'Cozinha Solidária' },
+    { emoji: '👶', nome: 'Apoio Crianças' },
+    { emoji: '🛏️', nome: 'Assistência Humanitária' },
+    { emoji: '🧥', nome: 'Distribuição Roupas' },
+    { emoji: '🐶', nome: 'Resgate Animal' },
+  ]},
+  { categoria: 'Comunicação e Tecnologia', emoji: '📡', orgaos: [
+    { emoji: '📡', nome: 'Centro Operacional' },
+    { emoji: '🖥️', nome: 'Monitoramento' },
+    { emoji: '📹', nome: 'Videomonitoramento' },
+    { emoji: '🛰️', nome: 'Drone Operacional' },
+    { emoji: '📱', nome: 'TI/Comunicação' },
+    { emoji: '🔊', nome: 'Carro de Som' },
+  ]},
+  { categoria: 'Saúde', emoji: '🏥', orgaos: [
+    { emoji: '🏥', nome: 'Hospital' },
+    { emoji: '🩺', nome: 'UPA' },
+    { emoji: '💉', nome: 'Vacinação' },
+    { emoji: '🚑', nome: 'Ambulância Particular' },
+    { emoji: '🧪', nome: 'Laboratório' },
+  ]},
+]
 import './Planejamento.css'
 
 const PlanoEmergencia = lazy(() => import('./PlanoEmergencia'))
@@ -538,6 +645,136 @@ function PreListasPanel({ onAdicionarItens }: { onAdicionarItens: (itens: string
   )
 }
 
+// ── Sistema Integrado de Resposta Operacional ───────────────────────────
+function OrgaosPanel({ selecionados, onChange }: { selecionados: string[]; onChange: (v: string[]) => void }) {
+  const [aberto, setAberto] = useState(false)
+  const [catAtiva, setCatAtiva] = useState<string | null>(null)
+  const [outrosTexto, setOutrosTexto] = useState('')
+
+  const key = (o: { emoji: string; nome: string }) => `${o.emoji} ${o.nome}`
+
+  function toggle(k: string) {
+    onChange(selecionados.includes(k) ? selecionados.filter(x => x !== k) : [...selecionados, k])
+  }
+
+  function adicionarOutro() {
+    const t = outrosTexto.trim()
+    if (!t || selecionados.includes(t)) return
+    onChange([...selecionados, t])
+    setOutrosTexto('')
+  }
+
+  const cat = ORGAOS_EMPENHO.find(c => c.categoria === catAtiva)
+  const orgaosNaLista = new Set(ORGAOS_EMPENHO.flatMap(c => c.orgaos.map(key)))
+  const extras = selecionados.filter(s => !orgaosNaLista.has(s))
+
+  return (
+    <div style={{ marginBottom: '0.5rem' }}>
+      <button
+        type="button"
+        onClick={() => setAberto(!aberto)}
+        style={{ width: '100%', background: 'linear-gradient(135deg,#1a3a6b,#1e40af)', border: 'none', borderRadius: 10, padding: '0.6rem 0.9rem', fontSize: '0.85rem', fontWeight: 800, color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', letterSpacing: '0.01em' }}
+      >
+        <span>🏛️ Sistema Integrado de Resposta Operacional{selecionados.length > 0 ? ` · ${selecionados.length} órgão${selecionados.length > 1 ? 's' : ''}` : ''}</span>
+        <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>{aberto ? '▲ Fechar' : '▼ Abrir'}</span>
+      </button>
+
+      {aberto && (
+        <div style={{ border: '2px solid #1e40af', borderTop: 'none', borderRadius: '0 0 12px 12px', background: '#f0f4ff', padding: '0.65rem' }}>
+
+          {/* Categorias */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.55rem' }}>
+            {ORGAOS_EMPENHO.map(c => {
+              const qtd = c.orgaos.filter(o => selecionados.includes(key(o))).length
+              const ativo = catAtiva === c.categoria
+              return (
+                <button
+                  key={c.categoria}
+                  type="button"
+                  onClick={() => { setCatAtiva(ativo ? null : c.categoria); setOutrosTexto('') }}
+                  style={{ background: ativo ? '#1e40af' : '#dbeafe', color: ativo ? 'white' : '#1e3a8a', border: 'none', borderRadius: 20, padding: '0.28rem 0.65rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                >
+                  {c.emoji} {c.categoria} {qtd > 0 && <span style={{ background: ativo ? 'rgba(255,255,255,0.3)' : '#1e40af', color: 'white', borderRadius: 10, padding: '0 5px', fontSize: '0.65rem' }}>{qtd}</span>}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Órgãos da categoria ativa */}
+          {cat && (
+            <div style={{ background: 'white', borderRadius: 10, padding: '0.55rem 0.65rem', border: '1.5px solid #bfdbfe', marginBottom: '0.4rem' }}>
+              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#1e40af', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                {cat.emoji} {cat.categoria}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.2rem' }}>
+                {cat.orgaos.map(o => {
+                  const k = key(o)
+                  const sel = selecionados.includes(k)
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => toggle(k)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: sel ? '#1e40af' : '#f1f5ff', color: sel ? 'white' : '#1e3a8a', border: sel ? '1.5px solid #1e40af' : '1.5px solid #dbeafe', borderRadius: 8, padding: '0.38rem 0.55rem', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
+                    >
+                      <span style={{ fontSize: '1rem', lineHeight: 1, flexShrink: 0 }}>{o.emoji}</span>
+                      <span style={{ flex: 1, lineHeight: 1.2 }}>{o.nome}</span>
+                      {sel && <span style={{ fontSize: '0.7rem', opacity: 0.9 }}>✓</span>}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Outros */}
+              <div style={{ borderTop: '1px dashed #cbd5e1', marginTop: '0.45rem', paddingTop: '0.4rem' }}>
+                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '0.28rem' }}>➕ Adicionar outro órgão</div>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <input
+                    type="text"
+                    placeholder="Nome do órgão/empresa..."
+                    value={outrosTexto}
+                    onChange={e => setOutrosTexto(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarOutro() } }}
+                    style={{ flex: 1, padding: '0.38rem 0.6rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', outline: 'none' }}
+                  />
+                  <button type="button" onClick={adicionarOutro} style={{ background: '#1e40af', color: 'white', border: 'none', borderRadius: 7, padding: '0.38rem 0.8rem', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>+</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Órgãos extras (não estão na lista) */}
+          {extras.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.4rem' }}>
+              {extras.map(s => (
+                <span key={s} style={{ background: '#fef3c7', color: '#92400e', borderRadius: 12, padding: '0.2rem 0.55rem', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  ✏️ {s}
+                  <button type="button" onClick={() => toggle(s)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b45309', fontWeight: 900, fontSize: '0.75rem', padding: 0, lineHeight: 1 }}>✕</button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Selecionados resumo */}
+          {selecionados.length > 0 && (
+            <div style={{ background: '#eff6ff', borderRadius: 8, padding: '0.4rem 0.6rem', border: '1px solid #bfdbfe' }}>
+              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#1e40af', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>✅ Órgãos empenhados ({selecionados.length})</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem' }}>
+                {selecionados.map(s => (
+                  <span key={s} style={{ background: '#1e40af', color: 'white', borderRadius: 12, padding: '0.18rem 0.5rem', fontSize: '0.72rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    {s}
+                    <button type="button" onClick={() => toggle(s)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.75)', fontWeight: 900, fontSize: '0.65rem', padding: 0, lineHeight: 1 }}>✕</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Exportação PDF ──────────────────────────────────────────────────────
 function exportarPDF(plano: Plano) {
   const cfg = TIPOS_CONFIG[plano.tipo]
@@ -555,9 +792,23 @@ function exportarPDF(plano: Plano) {
         ${plano.materiais.map((m, i) => `<tr><td>${i + 1}</td><td>${m.nome}</td><td>${m.quantidade}</td><td>${m.unidade}</td></tr>`).join('')}
       </tbody></table>`
 
-  const equipeHtml = plano.equipe.length === 0
-    ? '<p style="color:#9ca3af;font-size:11px">Nenhum agente</p>'
-    : plano.equipe.map(ag => `<span class="chip">${ag}</span>`).join(' ')
+  const equipeHtml = (() => {
+    if (plano.equipe.length === 0) return '<p style="color:#9ca3af;font-size:11px">Nenhum órgão empenhado</p>'
+    const orgaosNaLista = new Map(ORGAOS_EMPENHO.flatMap(c => c.orgaos.map(o => [`${o.emoji} ${o.nome}`, { cat: c.categoria, catEmoji: c.emoji }])))
+    const grupos: Record<string, { catEmoji: string; orgaos: string[] }> = {}
+    const extras: string[] = []
+    plano.equipe.forEach(e => {
+      const info = orgaosNaLista.get(e)
+      if (info) { if (!grupos[info.cat]) grupos[info.cat] = { catEmoji: info.catEmoji, orgaos: [] }; grupos[info.cat].orgaos.push(e) }
+      else extras.push(e)
+    })
+    const partes: string[] = []
+    Object.entries(grupos).forEach(([cat, { catEmoji, orgaos }]) => {
+      partes.push(`<div style="margin-bottom:6px"><div style="font-size:10px;font-weight:700;color:#1a4b8c;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">${catEmoji} ${cat}</div><div>${orgaos.map(o => `<span class="chip">${o}</span>`).join(' ')}</div></div>`)
+    })
+    if (extras.length > 0) partes.push(`<div style="margin-bottom:6px"><div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">✏️ Outros</div><div>${extras.map(o => `<span class="chip" style="background:#fef3c7;color:#92400e">${o}</span>`).join(' ')}</div></div>`)
+    return partes.join('')
+  })()
 
   const itensMapaHtml = plano.itensMapa.length === 0
     ? '<p style="color:#9ca3af;font-size:11px">Nenhum item posicionado</p>'
@@ -628,7 +879,7 @@ function exportarPDF(plano: Plano) {
 </div>
 
 <div class="section">
-  <h2>👥 Equipe (${plano.equipe.length} agentes)</h2>
+  <h2>🏛️ Sistema Integrado de Resposta Operacional (${plano.equipe.length} órgão${plano.equipe.length !== 1 ? 's' : ''})</h2>
   ${equipeHtml}
 </div>
 
@@ -693,10 +944,6 @@ function FormularioPlano({
   const [novoMat, setNovoMat] = useState('')
   const [novoMatQtd, setNovoMatQtd] = useState('1')
   const [novoMatUnd, setNovoMatUnd] = useState('un')
-
-  function toggleEquipe(nome: string) {
-    setEquipe(prev => prev.includes(nome) ? prev.filter(n => n !== nome) : [...prev, nome])
-  }
 
   function adicionarMaterial() {
     if (!novoMat.trim()) return
@@ -853,19 +1100,8 @@ function FormularioPlano({
             </div>
           )}
 
-          <div className="plan-form-secao">👥 Equipe</div>
-          <div className="plan-equipe-grid">
-            {AGENTES.map(ag => (
-              <button
-                key={ag}
-                type="button"
-                className={`plan-equipe-btn ${equipe.includes(ag) ? 'selecionado' : ''}`}
-                onClick={() => toggleEquipe(ag)}
-              >
-                {equipe.includes(ag) ? '✓ ' : ''}{ag}
-              </button>
-            ))}
-          </div>
+          <div className="plan-form-secao">🏛️ Órgãos Empenhados</div>
+          <OrgaosPanel selecionados={equipe} onChange={setEquipe} />
 
           <div className="plan-form-secao">📦 Materiais e recursos</div>
           <PreListasPanel onAdicionarItens={adicionarMateriais} />
@@ -1065,15 +1301,52 @@ function DetalheP({
           <MapaDetalhe plano={planoLocal} onAdicionarItem={adicionarItem} onRemoverItem={removerItem} />
         </div>
 
-        {/* Equipe */}
+        {/* Órgãos Empenhados */}
         {planoLocal.equipe.length > 0 && (
-          <div className="plan-detalhe-card">
-            <div className="plan-detalhe-card-header">👥 Equipe ({planoLocal.equipe.length} agentes)</div>
-            <div className="plan-equipe-chips">
-              {planoLocal.equipe.map(ag => (
-                <span key={ag} className="plan-equipe-chip">{ag}</span>
-              ))}
+          <div className="plan-detalhe-card" style={{ overflow: 'hidden' }}>
+            <div style={{ background: 'linear-gradient(135deg,#1a3a6b,#1e40af)', color: 'white', padding: '0.55rem 0.85rem', fontWeight: 800, fontSize: '0.85rem', letterSpacing: '0.01em' }}>
+              🏛️ Sistema Integrado de Resposta Operacional — {planoLocal.equipe.length} órgão{planoLocal.equipe.length > 1 ? 's' : ''} empenhado{planoLocal.equipe.length > 1 ? 's' : ''}
             </div>
+            {/* Agrupa por categoria para exibição */}
+            {(() => {
+              const orgaosNaLista = new Map(ORGAOS_EMPENHO.flatMap(c => c.orgaos.map(o => [`${o.emoji} ${o.nome}`, c.categoria])))
+              const grupos: Record<string, string[]> = {}
+              const extras: string[] = []
+              planoLocal.equipe.forEach(e => {
+                const cat = orgaosNaLista.get(e)
+                if (cat) { if (!grupos[cat]) grupos[cat] = []; grupos[cat].push(e) }
+                else extras.push(e)
+              })
+              return (
+                <div style={{ padding: '0.6rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {Object.entries(grupos).map(([cat, orgaos]) => {
+                    const catInfo = ORGAOS_EMPENHO.find(c => c.categoria === cat)
+                    return (
+                      <div key={cat}>
+                        <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>
+                          {catInfo?.emoji} {cat}
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                          {orgaos.map(o => (
+                            <span key={o} style={{ background: '#dbeafe', color: '#1e3a8a', borderRadius: 12, padding: '0.22rem 0.6rem', fontSize: '0.78rem', fontWeight: 600 }}>{o}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {extras.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>✏️ Outros</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                        {extras.map(o => (
+                          <span key={o} style={{ background: '#fef3c7', color: '#92400e', borderRadius: 12, padding: '0.22rem 0.6rem', fontSize: '0.78rem', fontWeight: 600 }}>{o}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         )}
 
