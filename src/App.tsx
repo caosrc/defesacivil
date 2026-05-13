@@ -33,8 +33,9 @@ const EscalaAgentes = lazy(() => import('./components/EscalaAgentes'))
 const Dashboard = lazy(() => import('./components/Dashboard'))
 const SosOverlay = lazy(() => import('./components/SosOverlay'))
 const MateriaisEmprestimos = lazy(() => import('./components/MateriaisEmprestimos'))
+const Planejamento = lazy(() => import('./components/Planejamento'))
 
-type Aba = 'lista' | 'mapa' | 'nova' | 'viatura' | 'escala' | 'materiais'
+type Aba = 'lista' | 'mapa' | 'nova' | 'viatura' | 'escala' | 'materiais' | 'planejamento'
 
 function dataLocal(iso: string): string {
   const d = new Date(iso)
@@ -463,6 +464,7 @@ export default function App() {
         import('./components/EscalaAgentes'),
         import('./components/Dashboard'),
         import('./components/MateriaisEmprestimos'),
+        import('./components/Planejamento'),
       ]).catch(() => { /* sem internet ou bloqueado, ignora */ })
     }, 1500)
     return () => window.clearTimeout(id)
@@ -845,6 +847,14 @@ export default function App() {
             </Suspense>
           </ErrorBoundary>
         )}
+
+        {aba === 'planejamento' && (
+          <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
+              <Planejamento />
+            </Suspense>
+          </ErrorBoundary>
+        )}
       </div>
 
       <nav className="bottom-nav">
@@ -862,6 +872,10 @@ export default function App() {
         <button className={`nav-btn ${aba === 'mapa' ? 'ativo' : ''}`} onClick={() => setAba('mapa')}>
           <span className="nav-emoji">🗺️</span>
           <span>Mapa</span>
+        </button>
+        <button className={`nav-btn ${aba === 'planejamento' ? 'ativo' : ''}`} onClick={() => setAba('planejamento')}>
+          <span className="nav-emoji">📐</span>
+          <span>Planejamento</span>
         </button>
         <button className={`nav-btn ${aba === 'viatura' ? 'ativo' : ''}`} onClick={() => setAba('viatura')}>
           <span className="nav-emoji">🚗</span>
