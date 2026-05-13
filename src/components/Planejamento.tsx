@@ -100,17 +100,88 @@ const RISCO_CONFIG = {
   alto:  { label: 'Alto',  cor: '#dc2626', bg: '#fee2e2' },
 }
 
-const PRE_LISTAS = [
-  { nome: 'Segurança',         emoji: '🛡️', itens: ['Cones', 'Fita zebrada', 'Cavaletes', 'Grades', 'Iluminação', 'Extintores', 'Rádio HT', 'EPI', 'Barreiras'] },
-  { nome: 'Trânsito',          emoji: '🚦', itens: ['Bloqueio de vias', 'Desvio', 'Sinalização', 'Placas', 'Cones refletivos', 'Viatura trânsito', 'Rota alternativa'] },
-  { nome: 'Saúde',             emoji: '🏥', itens: ['Ambulância', 'SAMU', 'Posto médico', 'Maca', 'DEA', 'Kit primeiros socorros', 'Água potável'] },
-  { nome: 'Estrutura',         emoji: '🏗️', itens: ['Tendas', 'Barracas', 'Cadeiras', 'Mesas', 'Palco', 'Gerador', 'Iluminação', 'Banheiro químico'] },
-  { nome: 'Apoio Operacional', emoji: '🤝', itens: ['Defesa Civil', 'PM', 'Bombeiros', 'Guarda Municipal', 'Brigadistas', 'Apoio social'] },
-  { nome: 'Hidratação',        emoji: '💧', itens: ['Ponto de água', "Caixa d'água", 'Copos', 'Distribuição água'] },
-  { nome: 'Comunicação',       emoji: '📡', itens: ['Rádio HT', 'Repetidora', 'Internet', 'Ponto Wi-Fi', 'Megafone', 'Carro som'] },
-  { nome: 'Clima/Chuva',       emoji: '🌧️', itens: ['Lona', 'Abrigo', 'Drenagem', 'Bomba água', 'Monitoramento clima'] },
-  { nome: 'Evacuação',         emoji: '🚪', itens: ['Rota fuga', 'Saída emergência', 'Ponto encontro', 'Iluminação emergência'] },
-  { nome: 'Logística',         emoji: '⚙️', itens: ['Combustível', 'Alimentação equipes', 'Energia', 'Carregadores', 'Ferramentas'] },
+const PRE_LISTAS: { nome: string; emoji: string; itens: { emoji: string; label: string }[] }[] = [
+  { nome: 'Segurança', emoji: '🛡️', itens: [
+    { emoji: '🟧', label: 'Cones' },
+    { emoji: '🚧', label: 'Fita zebrada' },
+    { emoji: '🐴', label: 'Cavaletes' },
+    { emoji: '🚏', label: 'Grades' },
+    { emoji: '💡', label: 'Iluminação' },
+    { emoji: '🧯', label: 'Extintores' },
+    { emoji: '📻', label: 'Rádio HT' },
+    { emoji: '🦺', label: 'EPI' },
+    { emoji: '🛑', label: 'Barreiras' },
+  ]},
+  { nome: 'Trânsito', emoji: '🚦', itens: [
+    { emoji: '🚧', label: 'Bloqueio de vias' },
+    { emoji: '↪️',  label: 'Desvio' },
+    { emoji: '🪧', label: 'Sinalização' },
+    { emoji: '🪧', label: 'Placas' },
+    { emoji: '🔶', label: 'Cones refletivos' },
+    { emoji: '🚓', label: 'Viatura trânsito' },
+    { emoji: '🗺️', label: 'Rota alternativa' },
+  ]},
+  { nome: 'Saúde', emoji: '🏥', itens: [
+    { emoji: '🚑', label: 'Ambulância' },
+    { emoji: '🚑', label: 'SAMU' },
+    { emoji: '🏥', label: 'Posto médico' },
+    { emoji: '🛏️', label: 'Maca' },
+    { emoji: '❤️', label: 'DEA' },
+    { emoji: '🧰', label: 'Kit primeiros socorros' },
+    { emoji: '💧', label: 'Água potável' },
+  ]},
+  { nome: 'Estrutura', emoji: '🏗️', itens: [
+    { emoji: '⛺', label: 'Tendas' },
+    { emoji: '🏕️', label: 'Barracas' },
+    { emoji: '🪑', label: 'Cadeiras' },
+    { emoji: '🪑', label: 'Mesas' },
+    { emoji: '🎤', label: 'Palco' },
+    { emoji: '⚡', label: 'Gerador' },
+    { emoji: '💡', label: 'Iluminação' },
+    { emoji: '🚻', label: 'Banheiro químico' },
+  ]},
+  { nome: 'Apoio Operacional', emoji: '🤝', itens: [
+    { emoji: '🛡️', label: 'Defesa Civil' },
+    { emoji: '🚓', label: 'PM' },
+    { emoji: '🚒', label: 'Bombeiros' },
+    { emoji: '🚔', label: 'Guarda Municipal' },
+    { emoji: '👷', label: 'Brigadistas' },
+    { emoji: '🤲', label: 'Apoio social' },
+  ]},
+  { nome: 'Hidratação', emoji: '💧', itens: [
+    { emoji: '🚰', label: 'Ponto de água' },
+    { emoji: '🗃️', label: "Caixa d'água" },
+    { emoji: '🥤', label: 'Copos' },
+    { emoji: '💧', label: 'Distribuição água' },
+  ]},
+  { nome: 'Comunicação', emoji: '📡', itens: [
+    { emoji: '📻', label: 'Rádio HT' },
+    { emoji: '📡', label: 'Repetidora' },
+    { emoji: '🌐', label: 'Internet' },
+    { emoji: '📶', label: 'Ponto Wi-Fi' },
+    { emoji: '📢', label: 'Megafone' },
+    { emoji: '🔊', label: 'Carro som' },
+  ]},
+  { nome: 'Clima/Chuva', emoji: '🌧️', itens: [
+    { emoji: '🟦', label: 'Lona' },
+    { emoji: '🏠', label: 'Abrigo' },
+    { emoji: '🌊', label: 'Drenagem' },
+    { emoji: '💦', label: 'Bomba água' },
+    { emoji: '🌡️', label: 'Monitoramento clima' },
+  ]},
+  { nome: 'Evacuação', emoji: '🚪', itens: [
+    { emoji: '🏃', label: 'Rota fuga' },
+    { emoji: '🚪', label: 'Saída emergência' },
+    { emoji: '📍', label: 'Ponto encontro' },
+    { emoji: '🔦', label: 'Iluminação emergência' },
+  ]},
+  { nome: 'Logística', emoji: '⚙️', itens: [
+    { emoji: '⛽', label: 'Combustível' },
+    { emoji: '🍱', label: 'Alimentação equipes' },
+    { emoji: '🔌', label: 'Energia' },
+    { emoji: '🔋', label: 'Carregadores' },
+    { emoji: '🔧', label: 'Ferramentas' },
+  ]},
 ]
 
 const OURO_BRANCO_CENTER: [number, number] = [-20.5195, -43.6983]
@@ -330,18 +401,27 @@ function PreListasPanel({ onAdicionarItens }: { onAdicionarItens: (itens: string
   const [aberto, setAberto] = useState(false)
   const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>(null)
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
+  const [outrosTexto, setOutrosTexto] = useState('')
 
-  function toggleItem(item: string) {
+  function toggleItem(label: string) {
     setSelecionados(prev => {
       const novo = new Set(prev)
-      novo.has(item) ? novo.delete(item) : novo.add(item)
+      novo.has(label) ? novo.delete(label) : novo.add(label)
       return novo
     })
+  }
+
+  function adicionarOutro() {
+    const texto = outrosTexto.trim()
+    if (!texto) return
+    setSelecionados(prev => new Set(prev).add(texto))
+    setOutrosTexto('')
   }
 
   function confirmar() {
     onAdicionarItens(Array.from(selecionados))
     setSelecionados(new Set())
+    setOutrosTexto('')
     setCategoriaAtiva(null)
     setAberto(false)
   }
@@ -355,18 +435,19 @@ function PreListasPanel({ onAdicionarItens }: { onAdicionarItens: (itens: string
         onClick={() => setAberto(!aberto)}
         style={{ width: '100%', background: '#f0f4ff', border: '1.5px solid #bfdbfe', borderRadius: 8, padding: '0.5rem 0.85rem', fontSize: '0.82rem', fontWeight: 700, color: '#1e40af', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
       >
-        <span>📋 Adicionar da pré-lista</span>
+        <span>📋 Adicionar da pré-lista{selecionados.size > 0 ? ` (${selecionados.size} selecionados)` : ''}</span>
         <span style={{ fontSize: '0.7rem' }}>{aberto ? '▲ Fechar' : '▼ Abrir'}</span>
       </button>
 
       {aberto && (
         <div style={{ border: '1.5px solid #bfdbfe', borderTop: 'none', borderRadius: '0 0 10px 10px', background: '#f8faff', padding: '0.6rem' }}>
+          {/* Botões de categoria */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.5rem' }}>
             {PRE_LISTAS.map(cat => (
               <button
                 key={cat.nome}
                 type="button"
-                onClick={() => setCategoriaAtiva(categoriaAtiva === cat.nome ? null : cat.nome)}
+                onClick={() => { setCategoriaAtiva(categoriaAtiva === cat.nome ? null : cat.nome); setOutrosTexto('') }}
                 style={{
                   background: categoriaAtiva === cat.nome ? '#1e40af' : '#e0e7ff',
                   color: categoriaAtiva === cat.nome ? 'white' : '#1e40af',
@@ -379,22 +460,66 @@ function PreListasPanel({ onAdicionarItens }: { onAdicionarItens: (itens: string
             ))}
           </div>
 
+          {/* Itens da categoria selecionada */}
           {catAtiva && (
             <div style={{ background: 'white', borderRadius: 8, padding: '0.5rem 0.6rem', border: '1px solid #e0e7ff', marginBottom: '0.4rem' }}>
               {catAtiva.itens.map(item => (
                 <label
-                  key={item}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', padding: '0.3rem 0.2rem', borderRadius: 6, background: selecionados.has(item) ? '#dbeafe' : 'transparent' }}
+                  key={item.label}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', cursor: 'pointer', padding: '0.32rem 0.3rem', borderRadius: 6, background: selecionados.has(item.label) ? '#dbeafe' : 'transparent' }}
                 >
                   <input
                     type="checkbox"
-                    checked={selecionados.has(item)}
-                    onChange={() => toggleItem(item)}
+                    checked={selecionados.has(item.label)}
+                    onChange={() => toggleItem(item.label)}
                     style={{ width: 16, height: 16, accentColor: '#1e40af', flexShrink: 0 }}
                   />
-                  <span style={{ fontSize: '0.82rem', color: '#1f2937' }}>{item}</span>
+                  <span style={{ fontSize: '1rem', lineHeight: 1 }}>{item.emoji}</span>
+                  <span style={{ fontSize: '0.82rem', color: '#1f2937' }}>{item.label}</span>
                 </label>
               ))}
+
+              {/* Separador e campo Outros */}
+              <div style={{ borderTop: '1px dashed #cbd5e1', marginTop: '0.4rem', paddingTop: '0.4rem' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748b', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  ➕ Outros — adicionar item personalizado
+                </div>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <input
+                    type="text"
+                    placeholder="Digite o item e pressione +"
+                    value={outrosTexto}
+                    onChange={e => setOutrosTexto(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarOutro() } }}
+                    style={{ flex: 1, padding: '0.4rem 0.6rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.82rem', outline: 'none' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={adicionarOutro}
+                    style={{ background: '#1e40af', color: 'white', border: 'none', borderRadius: 7, padding: '0.4rem 0.8rem', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
+                  >+</button>
+                </div>
+                {/* Mostra itens "outros" já adicionados nesta sessão */}
+                {Array.from(selecionados).filter(s => !catAtiva.itens.some(i => i.label === s)).length > 0 && (
+                  <div style={{ marginTop: '0.35rem', display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                    {Array.from(selecionados)
+                      .filter(s => !catAtiva.itens.some(i => i.label === s))
+                      .map(s => (
+                        <span
+                          key={s}
+                          style={{ background: '#fef3c7', color: '#92400e', borderRadius: 12, padding: '0.18rem 0.55rem', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                        >
+                          ✏️ {s}
+                          <button
+                            type="button"
+                            onClick={() => toggleItem(s)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b45309', fontWeight: 900, fontSize: '0.75rem', padding: 0, lineHeight: 1 }}
+                          >✕</button>
+                        </span>
+                      ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -404,7 +529,7 @@ function PreListasPanel({ onAdicionarItens }: { onAdicionarItens: (itens: string
               onClick={confirmar}
               style={{ width: '100%', background: '#1a4b8c', color: 'white', border: 'none', borderRadius: 8, padding: '0.5rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}
             >
-              ✅ Adicionar {selecionados.size} {selecionados.size === 1 ? 'item' : 'itens'} selecionados
+              ✅ Adicionar {selecionados.size} {selecionados.size === 1 ? 'item' : 'itens'} à lista
             </button>
           )}
         </div>
