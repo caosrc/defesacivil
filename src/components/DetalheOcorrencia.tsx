@@ -90,6 +90,10 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [erroEdit, setErroEdit] = useState('')
   const [fotoAmpliada, setFotoAmpliada] = useState<number | null>(null)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+  const [eFotos, setEFotos] = useState<string[]>(Array.isArray(o.fotos) ? o.fotos : [])
+  const [eFotoAmpliada, setEFotoAmpliada] = useState<number | null>(null)
+  const camEditRef = useRef<HTMLInputElement>(null)
+  const galEditRef = useRef<HTMLInputElement>(null)
 
   // ── Permissão: somente quem registrou pode editar/excluir ──
   const agenteLogado = (sessionStorage.getItem('defesacivil-agente-sessao') || '').trim()
@@ -172,9 +176,27 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setERecomendacao(o.recomendacao ?? '')
     setEConclusao(o.conclusao ?? '')
     setEAgentes(Array.isArray(o.agentes) ? o.agentes : [])
+    setEFotos(Array.isArray(o.fotos) ? [...o.fotos] : [])
+    setEFotoAmpliada(null)
     setGeoMsg('')
     setErroEdit('')
     setEditando(true)
+  }
+
+  function adicionarFotosEdicao(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    if (!files) return
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader()
+      reader.onload = async (ev) => {
+        if (ev.target?.result) {
+          const comMarca = await adicionarMarcaDagua(ev.target.result as string, o.lat ?? null, o.lng ?? null)
+          setEFotos((prev) => [...prev, comMarca])
+        }
+      }
+      reader.readAsDataURL(file)
+    })
+    e.target.value = ''
   }
 
   function cancelarEdicao() {
@@ -231,7 +253,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         nivel_risco: eNivel,
         status_oc: eStatus,
         data_ocorrencia: eDataOcorrencia || null,
-        fotos: o.fotos,
+        fotos: eFotos,
         lat: finalLat,
         lng: finalLng,
         endereco: eEndereco || null,
@@ -863,6 +885,39 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                   </div>
                 </div>
 
+                {/* Fotos */}
+                <div className="campo campo-edit">
+                  <label className="campo-label">🖼️ Fotos ({eFotos.length})</label>
+                  <div className="fotos-area">
+                    {eFotos.map((f, i) => (
+                      <div key={i} className="foto-wrap">
+                        <img
+                          src={f}
+                          alt={`Foto ${i + 1}`}
+                          className="foto-thumb"
+                          onClick={() => setEFotoAmpliada(i)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        <button
+                          className="foto-del"
+                          onClick={() => setEFotos((p) => p.filter((_, j) => j !== i))}
+                          title="Remover foto"
+                        >✕</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="fotos-botoes">
+                    <button className="btn-foto-camera" onClick={() => camEditRef.current?.click()}>
+                      <span>📷</span><span>Tirar Foto</span>
+                    </button>
+                    <button className="btn-foto-galeria" onClick={() => galEditRef.current?.click()}>
+                      <span>🖼️</span><span>Carregar Foto</span>
+                    </button>
+                  </div>
+                  <input ref={camEditRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={adicionarFotosEdicao} />
+                  <input ref={galEditRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={adicionarFotosEdicao} />
+                </div>
+
                 {erroEdit && <div className="erro-msg">⚠️ {erroEdit}</div>}
               </div>
             )}
@@ -905,6 +960,29 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
           </div>
         </div>
       </div>
+
+      {/* ── Lightbox de fotos no modo edição ── */}
+      {eFotoAmpliada !== null && eFotos.length > 0 && (
+        <div className="lightbox-overlay" onClick={() => setEFotoAmpliada(null)}>
+          <div className="lightbox-box" onClick={(e) => e.stopPropagation()}>
+            <button className="lightbox-fechar" onClick={() => setEFotoAmpliada(null)}>✕</button>
+            {eFotos.length > 1 && (
+              <button
+                className="lightbox-nav lightbox-prev"
+                onClick={() => setEFotoAmpliada((eFotoAmpliada - 1 + eFotos.length) % eFotos.length)}
+              >‹</button>
+            )}
+            <img src={eFotos[eFotoAmpliada]} alt={`Foto ${eFotoAmpliada + 1}`} className="lightbox-img" />
+            {eFotos.length > 1 && (
+              <button
+                className="lightbox-nav lightbox-next"
+                onClick={() => setEFotoAmpliada((eFotoAmpliada + 1) % eFotos.length)}
+              >›</button>
+            )}
+            <div className="lightbox-contador">{eFotoAmpliada + 1} / {eFotos.length}</div>
+          </div>
+        </div>
+      )}
 
       {/* ── Lightbox de foto ── */}
       {fotoAmpliada !== null && totalFotos > 0 && (
