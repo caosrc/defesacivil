@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getAgenteLogado } from './Login'
 import { AGENTES } from '../types'
 import './Planejamento.css'
+
+const PlanoEmergencia = lazy(() => import('./PlanoEmergencia'))
 
 // Corrige ícones do Leaflet com Vite
 delete (L.Icon.Default.prototype as Record<string, unknown>)._getIconUrl
@@ -15,7 +17,7 @@ L.Icon.Default.mergeOptions({
 })
 
 // ── Tipos ──────────────────────────────────────────────────────────────
-type TipoPlano = 'evento' | 'operacao' | 'simulado'
+type TipoPlano = 'evento' | 'operacao' | 'simulado' | 'emergencia'
 type StatusPlano = 'planejado' | 'em_curso' | 'concluido' | 'cancelado'
 
 interface MaterialPlano {
@@ -60,9 +62,10 @@ interface Plano {
 const STORAGE_KEY = 'defesacivil-planejamentos-v1'
 
 const TIPOS_CONFIG: Record<TipoPlano, { label: string; emoji: string; cor: string; descricao: string }> = {
-  evento:   { label: 'Eventos',    emoji: '🎪', cor: '#1a6bbf', descricao: 'Festas, shows, feiras e grandes concentrações' },
-  operacao: { label: 'Operações',  emoji: '🚨', cor: '#dc2626', descricao: 'Resposta a enchentes, deslizamentos, incêndios' },
-  simulado: { label: 'Simulados',  emoji: '🧪', cor: '#7c3aed', descricao: 'Exercícios e treinamentos de emergência' },
+  evento:     { label: 'Eventos',    emoji: '🎪', cor: '#1a6bbf', descricao: 'Festas, shows, feiras e grandes concentrações' },
+  operacao:   { label: 'Operações',  emoji: '🚨', cor: '#dc2626', descricao: 'Resposta a enchentes, deslizamentos, incêndios' },
+  simulado:   { label: 'Simulados',  emoji: '🧪', cor: '#7c3aed', descricao: 'Exercícios e treinamentos de emergência' },
+  emergencia: { label: 'Emergencial', emoji: '⚠️', cor: '#ea580c', descricao: 'Plano de emergência municipal' },
 }
 
 const STATUS_CONFIG: Record<StatusPlano, { label: string; emoji: string; classe: string }> = {
@@ -853,9 +856,9 @@ export default function Planejamento() {
   return (
     <div className="plan-wrap">
       <div className="plan-subtabs">
-        {(['evento', 'operacao', 'simulado'] as TipoPlano[]).map(t => {
+        {(['evento', 'operacao', 'simulado', 'emergencia'] as TipoPlano[]).map(t => {
           const c = TIPOS_CONFIG[t]
-          const total = totalPorTipo(t)
+          const total = t !== 'emergencia' ? totalPorTipo(t) : 0
           return (
             <button
               key={t}
@@ -882,16 +885,24 @@ export default function Planejamento() {
         })}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        <ListaPlanos
-          tipo={subAba}
-          planos={planos}
-          onNovo={() => setCriando(true)}
-          onAbrir={p => setAberto(p)}
-        />
-      </div>
+      {subAba === 'emergencia' ? (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Carregando...</div>}>
+            <PlanoEmergencia />
+          </Suspense>
+        </div>
+      ) : (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <ListaPlanos
+            tipo={subAba}
+            planos={planos}
+            onNovo={() => setCriando(true)}
+            onAbrir={p => setAberto(p)}
+          />
+        </div>
+      )}
 
-      {criando && (
+      {subAba !== 'emergencia' && criando && (
         <FormularioPlano
           tipo={subAba}
           onSalvar={salvarPlano}
@@ -899,7 +910,7 @@ export default function Planejamento() {
         />
       )}
 
-      {aberto && (
+      {subAba !== 'emergencia' && aberto && (
         <DetalheP
           plano={aberto}
           onVoltar={() => setAberto(null)}
