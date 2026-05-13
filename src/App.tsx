@@ -872,6 +872,10 @@ export default function App() {
           <span className="nav-emoji">👥</span>
           <span>Escala</span>
         </button>
+        <button className={`nav-btn ${aba === 'planejamento' ? 'ativo' : ''}`} onClick={() => setAba('planejamento')}>
+          <span className="nav-emoji">📐</span>
+          <span>Planejamento</span>
+        </button>
         <button className={`nav-btn ${aba === 'lista' ? 'ativo' : ''}`} onClick={() => setAba('lista')}>
           <span className="nav-emoji">📋</span>
           <span>Ocorrências</span>
@@ -882,10 +886,6 @@ export default function App() {
         <button className={`nav-btn ${aba === 'mapa' ? 'ativo' : ''}`} onClick={() => setAba('mapa')}>
           <span className="nav-emoji">🗺️</span>
           <span>Mapa</span>
-        </button>
-        <button className={`nav-btn ${aba === 'planejamento' ? 'ativo' : ''}`} onClick={() => setAba('planejamento')}>
-          <span className="nav-emoji">📐</span>
-          <span>Planejamento</span>
         </button>
         <button className={`nav-btn ${aba === 'plano_emergencia' ? 'ativo' : ''}`} onClick={() => setAba('plano_emergencia')}>
           <span className="nav-emoji">🚨</span>
