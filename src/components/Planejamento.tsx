@@ -100,6 +100,19 @@ const RISCO_CONFIG = {
   alto:  { label: 'Alto',  cor: '#dc2626', bg: '#fee2e2' },
 }
 
+const PRE_LISTAS = [
+  { nome: 'Segurança',         emoji: '🛡️', itens: ['Cones', 'Fita zebrada', 'Cavaletes', 'Grades', 'Iluminação', 'Extintores', 'Rádio HT', 'EPI', 'Barreiras'] },
+  { nome: 'Trânsito',          emoji: '🚦', itens: ['Bloqueio de vias', 'Desvio', 'Sinalização', 'Placas', 'Cones refletivos', 'Viatura trânsito', 'Rota alternativa'] },
+  { nome: 'Saúde',             emoji: '🏥', itens: ['Ambulância', 'SAMU', 'Posto médico', 'Maca', 'DEA', 'Kit primeiros socorros', 'Água potável'] },
+  { nome: 'Estrutura',         emoji: '🏗️', itens: ['Tendas', 'Barracas', 'Cadeiras', 'Mesas', 'Palco', 'Gerador', 'Iluminação', 'Banheiro químico'] },
+  { nome: 'Apoio Operacional', emoji: '🤝', itens: ['Defesa Civil', 'PM', 'Bombeiros', 'Guarda Municipal', 'Brigadistas', 'Apoio social'] },
+  { nome: 'Hidratação',        emoji: '💧', itens: ['Ponto de água', "Caixa d'água", 'Copos', 'Distribuição água'] },
+  { nome: 'Comunicação',       emoji: '📡', itens: ['Rádio HT', 'Repetidora', 'Internet', 'Ponto Wi-Fi', 'Megafone', 'Carro som'] },
+  { nome: 'Clima/Chuva',       emoji: '🌧️', itens: ['Lona', 'Abrigo', 'Drenagem', 'Bomba água', 'Monitoramento clima'] },
+  { nome: 'Evacuação',         emoji: '🚪', itens: ['Rota fuga', 'Saída emergência', 'Ponto encontro', 'Iluminação emergência'] },
+  { nome: 'Logística',         emoji: '⚙️', itens: ['Combustível', 'Alimentação equipes', 'Energia', 'Carregadores', 'Ferramentas'] },
+]
+
 const OURO_BRANCO_CENTER: [number, number] = [-20.5195, -43.6983]
 
 // ── Persistência ────────────────────────────────────────────────────────
@@ -148,6 +161,19 @@ function criarIconePrincipal(): L.DivIcon {
   })
 }
 
+function criarIconeCentro(): L.DivIcon {
+  return L.divIcon({
+    html: `<div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center">
+      <div style="width:20px;height:20px;background:rgba(26,75,140,0.18);border:2.5px dashed #1a4b8c;border-radius:50%;display:flex;align-items:center;justify-content:center">
+        <div style="width:5px;height:5px;background:#1a4b8c;border-radius:50%"></div>
+      </div>
+    </div>`,
+    className: '',
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -18],
+  })
+}
+
 // ── Componente de clique no mapa ────────────────────────────────────────
 function MapClickHandler({ onClique, ativo }: { onClique: (lat: number, lng: number) => void; ativo: boolean }) {
   useMapEvents({
@@ -190,15 +216,19 @@ function MapaPicker({
       <MapContainer
         center={centro}
         zoom={lat && lng ? 15 : 13}
-        style={{ height: 220, width: '100%', borderRadius: 12 }}
+        style={{ height: 240, width: '100%', borderRadius: 12 }}
         zoomControl={true}
         attributionControl={false}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <MapClickHandler ativo={modoClick} onClique={(la, ln) => { onChange(la, ln); setModoClick(false) }} />
-        {lat && lng && (
+        {lat && lng ? (
           <Marker position={[lat, lng]} icon={criarIconePrincipal()}>
-            <Popup>Local do planejamento</Popup>
+            <Popup>📍 Local do evento</Popup>
+          </Marker>
+        ) : (
+          <Marker position={OURO_BRANCO_CENTER} icon={criarIconeCentro()}>
+            <Popup>🏙️ Centro de Ouro Branco<br /><small>Toque no mapa para definir o local do evento</small></Popup>
           </Marker>
         )}
       </MapContainer>
@@ -295,6 +325,217 @@ function MapaDetalhe({
   )
 }
 
+// ── Painel de pré-listas de materiais ──────────────────────────────────
+function PreListasPanel({ onAdicionarItens }: { onAdicionarItens: (itens: string[]) => void }) {
+  const [aberto, setAberto] = useState(false)
+  const [categoriaAtiva, setCategoriaAtiva] = useState<string | null>(null)
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set())
+
+  function toggleItem(item: string) {
+    setSelecionados(prev => {
+      const novo = new Set(prev)
+      novo.has(item) ? novo.delete(item) : novo.add(item)
+      return novo
+    })
+  }
+
+  function confirmar() {
+    onAdicionarItens(Array.from(selecionados))
+    setSelecionados(new Set())
+    setCategoriaAtiva(null)
+    setAberto(false)
+  }
+
+  const catAtiva = PRE_LISTAS.find(c => c.nome === categoriaAtiva)
+
+  return (
+    <div style={{ marginBottom: '0.5rem' }}>
+      <button
+        type="button"
+        onClick={() => setAberto(!aberto)}
+        style={{ width: '100%', background: '#f0f4ff', border: '1.5px solid #bfdbfe', borderRadius: 8, padding: '0.5rem 0.85rem', fontSize: '0.82rem', fontWeight: 700, color: '#1e40af', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+      >
+        <span>📋 Adicionar da pré-lista</span>
+        <span style={{ fontSize: '0.7rem' }}>{aberto ? '▲ Fechar' : '▼ Abrir'}</span>
+      </button>
+
+      {aberto && (
+        <div style={{ border: '1.5px solid #bfdbfe', borderTop: 'none', borderRadius: '0 0 10px 10px', background: '#f8faff', padding: '0.6rem' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.5rem' }}>
+            {PRE_LISTAS.map(cat => (
+              <button
+                key={cat.nome}
+                type="button"
+                onClick={() => setCategoriaAtiva(categoriaAtiva === cat.nome ? null : cat.nome)}
+                style={{
+                  background: categoriaAtiva === cat.nome ? '#1e40af' : '#e0e7ff',
+                  color: categoriaAtiva === cat.nome ? 'white' : '#1e40af',
+                  border: 'none', borderRadius: 20,
+                  padding: '0.28rem 0.65rem', fontSize: '0.73rem', fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                {cat.emoji} {cat.nome}
+              </button>
+            ))}
+          </div>
+
+          {catAtiva && (
+            <div style={{ background: 'white', borderRadius: 8, padding: '0.5rem 0.6rem', border: '1px solid #e0e7ff', marginBottom: '0.4rem' }}>
+              {catAtiva.itens.map(item => (
+                <label
+                  key={item}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', padding: '0.3rem 0.2rem', borderRadius: 6, background: selecionados.has(item) ? '#dbeafe' : 'transparent' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selecionados.has(item)}
+                    onChange={() => toggleItem(item)}
+                    style={{ width: 16, height: 16, accentColor: '#1e40af', flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: '0.82rem', color: '#1f2937' }}>{item}</span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {selecionados.size > 0 && (
+            <button
+              type="button"
+              onClick={confirmar}
+              style={{ width: '100%', background: '#1a4b8c', color: 'white', border: 'none', borderRadius: 8, padding: '0.5rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}
+            >
+              ✅ Adicionar {selecionados.size} {selecionados.size === 1 ? 'item' : 'itens'} selecionados
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Exportação PDF ──────────────────────────────────────────────────────
+function exportarPDF(plano: Plano) {
+  const cfg = TIPOS_CONFIG[plano.tipo]
+  const sc = STATUS_CONFIG[plano.status]
+  const rc = RISCO_CONFIG[plano.risco]
+  const agora = new Date()
+  const dataEmissao = agora.toLocaleDateString('pt-BR') + ' às ' + agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+  const linhaInfo = (label: string, valor: string) =>
+    valor ? `<tr><td class="lbl">${label}</td><td>${valor}</td></tr>` : ''
+
+  const materiaisHtml = plano.materiais.length === 0
+    ? '<p style="color:#9ca3af;font-size:11px">Nenhum material cadastrado</p>'
+    : `<table class="tbl"><thead><tr><th>#</th><th>Material</th><th>Qtd</th><th>Unid.</th></tr></thead><tbody>
+        ${plano.materiais.map((m, i) => `<tr><td>${i + 1}</td><td>${m.nome}</td><td>${m.quantidade}</td><td>${m.unidade}</td></tr>`).join('')}
+      </tbody></table>`
+
+  const equipeHtml = plano.equipe.length === 0
+    ? '<p style="color:#9ca3af;font-size:11px">Nenhum agente</p>'
+    : plano.equipe.map(ag => `<span class="chip">${ag}</span>`).join(' ')
+
+  const itensMapaHtml = plano.itensMapa.length === 0
+    ? '<p style="color:#9ca3af;font-size:11px">Nenhum item posicionado</p>'
+    : plano.itensMapa.map(it => `<span class="chip">${it.emoji} ${it.obs || it.tipo}</span>`).join(' ')
+
+  const localizacao = plano.lat && plano.lng
+    ? `${plano.lat.toFixed(5)}, ${plano.lng.toFixed(5)}`
+    : plano.local || '—'
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8">
+<title>${plano.nome} — Defesa Civil Ouro Branco</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:12px;color:#1f2937;padding:28px 32px}
+  .header{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:3px solid #1a4b8c;padding-bottom:12px;margin-bottom:18px}
+  .header h1{font-size:18px;color:#1a4b8c;margin-bottom:4px}
+  .header .sub{font-size:11px;color:#6b7280}
+  .logo{font-size:2.2rem}
+  .badges{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+  .badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:10px;font-weight:700}
+  .badge-status{background:#dbeafe;color:#1e40af}
+  .badge-risco-baixo{background:#dcfce7;color:#16a34a}
+  .badge-risco-medio{background:#fef3c7;color:#d97706}
+  .badge-risco-alto{background:#fee2e2;color:#dc2626}
+  .section{margin-bottom:18px}
+  .section h2{font-size:12px;color:#1a4b8c;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin-bottom:8px}
+  table.info{width:100%;border-collapse:collapse;font-size:11px}
+  table.info td{padding:4px 6px;vertical-align:top}
+  table.info td.lbl{font-weight:700;color:#4b5563;width:110px;white-space:nowrap}
+  .tbl{width:100%;border-collapse:collapse;font-size:11px;margin-top:4px}
+  .tbl th{background:#f3f4f6;text-align:left;padding:5px 8px;font-weight:700;color:#374151}
+  .tbl td{padding:4px 8px;border-bottom:1px solid #f3f4f6}
+  .tbl tr:nth-child(even) td{background:#fafafa}
+  .chip{display:inline-block;background:#dbeafe;color:#1e40af;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:600;margin:2px 2px 2px 0}
+  .obs{background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;font-size:11px;color:#374151;white-space:pre-wrap}
+  .footer{margin-top:24px;border-top:1px solid #e5e7eb;padding-top:8px;font-size:9px;color:#9ca3af;display:flex;justify-content:space-between}
+  @media print{body{padding:16px}@page{margin:12mm}}
+</style></head><body>
+
+<div class="header">
+  <div>
+    <h1>${cfg.emoji} ${plano.nome}</h1>
+    <div class="sub">Defesa Civil Ouro Branco — ${cfg.label} | Emitido em ${dataEmissao}</div>
+  </div>
+  <div class="logo">🛡️</div>
+</div>
+
+<div class="badges">
+  <span class="badge badge-status">${sc.emoji} ${sc.label}</span>
+  <span class="badge badge-risco-${plano.risco}">⚠️ Risco ${rc.label}</span>
+  <span class="badge" style="background:#f3f4f6;color:#374151">📋 ${cfg.label}</span>
+</div>
+
+<div class="section">
+  <h2>📋 Informações gerais</h2>
+  <table class="info">
+    ${linhaInfo('Nome', plano.nome)}
+    ${linhaInfo('Descrição', plano.descricao)}
+    ${linhaInfo('Local', plano.local)}
+    ${plano.lat && plano.lng ? linhaInfo('Coordenadas', localizacao) : ''}
+    ${linhaInfo('Data início', plano.dataInicio ? new Date(plano.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR') : '')}
+    ${plano.dataFim && plano.dataFim !== plano.dataInicio ? linhaInfo('Data fim', new Date(plano.dataFim + 'T12:00:00').toLocaleDateString('pt-BR')) : ''}
+    ${linhaInfo('Horário', plano.horario)}
+    ${plano.publicoEstimado ? linhaInfo('Público estimado', plano.publicoEstimado + ' pessoas') : ''}
+    ${linhaInfo('Criado por', plano.criadoPor + ' em ' + new Date(plano.criadoEm).toLocaleDateString('pt-BR'))}
+  </table>
+</div>
+
+<div class="section">
+  <h2>👥 Equipe (${plano.equipe.length} agentes)</h2>
+  ${equipeHtml}
+</div>
+
+<div class="section">
+  <h2>📦 Materiais e recursos (${plano.materiais.length})</h2>
+  ${materiaisHtml}
+</div>
+
+${plano.itensMapa.length > 0 ? `<div class="section">
+  <h2>🗺️ Itens no mapa (${plano.itensMapa.length})</h2>
+  ${itensMapaHtml}
+</div>` : ''}
+
+${plano.observacoes ? `<div class="section">
+  <h2>📝 Observações</h2>
+  <div class="obs">${plano.observacoes}</div>
+</div>` : ''}
+
+<div class="footer">
+  <span>Defesa Civil Ouro Branco — Sistema de Gerenciamento de Ocorrências</span>
+  <span>Emitido em ${dataEmissao}</span>
+</div>
+
+<script>setTimeout(()=>window.print(),400)</script>
+</body></html>`
+
+  const w = window.open('', '_blank')
+  if (!w) { alert('Permita pop-ups para exportar o PDF'); return }
+  w.document.write(html)
+  w.document.close()
+}
+
 // ── Formulário de criação/edição ────────────────────────────────────────
 function FormularioPlano({
   tipo,
@@ -342,6 +583,16 @@ function FormularioPlano({
     }])
     setNovoMat('')
     setNovoMatQtd('1')
+  }
+
+  function adicionarMateriais(nomes: string[]) {
+    setMateriais(prev => {
+      const existentes = new Set(prev.map(m => m.nome.toLowerCase()))
+      const novos = nomes
+        .filter(n => !existentes.has(n.toLowerCase()))
+        .map(n => ({ id: gerarId(), nome: n, quantidade: 1, unidade: 'un' }))
+      return [...prev, ...novos]
+    })
   }
 
   function removerMaterial(id: string) {
@@ -492,6 +743,7 @@ function FormularioPlano({
           </div>
 
           <div className="plan-form-secao">📦 Materiais e recursos</div>
+          <PreListasPanel onAdicionarItens={adicionarMateriais} />
           {materiais.length > 0 && (
             <div className="plan-mat-lista">
               {materiais.map(m => (
@@ -606,6 +858,12 @@ function DetalheP({
           <span>{cfg.label}</span>
         </div>
         <div className="plan-detalhe-acoes">
+          <button
+            className="plan-detalhe-btn-acao"
+            onClick={() => exportarPDF(planoLocal)}
+            title="Exportar PDF"
+            style={{ fontSize: '1rem' }}
+          >📄</button>
           <button className="plan-detalhe-btn-acao" onClick={() => setEditando(true)} title="Editar">✏️</button>
         </div>
       </div>
