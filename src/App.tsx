@@ -34,8 +34,9 @@ const Dashboard = lazy(() => import('./components/Dashboard'))
 const SosOverlay = lazy(() => import('./components/SosOverlay'))
 const MateriaisEmprestimos = lazy(() => import('./components/MateriaisEmprestimos'))
 const Planejamento = lazy(() => import('./components/Planejamento'))
+const PlanoEmergencia = lazy(() => import('./components/PlanoEmergencia'))
 
-type Aba = 'lista' | 'mapa' | 'nova' | 'viatura' | 'escala' | 'materiais' | 'planejamento'
+type Aba = 'lista' | 'mapa' | 'nova' | 'viatura' | 'escala' | 'materiais' | 'planejamento' | 'plano_emergencia'
 
 function dataLocal(iso: string): string {
   const d = new Date(iso)
@@ -465,6 +466,7 @@ export default function App() {
         import('./components/Dashboard'),
         import('./components/MateriaisEmprestimos'),
         import('./components/Planejamento'),
+        import('./components/PlanoEmergencia'),
       ]).catch(() => { /* sem internet ou bloqueado, ignora */ })
     }, 1500)
     return () => window.clearTimeout(id)
@@ -855,6 +857,14 @@ export default function App() {
             </Suspense>
           </ErrorBoundary>
         )}
+
+        {aba === 'plano_emergencia' && (
+          <ErrorBoundary>
+            <Suspense fallback={<LazyFallback />}>
+              <PlanoEmergencia />
+            </Suspense>
+          </ErrorBoundary>
+        )}
       </div>
 
       <nav className="bottom-nav">
@@ -876,6 +886,10 @@ export default function App() {
         <button className={`nav-btn ${aba === 'planejamento' ? 'ativo' : ''}`} onClick={() => setAba('planejamento')}>
           <span className="nav-emoji">📐</span>
           <span>Planejamento</span>
+        </button>
+        <button className={`nav-btn ${aba === 'plano_emergencia' ? 'ativo' : ''}`} onClick={() => setAba('plano_emergencia')}>
+          <span className="nav-emoji">🚨</span>
+          <span>Emergência</span>
         </button>
         <button className={`nav-btn ${aba === 'viatura' ? 'ativo' : ''}`} onClick={() => setAba('viatura')}>
           <span className="nav-emoji">🚗</span>
