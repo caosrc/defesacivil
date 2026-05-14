@@ -1,6 +1,25 @@
 import { useState, useRef, useEffect } from 'react'
 import { AGENTES, getSenhaAgente } from '../types'
 
+function useGeolocalizacao() {
+  const [pos, setPos] = useState<{ lat: number; lng: number } | null>(null)
+  const [buscando, setBuscando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  function obter() {
+    if (!navigator.geolocation) { setErro('GPS não disponível'); return }
+    setBuscando(true)
+    setErro('')
+    navigator.geolocation.getCurrentPosition(
+      (p) => { setPos({ lat: p.coords.latitude, lng: p.coords.longitude }); setBuscando(false) },
+      () => { setErro('Sem sinal GPS'); setBuscando(false) },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
+  return { pos, buscando, erro, obter }
+}
+
 const LOGIN_KEY = 'defesacivil-logado'
 const AGENTE_SESSION_KEY = 'defesacivil-agente-sessao'
 const AGENTE_NOME_KEY = 'defesacivil-device-nome'
@@ -44,6 +63,7 @@ export default function Login({ onLogin, apenasAgente = false }: Props) {
   const [erroSenhaAgente, setErroSenhaAgente] = useState(false)
   const [mostrarSenhaAgente, setMostrarSenhaAgente] = useState(false)
   const senhaAgenteRef = useRef<HTMLInputElement>(null)
+  const gps = useGeolocalizacao()
 
   useEffect(() => {
     if (etapa === 'credenciais') {
@@ -203,6 +223,33 @@ export default function Login({ onLogin, apenasAgente = false }: Props) {
                 )}
               </button>
             ))}
+          </div>
+
+          {/* GPS de posição geográfica */}
+          <div style={{ marginTop: '0.75rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem' }}>
+            <button
+              onClick={gps.obter}
+              disabled={gps.buscando}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                background: gps.pos ? '#dcfce7' : '#f0f4ff',
+                border: `1.5px solid ${gps.pos ? '#86efac' : '#c7d2fe'}`,
+                borderRadius: 20, padding: '0.4rem 1rem',
+                fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
+                color: gps.pos ? '#166534' : '#3730a3',
+              }}
+            >
+              <span style={{ fontSize: '1.05rem' }}>{gps.buscando ? '⏳' : '📡'}</span>
+              {gps.buscando ? 'Obtendo posição...' : gps.pos ? 'Posição obtida' : 'Verificar minha posição'}
+            </button>
+            {gps.pos && (
+              <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 600, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '0.25rem 0.7rem' }}>
+                📍 {gps.pos.lat.toFixed(5)}, {gps.pos.lng.toFixed(5)}
+              </div>
+            )}
+            {gps.erro && (
+              <div style={{ fontSize: '0.72rem', color: '#b91c1c', fontWeight: 600 }}>{gps.erro}</div>
+            )}
           </div>
         </div>
       </div>

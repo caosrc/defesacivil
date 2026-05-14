@@ -1,9 +1,30 @@
 import { useState, useRef, useEffect } from 'react'
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import { TIPOS_OCORRENCIA, NATUREZAS, AGENTES } from '../types'
 import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
 import { geocodificarEndereco } from '../offline'
 import { formatarCoordenadas, adicionarMarcaDagua, mensagemErroGps } from '../utils'
+
+// Fix Leaflet default icon
+;(function fixLeafletIcon() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  delete (L.Icon.Default.prototype as any)._getIconUrl
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
+    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
+    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+  })
+})()
+
+const OURO_BRANCO_CENTER: [number, number] = [-20.5264, -43.6947]
+
+function MapPickerClick({ onPick }: { onPick: (lat: number, lng: number) => void }) {
+  useMapEvents({ click(e) { onPick(e.latlng.lat, e.latlng.lng) } })
+  return null
+}
 
 interface Props {
   onSalvo: (offline: boolean) => void
@@ -41,6 +62,9 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const [buscandoGps, setBuscandoGps] = useState(false)
   const [geocodificando, setGeocodificando] = useState(false)
   const [geoMsg, setGeoMsg] = useState('')
+  const [mostrarMapaPicker, setMostrarMapaPicker] = useState(false)
+  const [latPicker, setLatPicker] = useState<number | null>(null)
+  const [lngPicker, setLngPicker] = useState<number | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [tipoAberto, setTipoAberto] = useState(false)
@@ -474,6 +498,14 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
                 <button className="btn-gps" onClick={obterGps} disabled={buscandoGps}>
                   {buscandoGps ? '⏳' : 'Obter GPS'}
                 </button>
+                <button
+                  className="btn-gps"
+                  style={{ background: '#1a4b8c', color: 'white', borderColor: '#1a4b8c' }}
+                  onClick={() => { setLatPicker(lat); setLngPicker(lng); setMostrarMapaPicker(true) }}
+                  type="button"
+                >
+                  🗺️ Abrir Mapa
+                </button>
               </div>
             )}
 
@@ -606,6 +638,68 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
           {salvando ? '⏳ Salvando...' : '💾  Salvar Ocorrência'}
         </button>
       </div>
+
+      {/* ── Modal de seleção de localização no mapa ── */}
+      {mostrarMapaPicker && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex', flexDirection: 'column',
+        }}>
+          <div style={{ background: '#1a4b8c', color: 'white', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <span style={{ fontSize: '1.1rem' }}>🗺️</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>Selecionar localização</div>
+              <div style={{ fontSize: '0.75rem', opacity: 0.85 }}>Toque no mapa para marcar o ponto</div>
+            </div>
+            <button
+              onClick={() => setMostrarMapaPicker(false)}
+              style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: 8, padding: '0.3rem 0.7rem', fontWeight: 800, fontSize: '1rem', cursor: 'pointer' }}
+            >✕</button>
+          </div>
+
+          {latPicker !== null && (
+            <div style={{ background: '#f0fdf4', borderBottom: '1px solid #bbf7d0', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.85rem' }}>📍</span>
+              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#166534', flex: 1 }}>
+                {latPicker?.toFixed(6)}, {lngPicker?.toFixed(6)}
+              </span>
+              <button
+                onClick={() => {
+                  setLat(latPicker)
+                  setLng(lngPicker)
+                  setGeoMsg('✅ Localização definida pelo mapa')
+                  setMostrarMapaPicker(false)
+                }}
+                style={{ background: '#16a34a', color: 'white', border: 'none', borderRadius: 8, padding: '0.4rem 1rem', fontWeight: 800, fontSize: '0.85rem', cursor: 'pointer' }}
+              >
+                ✅ Confirmar
+              </button>
+            </div>
+          )}
+
+          <div style={{ flex: 1, position: 'relative' }}>
+            <MapContainer
+              center={latPicker && lngPicker ? [latPicker, lngPicker] : OURO_BRANCO_CENTER}
+              zoom={latPicker ? 16 : 14}
+              style={{ height: '100%', width: '100%' }}
+              zoomControl={true}
+            >
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <MapPickerClick onPick={(lt, lg) => { setLatPicker(lt); setLngPicker(lg) }} />
+              {latPicker !== null && lngPicker !== null && (
+                <Marker position={[latPicker, lngPicker]} />
+              )}
+            </MapContainer>
+          </div>
+
+          {latPicker === null && (
+            <div style={{ background: '#fef3c7', padding: '0.6rem 1rem', textAlign: 'center', fontSize: '0.82rem', fontWeight: 600, color: '#92400e' }}>
+              👆 Toque no mapa para definir a localização
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

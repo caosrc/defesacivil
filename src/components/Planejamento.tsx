@@ -739,118 +739,8 @@ function MapaDetalhe({
 
   return (
     <>
-    <div className="plan-mapa-container" style={{ borderRadius: 12, overflow: 'hidden' }}>
-      {itemSelecionado && (
-        <div className="plan-mapa-picker-info">
-          📍 Toque no mapa para posicionar: <strong>{labelSelecionado}</strong>
-          <button onClick={() => setItemSelecionado(null)}>Cancelar</button>
-        </div>
-      )}
-      <MapContainer
-        center={centro}
-        zoom={plano.lat && plano.lng ? 15 : 13}
-        style={{ height: 'min(58vh, 540px)', minHeight: 380, width: '100%' }}
-        zoomControl={true}
-        attributionControl={false}
-      >
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-        <MapClickHandler ativo={!!itemSelecionado} onClique={handleCliqueMapa} />
-        {plano.lat && plano.lng && (
-          <Marker position={[plano.lat, plano.lng]} icon={criarIconePrincipal()}>
-            <Popup><strong>{plano.nome}</strong><br />📍 Local principal</Popup>
-          </Marker>
-        )}
-        {(plano.pontosExtras ?? []).map(p => (
-          <Marker key={p.id} position={[p.lat, p.lng]} icon={criarIconeEmoji('📌')}>
-            <Popup><strong>📌 {p.label || 'Ponto extra'}</strong><br />{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</Popup>
-          </Marker>
-        ))}
-        {plano.itensMapa.map(item => (
-          <Marker
-            key={item.id}
-            position={[item.lat, item.lng]}
-            icon={item.tipo === 'agente_dc' ? criarIconeAgentePlanejado(item.obs || item.tipo) : criarIconeEmoji(item.emoji)}
-          >
-            <Popup>
-              <div style={{ textAlign: 'center' }}>
-                {item.tipo === 'agente_dc'
-                  ? <span style={{ fontSize: '1.2rem' }}>🧑‍🚒</span>
-                  : <span style={{ fontSize: '1.5rem' }}>{item.emoji}</span>
-                }
-                <div style={{ fontWeight: 700, fontSize: '0.85rem', marginTop: 4 }}>{item.obs || item.tipo}</div>
-                {item.tipo === 'agente_dc' && (
-                  <div style={{ fontSize: '0.72rem', color: '#1a4b8c', fontWeight: 600, marginBottom: 4 }}>👷 Agente planejado</div>
-                )}
-                <button
-                  onClick={() => onRemoverItem(item.id)}
-                  style={{ marginTop: 6, background: '#fee2e2', border: 'none', borderRadius: 6, padding: '0.2rem 0.7rem', color: '#b91c1c', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}
-                >
-                  Remover
-                </button>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-
-        {/* Agentes com GPS ativo (prontidão ou só GPS) */}
-        {Array.from(posicoesPront.entries()).map(([id, p]) => (
-          <Marker key={`ag-${id}`} position={[p.lat, p.lng]} icon={criarIconeAgente(p.nome)}>
-            <Popup>
-              <div style={{ textAlign: 'center', minWidth: 120 }}>
-                <div style={{ fontSize: '1.2rem' }}>🧑‍🚒</div>
-                <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{p.nome}</div>
-                {p.emProntidao
-                  ? <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: 2 }}>✅ Em prontidão · GPS ativo</div>
-                  : <div style={{ fontSize: '0.75rem', color: '#1a4b8c', fontWeight: 600, marginTop: 2 }}>📡 GPS ativo · posição em tempo real</div>
-                }
-                {p.precisao > 0 && p.precisao < 500 && <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 1 }}>±{Math.round(p.precisao)}m</div>}
-              </div>
-            </Popup>
-            {p.precisao > 0 && p.precisao < 300 && (
-              <Circle center={[p.lat, p.lng]} radius={p.precisao} pathOptions={{ color: p.emProntidao ? '#059669' : '#1a4b8c', fillColor: p.emProntidao ? '#059669' : '#1a4b8c', fillOpacity: 0.1, weight: 1.5 }} />
-            )}
-          </Marker>
-        ))}
-      </MapContainer>
-
-      {(agProntidao.size > 0 || posicoesPront.size > 0) && (
-        <div style={{ background: '#f0fdf4', borderTop: '1px solid #bbf7d0', padding: '0.4rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-          {/* Agentes em prontidão */}
-          {agProntidao.size > 0 && (
-            <>
-              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669' }}>🛡️ Prontidão:</span>
-              {Array.from(agProntidao.entries()).map(([id, nome]) => {
-                const temGps = posicoesPront.has(id)
-                return (
-                  <span key={id} style={{ background: temGps ? '#dcfce7' : '#f3f4f6', color: temGps ? '#166534' : '#6b7280', borderRadius: 12, padding: '0.15rem 0.5rem', fontSize: '0.72rem', fontWeight: 600 }}>
-                    {temGps ? '📡' : '📵'} {nome.split(' ')[0]}
-                  </span>
-                )
-              })}
-            </>
-          )}
-          {/* Agentes só com GPS (não estão em prontidão formal) */}
-          {Array.from(posicoesPront.entries()).filter(([id, p]) => !p.emProntidao).length > 0 && (
-            <>
-              {agProntidao.size > 0 && <span style={{ color: '#d1d5db', fontSize: '0.8rem' }}>·</span>}
-              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a4b8c' }}>📡 GPS ativo:</span>
-              {Array.from(posicoesPront.entries())
-                .filter(([, p]) => !p.emProntidao)
-                .map(([id, p]) => (
-                  <span key={id} style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 12, padding: '0.15rem 0.5rem', fontSize: '0.72rem', fontWeight: 600 }}>
-                    📡 {p.nome.split(' ')[0]}
-                  </span>
-                ))
-              }
-            </>
-          )}
-        </div>
-      )}
-
-    </div>
-
-      {/* ── Painel: adicionar ao mapa ───────────────────────────── */}
-      <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', marginTop: 4 }}>
+      {/* ── Painel: adicionar ao mapa (ACIMA do mapa) ─── */}
+      <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', marginBottom: 6 }}>
 
         {/* Cabeçalho + banner de posicionamento */}
         <div style={{ padding: '0.5rem 0.85rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1037,6 +927,112 @@ function MapaDetalhe({
         </div>
 
       </div>
+
+      {/* ── Mapa tático ─── */}
+      <div className="plan-mapa-container" style={{ borderRadius: 12, overflow: 'hidden' }}>
+      <MapContainer
+        center={centro}
+        zoom={plano.lat && plano.lng ? 15 : 13}
+        style={{ height: 'min(58vh, 540px)', minHeight: 380, width: '100%' }}
+        zoomControl={true}
+        attributionControl={false}
+      >
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <MapClickHandler ativo={!!itemSelecionado} onClique={handleCliqueMapa} />
+        {plano.lat && plano.lng && (
+          <Marker position={[plano.lat, plano.lng]} icon={criarIconePrincipal()}>
+            <Popup><strong>{plano.nome}</strong><br />📍 Local principal</Popup>
+          </Marker>
+        )}
+        {(plano.pontosExtras ?? []).map(p => (
+          <Marker key={p.id} position={[p.lat, p.lng]} icon={criarIconeEmoji('📌')}>
+            <Popup><strong>📌 {p.label || 'Ponto extra'}</strong><br />{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</Popup>
+          </Marker>
+        ))}
+        {plano.itensMapa.map(item => (
+          <Marker
+            key={item.id}
+            position={[item.lat, item.lng]}
+            icon={item.tipo === 'agente_dc' ? criarIconeAgentePlanejado(item.obs || item.tipo) : criarIconeEmoji(item.emoji)}
+          >
+            <Popup>
+              <div style={{ textAlign: 'center' }}>
+                {item.tipo === 'agente_dc'
+                  ? <span style={{ fontSize: '1.2rem' }}>🧑‍🚒</span>
+                  : <span style={{ fontSize: '1.5rem' }}>{item.emoji}</span>
+                }
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', marginTop: 4 }}>{item.obs || item.tipo}</div>
+                {item.tipo === 'agente_dc' && (
+                  <div style={{ fontSize: '0.72rem', color: '#1a4b8c', fontWeight: 600, marginBottom: 4 }}>👷 Agente planejado</div>
+                )}
+                <button
+                  onClick={() => onRemoverItem(item.id)}
+                  style={{ marginTop: 6, background: '#fee2e2', border: 'none', borderRadius: 6, padding: '0.2rem 0.7rem', color: '#b91c1c', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}
+                >
+                  Remover
+                </button>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+
+        {/* Agentes com GPS ativo (prontidão ou só GPS) */}
+        {Array.from(posicoesPront.entries()).map(([id, p]) => (
+          <Marker key={`ag-${id}`} position={[p.lat, p.lng]} icon={criarIconeAgente(p.nome)}>
+            <Popup>
+              <div style={{ textAlign: 'center', minWidth: 120 }}>
+                <div style={{ fontSize: '1.2rem' }}>🧑‍🚒</div>
+                <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{p.nome}</div>
+                {p.emProntidao
+                  ? <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: 2 }}>✅ Em prontidão · GPS ativo</div>
+                  : <div style={{ fontSize: '0.75rem', color: '#1a4b8c', fontWeight: 600, marginTop: 2 }}>📡 GPS ativo · posição em tempo real</div>
+                }
+                {p.precisao > 0 && p.precisao < 500 && <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 1 }}>±{Math.round(p.precisao)}m</div>}
+              </div>
+            </Popup>
+            {p.precisao > 0 && p.precisao < 300 && (
+              <Circle center={[p.lat, p.lng]} radius={p.precisao} pathOptions={{ color: p.emProntidao ? '#059669' : '#1a4b8c', fillColor: p.emProntidao ? '#059669' : '#1a4b8c', fillOpacity: 0.1, weight: 1.5 }} />
+            )}
+          </Marker>
+        ))}
+      </MapContainer>
+
+      {(agProntidao.size > 0 || posicoesPront.size > 0) && (
+        <div style={{ background: '#f0fdf4', borderTop: '1px solid #bbf7d0', padding: '0.4rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+          {/* Agentes em prontidão */}
+          {agProntidao.size > 0 && (
+            <>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669' }}>🛡️ Prontidão:</span>
+              {Array.from(agProntidao.entries()).map(([id, nome]) => {
+                const temGps = posicoesPront.has(id)
+                return (
+                  <span key={id} style={{ background: temGps ? '#dcfce7' : '#f3f4f6', color: temGps ? '#166534' : '#6b7280', borderRadius: 12, padding: '0.15rem 0.5rem', fontSize: '0.72rem', fontWeight: 600 }}>
+                    {temGps ? '📡' : '📵'} {nome.split(' ')[0]}
+                  </span>
+                )
+              })}
+            </>
+          )}
+          {/* Agentes só com GPS (não estão em prontidão formal) */}
+          {Array.from(posicoesPront.entries()).filter(([id, p]) => !p.emProntidao).length > 0 && (
+            <>
+              {agProntidao.size > 0 && <span style={{ color: '#d1d5db', fontSize: '0.8rem' }}>·</span>}
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a4b8c' }}>📡 GPS ativo:</span>
+              {Array.from(posicoesPront.entries())
+                .filter(([, p]) => !p.emProntidao)
+                .map(([id, p]) => (
+                  <span key={id} style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 12, padding: '0.15rem 0.5rem', fontSize: '0.72rem', fontWeight: 600 }}>
+                    📡 {p.nome.split(' ')[0]}
+                  </span>
+                ))
+              }
+            </>
+          )}
+        </div>
+      )}
+
+    </div>
+
     </>
   )
 }
@@ -2153,80 +2149,54 @@ function DetalheP({
           </div>
         </div>
 
-        {/* Prontidão */}
-        <div className="plan-detalhe-card" style={{ overflow: 'hidden' }}>
-          <div style={{
-            background: emProntidao ? 'linear-gradient(135deg,#065f46,#059669)' : 'linear-gradient(135deg,#374151,#4b5563)',
-            color: 'white', padding: '0.6rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem'
-          }}>
-            <span style={{ fontSize: '1.1rem' }}>🛡️</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 800, fontSize: '0.88rem' }}>
-                {emProntidao ? 'Você está em prontidão' : 'Prontidão'}
-              </div>
-              <div style={{ fontSize: '0.72rem', opacity: 0.85, marginTop: 1 }}>
-                {emProntidao
-                  ? estadoGps.status === 'ativo' ? '📡 GPS ativo — sua posição é visível no mapa' : '📵 GPS inativo — ative para aparecer no mapa'
-                  : 'Declare prontidão para aparecer no mapa tático em tempo real'}
-              </div>
-            </div>
-            <button
-              onClick={toggleProntidao}
-              style={{
-                background: emProntidao ? '#fee2e2' : '#dcfce7',
-                color: emProntidao ? '#b91c1c' : '#166534',
-                border: 'none', borderRadius: 20, padding: '0.35rem 0.85rem',
-                fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.2)'
-              }}
-            >
-              {emProntidao ? '🔴 Sair' : '🟢 Entrar'}
-            </button>
+        {/* Prontidão — strip compacto */}
+        <div style={{
+          background: emProntidao ? 'linear-gradient(90deg,#065f46,#059669)' : '#f1f5f9',
+          border: emProntidao ? 'none' : '1.5px solid #e2e8f0',
+          borderRadius: 12,
+          padding: '0.45rem 0.75rem',
+          display: 'flex', alignItems: 'center', gap: '0.55rem',
+          flexWrap: 'wrap',
+        }}>
+          <span style={{ fontSize: '0.95rem' }}>🛡️</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ fontWeight: 700, fontSize: '0.82rem', color: emProntidao ? 'white' : '#374151' }}>
+              {emProntidao ? 'Em prontidão' : 'Prontidão'}
+            </span>
+            {emProntidao && (
+              <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.85)', marginLeft: '0.45rem' }}>
+                {estadoGps.status === 'ativo' ? '📡 GPS ativo' : '📵 GPS inativo'}
+              </span>
+            )}
+            {outrosProntidao.length > 0 && (
+              <span style={{ fontSize: '0.7rem', color: emProntidao ? 'rgba(255,255,255,0.85)' : '#6b7280', marginLeft: '0.4rem' }}>
+                · {outrosProntidao.length} outro{outrosProntidao.length > 1 ? 's' : ''}
+              </span>
+            )}
           </div>
-
           {emProntidao && (estadoGps.status === 'inativo' || estadoGps.status === 'erro') && (
-            <div style={{ background: '#fef3c7', padding: '0.45rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.8rem' }}>⚠️</span>
-              <span style={{ fontSize: '0.78rem', color: '#92400e', fontWeight: 600 }}>GPS desativado</span>
-              <button
-                onClick={() => ativarGps()}
-                style={{ marginLeft: 'auto', background: '#f59e0b', color: 'white', border: 'none', borderRadius: 12, padding: '0.22rem 0.7rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
-              >
-                Ativar GPS
-              </button>
-            </div>
+            <button
+              onClick={() => ativarGps()}
+              style={{ background: '#f59e0b', color: 'white', border: 'none', borderRadius: 10, padding: '0.2rem 0.6rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+            >📡 GPS</button>
           )}
-
-          {emProntidao && estadoGps.status === 'aguardando' && (
-            <div style={{ background: '#eff6ff', padding: '0.4rem 0.85rem', fontSize: '0.78rem', color: '#1d4ed8', fontWeight: 600 }}>
-              🔄 Aguardando sinal de GPS…
-            </div>
-          )}
-
-          {outrosProntidao.length > 0 && (
-            <div style={{ padding: '0.55rem 0.85rem', borderTop: '1px solid #e5e7eb' }}>
-              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
-                Outros agentes em prontidão ({outrosProntidao.length})
-              </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                {outrosProntidao.map(ag => (
-                  <span key={ag.id} style={{ background: '#dcfce7', color: '#166534', borderRadius: 12, padding: '0.2rem 0.6rem', fontSize: '0.78rem', fontWeight: 600 }}>
-                    🧑‍🚒 {ag.nome}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {outrosProntidao.length === 0 && !emProntidao && (
-            <div style={{ padding: '0.5rem 0.85rem', fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center' }}>
-              Nenhum agente em prontidão neste evento
-            </div>
-          )}
+          <button
+            onClick={toggleProntidao}
+            style={{
+              background: emProntidao ? 'rgba(255,255,255,0.2)' : '#1a4b8c',
+              color: 'white',
+              border: emProntidao ? '1.5px solid rgba(255,255,255,0.4)' : 'none',
+              borderRadius: 20, padding: '0.3rem 0.8rem',
+              fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap',
+              display: 'flex', alignItems: 'center', gap: '0.3rem',
+            }}
+          >
+            {emProntidao ? '🔴 Sair' : '📡 Entrar'}
+          </button>
         </div>
 
         {/* Mapa tático */}
-        <div className="plan-detalhe-card">
+        <div className="plan-detalhe-card" style={{ overflow: 'hidden' }}>
           <div className="plan-detalhe-card-header">
             🗺️ Mapa tático
             {planoLocal.itensMapa.length > 0 && (
@@ -2681,9 +2651,11 @@ function ListaPlanos({
                     <span className={`plan-badge plan-badge-${sc.classe}`}>
                       {sc.emoji} {sc.label}
                     </span>
-                    <span className="plan-badge plan-badge-info" style={{ background: rc.bg, color: rc.cor }}>
-                      ⚠️ {rc.label}
-                    </span>
+                    {p.risco !== 'baixo' && (
+                      <span className="plan-badge plan-badge-info" style={{ background: rc.bg, color: rc.cor }}>
+                        ⚠️ {rc.label}
+                      </span>
+                    )}
                     {p.equipe.length > 0 && (
                       <span className="plan-badge plan-badge-eq">👥 {p.equipe.length}</span>
                     )}

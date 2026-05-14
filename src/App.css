@@ -1606,15 +1606,27 @@ input, select, textarea { font-family: inherit; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  font-size: 0.68rem;
+  gap: 2px;
+  font-size: 0.65rem;
   color: #9ca3af;
   font-weight: 500;
-  transition: color 0.15s;
-  padding: 0.4rem 0;
+  transition: color 0.15s, transform 0.1s;
+  padding: 0.35rem 0 0.2rem;
+  position: relative;
+  border-top: 2.5px solid transparent;
 }
-.nav-btn.ativo { color: #1a4b8c; }
-.nav-emoji { font-size: 1.4rem; }
+.nav-btn.ativo {
+  color: #1a4b8c;
+  font-weight: 700;
+  border-top-color: #1a4b8c;
+}
+.nav-btn:active { transform: scale(0.92); }
+.nav-btn .nav-emoji {
+  font-size: 1.35rem;
+  transition: transform 0.15s;
+}
+.nav-btn.ativo .nav-emoji { transform: scale(1.12); }
+.nav-emoji { font-size: 1.35rem; }
 
 .nav-nova {
   flex: none;
