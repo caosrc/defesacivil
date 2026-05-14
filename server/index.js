@@ -49,14 +49,19 @@ app.use(cors({
 app.use(express.json({ limit: '100mb' }))
 
 // ── VAPID (Web Push) ──
-const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC_KEY || ''
-const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || ''
+// Strip any base64 padding (=) that web-push does not accept
+function stripBase64Padding(key) {
+  return (key || '').replace(/=+$/, '')
+}
+const VAPID_PUBLIC_KEY = stripBase64Padding(process.env.VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC_KEY || '')
+const VAPID_PRIVATE_KEY = stripBase64Padding(process.env.VAPID_PRIVATE_KEY || '')
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:defesacivilob@gmail.com'
 let vapidConfigured = false
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   try {
     webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
     vapidConfigured = true
+    console.log('[VAPID] configurado com sucesso')
   } catch (e) {
     console.warn('[VAPID] configuração inválida:', e?.message || e)
   }
