@@ -531,54 +531,84 @@ function InputGMS({
   )
 }
 
-// ── Mapa no formulário (picker de localização) ──────────────────────────
-function MapaPicker({
-  lat, lng, onChange,
+// ── Modal tela-cheia para selecionar localização ─────────────────────────
+function MapaPickerModal({
+  lat, lng, onConfirmar, onFechar,
 }: {
   lat: number | null
   lng: number | null
-  onChange: (lat: number, lng: number) => void
+  onConfirmar: (lat: number, lng: number) => void
+  onFechar: () => void
 }) {
-  const [modoClick, setModoClick] = useState(false)
-  const centro: [number, number] = lat && lng ? [lat, lng] : OURO_BRANCO_CENTER
+  const [marcado, setMarcado] = useState<{ lat: number; lng: number } | null>(
+    lat && lng ? { lat, lng } : null
+  )
+  const centro: [number, number] = marcado
+    ? [marcado.lat, marcado.lng]
+    : lat && lng ? [lat, lng] : OURO_BRANCO_CENTER
 
   return (
-    <div className="plan-mapa-container">
-      {modoClick && (
-        <div className="plan-mapa-picker-info">
-          📍 Toque no mapa para definir o local
-          <button onClick={() => setModoClick(false)}>Cancelar</button>
-        </div>
-      )}
-      {!modoClick && (
-        <div className="plan-mapa-toolbar" style={{ pointerEvents: 'auto' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 2500, display: 'flex', flexDirection: 'column', background: '#1a4b8c' }}>
+      {/* Cabeçalho */}
+      <div style={{ background: 'linear-gradient(100deg,#123b73,#1a6bbf)', color: 'white', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0, paddingTop: 'calc(0.75rem + env(safe-area-inset-top,0px))' }}>
+        <button
+          onClick={onFechar}
+          style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '50%', width: 38, height: 38, fontSize: '1.3rem', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+        >‹</button>
+        <span style={{ fontWeight: 700, fontSize: '0.95rem', flex: 1 }}>📍 Selecionar local no mapa</span>
+        {marcado && (
           <button
-            style={{ background: '#1a4b8c', color: 'white', border: 'none', borderRadius: 8, padding: '0.3rem 0.8rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
-            onClick={() => setModoClick(true)}
-          >
-            {lat && lng ? '✏️ Mover local' : '📍 Definir local no mapa'}
-          </button>
+            onClick={() => onConfirmar(marcado.lat, marcado.lng)}
+            style={{ background: '#16a34a', border: 'none', color: 'white', borderRadius: 20, padding: '0.4rem 1rem', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}
+          >✓ Confirmar</button>
+        )}
+      </div>
+
+      {/* Instrução */}
+      <div style={{
+        background: marcado ? '#fef3c7' : '#1e40af',
+        color: marcado ? '#92400e' : 'white',
+        padding: '0.5rem 1rem', fontSize: '0.82rem', fontWeight: 600,
+        textAlign: 'center', flexShrink: 0,
+      }}>
+        {marcado
+          ? `📍 ${decimalParaGMS(marcado.lat, 'lat')} · ${decimalParaGMS(marcado.lng, 'lng')} — Toque em outro ponto para mover`
+          : '👆 Toque em qualquer ponto do mapa para marcar o local'}
+      </div>
+
+      {/* Mapa */}
+      <div style={{ flex: 1, position: 'relative' }}>
+        <MapContainer
+          center={centro}
+          zoom={marcado ? 15 : 13}
+          style={{ height: '100%', width: '100%' }}
+          zoomControl={true}
+          attributionControl={false}
+        >
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <MapClickHandler ativo={true} onClique={(la, ln) => setMarcado({ lat: la, lng: ln })} />
+          {marcado && (
+            <Marker position={[marcado.lat, marcado.lng]} icon={criarIconePrincipal()}>
+              <Popup>📍 Local selecionado</Popup>
+            </Marker>
+          )}
+          {!marcado && (
+            <Marker position={OURO_BRANCO_CENTER} icon={criarIconeCentro()}>
+              <Popup>🏙️ Centro de Ouro Branco</Popup>
+            </Marker>
+          )}
+        </MapContainer>
+      </div>
+
+      {/* Rodapé com botão de confirmação */}
+      {marcado && (
+        <div style={{ background: 'white', padding: '0.75rem 1rem', flexShrink: 0, paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom,0px))' }}>
+          <button
+            onClick={() => onConfirmar(marcado.lat, marcado.lng)}
+            style={{ width: '100%', background: 'linear-gradient(100deg,#123b73,#1a6bbf)', color: 'white', border: 'none', borderRadius: 10, padding: '0.85rem', fontSize: '0.95rem', fontWeight: 700, cursor: 'pointer' }}
+          >✓ Confirmar local</button>
         </div>
       )}
-      <MapContainer
-        center={centro}
-        zoom={lat && lng ? 15 : 13}
-        style={{ height: 240, width: '100%', borderRadius: 12 }}
-        zoomControl={true}
-        attributionControl={false}
-      >
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-        <MapClickHandler ativo={modoClick} onClique={(la, ln) => { onChange(la, ln); setModoClick(false) }} />
-        {lat && lng ? (
-          <Marker position={[lat, lng]} icon={criarIconePrincipal()}>
-            <Popup>📍 Local do evento</Popup>
-          </Marker>
-        ) : (
-          <Marker position={OURO_BRANCO_CENTER} icon={criarIconeCentro()}>
-            <Popup>🏙️ Centro de Ouro Branco<br /><small>Toque no mapa para definir o local do evento</small></Popup>
-          </Marker>
-        )}
-      </MapContainer>
     </div>
   )
 }
@@ -1207,17 +1237,17 @@ function OrgaosPanel({ selecionados, onChange }: { selecionados: string[]; onCha
       <button
         type="button"
         onClick={() => setAberto(!aberto)}
-        style={{ width: '100%', background: 'linear-gradient(135deg,#1a3a6b,#1e40af)', border: 'none', borderRadius: 10, padding: '0.6rem 0.9rem', fontSize: '0.85rem', fontWeight: 800, color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', letterSpacing: '0.01em' }}
+        style={{ width: '100%', background: 'linear-gradient(135deg,#1a3a6b,#1e40af)', border: 'none', borderRadius: aberto ? '10px 10px 0 0' : 10, padding: '0.5rem 0.75rem', fontSize: '0.78rem', fontWeight: 800, color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', letterSpacing: '0.01em' }}
       >
-        <span>🏛️ Sistema Integrado de Resposta Operacional{selecionados.length > 0 ? ` · ${selecionados.length} órgão${selecionados.length > 1 ? 's' : ''}` : ''}</span>
-        <span style={{ fontSize: '0.7rem', opacity: 0.85 }}>{aberto ? '▲ Fechar' : '▼ Abrir'}</span>
+        <span>🏛️ Órgãos{selecionados.length > 0 ? ` · ${selecionados.length} selecionado${selecionados.length > 1 ? 's' : ''}` : ' — Sistema Integrado'}</span>
+        <span style={{ fontSize: '0.65rem', opacity: 0.85, flexShrink: 0 }}>{aberto ? '▲ Fechar' : '▼ Abrir'}</span>
       </button>
 
       {aberto && (
-        <div style={{ border: '2px solid #1e40af', borderTop: 'none', borderRadius: '0 0 12px 12px', background: '#f0f4ff', padding: '0.65rem' }}>
+        <div style={{ border: '2px solid #1e40af', borderTop: 'none', borderRadius: '0 0 10px 10px', background: '#f0f4ff', padding: '0.5rem' }}>
 
-          {/* Categorias */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: '0.55rem' }}>
+          {/* Categorias em grade compacta */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.22rem', marginBottom: '0.45rem' }}>
             {ORGAOS_EMPENHO.map(c => {
               const qtd = c.orgaos.filter(o => selecionados.includes(key(o))).length
               const ativo = catAtiva === c.categoria
@@ -1226,9 +1256,11 @@ function OrgaosPanel({ selecionados, onChange }: { selecionados: string[]; onCha
                   key={c.categoria}
                   type="button"
                   onClick={() => { setCatAtiva(ativo ? null : c.categoria); setOutrosTexto('') }}
-                  style={{ background: ativo ? '#1e40af' : '#dbeafe', color: ativo ? 'white' : '#1e3a8a', border: 'none', borderRadius: 20, padding: '0.28rem 0.65rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  style={{ background: ativo ? '#1e40af' : '#dbeafe', color: ativo ? 'white' : '#1e3a8a', border: ativo ? '1.5px solid #1e40af' : '1.5px solid #bfdbfe', borderRadius: 8, padding: '0.3rem 0.4rem', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.2rem', textAlign: 'left' }}
                 >
-                  {c.emoji} {c.categoria} {qtd > 0 && <span style={{ background: ativo ? 'rgba(255,255,255,0.3)' : '#1e40af', color: 'white', borderRadius: 10, padding: '0 5px', fontSize: '0.65rem' }}>{qtd}</span>}
+                  <span style={{ fontSize: '0.85rem', lineHeight: 1, flexShrink: 0 }}>{c.emoji}</span>
+                  <span style={{ flex: 1, lineHeight: 1.2 }}>{c.categoria}</span>
+                  {qtd > 0 && <span style={{ background: ativo ? 'rgba(255,255,255,0.3)' : '#1e40af', color: 'white', borderRadius: 10, padding: '0 4px', fontSize: '0.6rem', flexShrink: 0 }}>{qtd}</span>}
                 </button>
               )
             })}
@@ -1236,11 +1268,11 @@ function OrgaosPanel({ selecionados, onChange }: { selecionados: string[]; onCha
 
           {/* Órgãos da categoria ativa */}
           {cat && (
-            <div style={{ background: 'white', borderRadius: 10, padding: '0.55rem 0.65rem', border: '1.5px solid #bfdbfe', marginBottom: '0.4rem' }}>
-              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#1e40af', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            <div style={{ background: 'white', borderRadius: 8, padding: '0.45rem 0.5rem', border: '1.5px solid #bfdbfe', marginBottom: '0.4rem' }}>
+              <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#1e40af', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                 {cat.emoji} {cat.categoria}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.2rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.18rem' }}>
                 {cat.orgaos.map(o => {
                   const k = key(o)
                   const sel = selecionados.includes(k)
@@ -1249,33 +1281,33 @@ function OrgaosPanel({ selecionados, onChange }: { selecionados: string[]; onCha
                       key={k}
                       type="button"
                       onClick={() => toggle(k)}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: sel ? '#1e40af' : '#f1f5ff', color: sel ? 'white' : '#1e3a8a', border: sel ? '1.5px solid #1e40af' : '1.5px solid #dbeafe', borderRadius: 8, padding: '0.38rem 0.55rem', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', background: sel ? '#1e40af' : '#f1f5ff', color: sel ? 'white' : '#1e3a8a', border: sel ? '1.5px solid #1e40af' : '1.5px solid #dbeafe', borderRadius: 7, padding: '0.3rem 0.45rem', fontSize: '0.73rem', fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}
                     >
                       {o.nome === 'Defesa Civil' ? (
-                        <img src="/logo-dc.png" style={{ width: 20, height: 20, objectFit: 'contain', flexShrink: 0, borderRadius: 3 }} />
+                        <img src="/logo-dc.png" style={{ width: 18, height: 18, objectFit: 'contain', flexShrink: 0, borderRadius: 3 }} />
                       ) : (
-                        <span style={{ fontSize: '1rem', lineHeight: 1, flexShrink: 0 }}>{o.emoji}</span>
+                        <span style={{ fontSize: '0.9rem', lineHeight: 1, flexShrink: 0 }}>{o.emoji}</span>
                       )}
                       <span style={{ flex: 1, lineHeight: 1.2 }}>{o.nome}</span>
-                      {sel && <span style={{ fontSize: '0.7rem', opacity: 0.9 }}>✓</span>}
+                      {sel && <span style={{ fontSize: '0.65rem', opacity: 0.9, flexShrink: 0 }}>✓</span>}
                     </button>
                   )
                 })}
               </div>
 
               {/* Outros */}
-              <div style={{ borderTop: '1px dashed #cbd5e1', marginTop: '0.45rem', paddingTop: '0.4rem' }}>
-                <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: '0.28rem' }}>➕ Adicionar outro órgão</div>
-                <div style={{ display: 'flex', gap: '0.4rem' }}>
+              <div style={{ borderTop: '1px dashed #cbd5e1', marginTop: '0.4rem', paddingTop: '0.35rem' }}>
+                <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', marginBottom: '0.22rem' }}>➕ Adicionar outro órgão</div>
+                <div style={{ display: 'flex', gap: '0.35rem' }}>
                   <input
                     type="text"
                     placeholder="Nome do órgão/empresa..."
                     value={outrosTexto}
                     onChange={e => setOutrosTexto(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarOutro() } }}
-                    style={{ flex: 1, padding: '0.38rem 0.6rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', outline: 'none' }}
+                    style={{ flex: 1, padding: '0.32rem 0.5rem', border: '1.5px solid #cbd5e1', borderRadius: 6, fontSize: '0.75rem', outline: 'none' }}
                   />
-                  <button type="button" onClick={adicionarOutro} style={{ background: '#1e40af', color: 'white', border: 'none', borderRadius: 7, padding: '0.38rem 0.8rem', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>+</button>
+                  <button type="button" onClick={adicionarOutro} style={{ background: '#1e40af', color: 'white', border: 'none', borderRadius: 6, padding: '0.32rem 0.65rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>+</button>
                 </div>
               </div>
             </div>
@@ -1283,11 +1315,11 @@ function OrgaosPanel({ selecionados, onChange }: { selecionados: string[]; onCha
 
           {/* Órgãos extras (não estão na lista) */}
           {extras.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginBottom: '0.4rem' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem', marginBottom: '0.35rem' }}>
               {extras.map(s => (
-                <span key={s} style={{ background: '#fef3c7', color: '#92400e', borderRadius: 12, padding: '0.2rem 0.55rem', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <span key={s} style={{ background: '#fef3c7', color: '#92400e', borderRadius: 10, padding: '0.18rem 0.48rem', fontSize: '0.68rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                   ✏️ {s}
-                  <button type="button" onClick={() => toggle(s)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b45309', fontWeight: 900, fontSize: '0.75rem', padding: 0, lineHeight: 1 }}>✕</button>
+                  <button type="button" onClick={() => toggle(s)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#b45309', fontWeight: 900, fontSize: '0.7rem', padding: 0, lineHeight: 1 }}>✕</button>
                 </span>
               ))}
             </div>
@@ -1295,13 +1327,13 @@ function OrgaosPanel({ selecionados, onChange }: { selecionados: string[]; onCha
 
           {/* Selecionados resumo */}
           {selecionados.length > 0 && (
-            <div style={{ background: '#eff6ff', borderRadius: 8, padding: '0.4rem 0.6rem', border: '1px solid #bfdbfe' }}>
-              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#1e40af', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>✅ Órgãos empenhados ({selecionados.length})</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.2rem' }}>
+            <div style={{ background: '#eff6ff', borderRadius: 7, padding: '0.35rem 0.5rem', border: '1px solid #bfdbfe' }}>
+              <div style={{ fontSize: '0.63rem', fontWeight: 700, color: '#1e40af', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>✅ Empenhados ({selecionados.length})</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.18rem' }}>
                 {selecionados.map(s => (
-                  <span key={s} style={{ background: '#1e40af', color: 'white', borderRadius: 12, padding: '0.18rem 0.5rem', fontSize: '0.72rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <span key={s} style={{ background: '#1e40af', color: 'white', borderRadius: 10, padding: '0.15rem 0.45rem', fontSize: '0.67rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                     {s}
-                    <button type="button" onClick={() => toggle(s)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.75)', fontWeight: 900, fontSize: '0.65rem', padding: 0, lineHeight: 1 }}>✕</button>
+                    <button type="button" onClick={() => toggle(s)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.75)', fontWeight: 900, fontSize: '0.6rem', padding: 0, lineHeight: 1 }}>✕</button>
                   </span>
                 ))}
               </div>
@@ -1531,6 +1563,7 @@ function FormularioPlano({
   const [clickandoPonto, setClickandoPonto] = useState(false)
 
   const [agentesDefesaCivil, setAgentesDefesaCivil] = useState<string[]>(planoEditando?.agentesDefesaCivil ?? [])
+  const [mostrarMapaModal, setMostrarMapaModal] = useState(false)
 
   const [novoMat, setNovoMat] = useState('')
   const [novoMatQtd, setNovoMatQtd] = useState('1')
@@ -1665,10 +1698,23 @@ function FormularioPlano({
           )}
 
           <div className="plan-form-secao">📍 Localização no mapa</div>
-          {/* Mapa principal */}
-          <MapaPicker lat={lat} lng={lng} onChange={(la, ln) => { setLat(la); setLng(ln) }} />
-          {/* Entrada manual de coordenadas em GMS */}
-          <div style={{ display: 'flex', gap: '0.4rem', margin: '-2px 0 8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+
+          {/* Botão que abre mapa em tela cheia */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setMostrarMapaModal(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', background: lat && lng ? '#dcfce7' : '#1a4b8c', color: lat && lng ? '#166534' : 'white', border: lat && lng ? '1.5px solid #86efac' : 'none', borderRadius: 20, padding: '0.45rem 1rem', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
+            >
+              🗺️ {lat && lng ? 'Mapa (mover local)' : 'Mapa'}
+            </button>
+            {lat && lng && (
+              <button type="button" onClick={() => { setLat(null); setLng(null) }} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 700 }}>✕ Remover</button>
+            )}
+          </div>
+
+          {/* Coordenadas GMS (edição manual ou exibição após mapa) */}
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div style={{ flex: '1 1 140px' }}>
               <div style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 600, marginBottom: 2 }}>Latitude (GMS)</div>
               <InputGMS valor={lat} tipo="lat" onChange={v => setLat(v)} />
@@ -1677,14 +1723,21 @@ function FormularioPlano({
               <div style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 600, marginBottom: 2 }}>Longitude (GMS)</div>
               <InputGMS valor={lng} tipo="lng" onChange={v => setLng(v)} />
             </div>
-            {lat && lng && (
-              <button style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0, paddingBottom: '0.38rem', fontWeight: 700 }} onClick={() => { setLat(null); setLng(null) }}>✕ Remover</button>
-            )}
           </div>
           {lat && lng && (
             <div style={{ fontSize: '0.73rem', color: '#6b7280', textAlign: 'center', marginTop: -4, marginBottom: '0.4rem', fontFamily: 'monospace' }}>
               📍 {decimalParaGMS(lat, 'lat')} · {decimalParaGMS(lng, 'lng')}
             </div>
+          )}
+
+          {/* Modal tela cheia do mapa */}
+          {mostrarMapaModal && (
+            <MapaPickerModal
+              lat={lat}
+              lng={lng}
+              onConfirmar={(la, ln) => { setLat(la); setLng(ln); setMostrarMapaModal(false) }}
+              onFechar={() => setMostrarMapaModal(false)}
+            />
           )}
 
           {/* Pontos extras */}
