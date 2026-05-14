@@ -494,9 +494,20 @@ function MapaDetalhe({
 
   // ── Prontidão: rastreia quem está de prontidão + posições GPS ──────────
   const [agProntidao, setAgProntidao] = useState<Map<string, string>>(new Map()) // id → nome
-  const [posicoesPront, setPosicoesPront] = useState<Map<string, { nome: string; lat: number; lng: number; precisao: number; ts: number }>>(new Map())
+  const [posicoesPront, setPosicoesPront] = useState<Map<string, { nome: string; lat: number; lng: number; precisao: number; ts: number; emProntidao: boolean }>>(new Map())
   const agProntRef = useRef(agProntidao)
   useEffect(() => { agProntRef.current = agProntidao }, [agProntidao])
+
+  // Função auxiliar: verifica se um nome de agente pertence a este plano
+  const nomeEhAgenteDoPlano = (nome: string) => {
+    const agentes = plano.agentesDefesaCivil ?? []
+    if (agentes.length === 0) return false
+    const n = nome.toLowerCase()
+    return agentes.some(ag => {
+      const a = ag.toLowerCase()
+      return a === n || n.startsWith(a.split(' ')[0]) || a.split(' ')[0] === n.split(' ')[0]
+    })
+  }
 
   useEffect(() => {
     const planoId = plano.id
@@ -523,16 +534,25 @@ function MapaDetalhe({
       if (String(msg.planoId) !== planoId) return
       const id = String(msg.id)
       setAgProntidao(prev => { const m = new Map(prev); m.delete(id); return m })
-      setPosicoesPront(prev => { const m = new Map(prev); m.delete(id); return m })
+      // Só remove do mapa se não tiver GPS ativo independente
+      setPosicoesPront(prev => {
+        const m = new Map(prev)
+        const pos = m.get(id)
+        if (pos) m.set(id, { ...pos, emProntidao: false })
+        return m
+      })
     })
 
     const offPosicao = wsOn('posicao', (msg) => {
       const id = String(msg.id)
       if (id === meuId) return
-      if (!agProntRef.current.has(id)) return
+      const nome = String(msg.nome || id)
+      const emProntidao = agProntRef.current.has(id)
+      // Aceita: agentes em prontidão deste plano OU agentes da lista do plano com GPS ativo
+      if (!emProntidao && !nomeEhAgenteDoPlano(nome)) return
       setPosicoesPront(prev => {
         const m = new Map(prev)
-        m.set(id, { nome: String(msg.nome || id), lat: Number(msg.lat), lng: Number(msg.lng), precisao: Number(msg.precisao || 0), ts: Date.now() })
+        m.set(id, { nome, lat: Number(msg.lat), lng: Number(msg.lng), precisao: Number(msg.precisao || 0), ts: Date.now(), emProntidao })
         return m
       })
     })
@@ -542,9 +562,10 @@ function MapaDetalhe({
       setPosicoesPront(prev => {
         const m = new Map(prev)
         for (const p of lista) {
-          if (agProntRef.current.has(p.id) && p.id !== meuId) {
-            m.set(p.id, { nome: p.nome, lat: p.lat, lng: p.lng, precisao: p.precisao || 0, ts: Date.now() })
-          }
+          if (p.id === meuId) continue
+          const emProntidao = agProntRef.current.has(p.id)
+          if (!emProntidao && !nomeEhAgenteDoPlano(p.nome)) continue
+          m.set(p.id, { nome: p.nome, lat: p.lat, lng: p.lng, precisao: p.precisao || 0, ts: Date.now(), emProntidao })
         }
         return m
       })
@@ -566,6 +587,7 @@ function MapaDetalhe({
     }, 5000)
 
     return () => { offIniciais(); offPront(); offSair(); offPosicao(); offPosIniciais(); offRemover(); clearInterval(ttl) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plano.id])
 
   function handleCliqueMapa(lat: number, lng: number) {
@@ -664,35 +686,58 @@ function MapaDetalhe({
           </Marker>
         ))}
 
-        {/* Agentes em prontidão com GPS ativo */}
+        {/* Agentes com GPS ativo (prontidão ou só GPS) */}
         {Array.from(posicoesPront.entries()).map(([id, p]) => (
           <Marker key={`ag-${id}`} position={[p.lat, p.lng]} icon={criarIconeAgente(p.nome)}>
             <Popup>
               <div style={{ textAlign: 'center', minWidth: 120 }}>
                 <div style={{ fontSize: '1.2rem' }}>🧑‍🚒</div>
                 <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{p.nome}</div>
-                <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: 2 }}>✅ Em prontidão · GPS ativo</div>
-                {p.precisao < 200 && <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 1 }}>±{Math.round(p.precisao)}m</div>}
+                {p.emProntidao
+                  ? <div style={{ fontSize: '0.75rem', color: '#059669', fontWeight: 600, marginTop: 2 }}>✅ Em prontidão · GPS ativo</div>
+                  : <div style={{ fontSize: '0.75rem', color: '#1a4b8c', fontWeight: 600, marginTop: 2 }}>📡 GPS ativo · posição em tempo real</div>
+                }
+                {p.precisao > 0 && p.precisao < 500 && <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 1 }}>±{Math.round(p.precisao)}m</div>}
               </div>
             </Popup>
             {p.precisao > 0 && p.precisao < 300 && (
-              <Circle center={[p.lat, p.lng]} radius={p.precisao} pathOptions={{ color: '#059669', fillColor: '#059669', fillOpacity: 0.1, weight: 1.5 }} />
+              <Circle center={[p.lat, p.lng]} radius={p.precisao} pathOptions={{ color: p.emProntidao ? '#059669' : '#1a4b8c', fillColor: p.emProntidao ? '#059669' : '#1a4b8c', fillOpacity: 0.1, weight: 1.5 }} />
             )}
           </Marker>
         ))}
       </MapContainer>
 
-      {agProntidao.size > 0 && (
-        <div style={{ background: '#f0fdf4', borderTop: '1px solid #bbf7d0', padding: '0.4rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669' }}>🛡️ Em prontidão:</span>
-          {Array.from(agProntidao.entries()).map(([id, nome]) => {
-            const temGps = posicoesPront.has(id)
-            return (
-              <span key={id} style={{ background: temGps ? '#dcfce7' : '#f3f4f6', color: temGps ? '#166534' : '#6b7280', borderRadius: 12, padding: '0.15rem 0.5rem', fontSize: '0.72rem', fontWeight: 600 }}>
-                {temGps ? '📡' : '📵'} {nome.split(' ')[0]}
-              </span>
-            )
-          })}
+      {(agProntidao.size > 0 || posicoesPront.size > 0) && (
+        <div style={{ background: '#f0fdf4', borderTop: '1px solid #bbf7d0', padding: '0.4rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+          {/* Agentes em prontidão */}
+          {agProntidao.size > 0 && (
+            <>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#059669' }}>🛡️ Prontidão:</span>
+              {Array.from(agProntidao.entries()).map(([id, nome]) => {
+                const temGps = posicoesPront.has(id)
+                return (
+                  <span key={id} style={{ background: temGps ? '#dcfce7' : '#f3f4f6', color: temGps ? '#166534' : '#6b7280', borderRadius: 12, padding: '0.15rem 0.5rem', fontSize: '0.72rem', fontWeight: 600 }}>
+                    {temGps ? '📡' : '📵'} {nome.split(' ')[0]}
+                  </span>
+                )
+              })}
+            </>
+          )}
+          {/* Agentes só com GPS (não estão em prontidão formal) */}
+          {Array.from(posicoesPront.entries()).filter(([id, p]) => !p.emProntidao).length > 0 && (
+            <>
+              {agProntidao.size > 0 && <span style={{ color: '#d1d5db', fontSize: '0.8rem' }}>·</span>}
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a4b8c' }}>📡 GPS ativo:</span>
+              {Array.from(posicoesPront.entries())
+                .filter(([, p]) => !p.emProntidao)
+                .map(([id, p]) => (
+                  <span key={id} style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 12, padding: '0.15rem 0.5rem', fontSize: '0.72rem', fontWeight: 600 }}>
+                    📡 {p.nome.split(' ')[0]}
+                  </span>
+                ))
+              }
+            </>
+          )}
         </div>
       )}
 
