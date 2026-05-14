@@ -624,7 +624,7 @@ function MapaDetalhe({
   onRemoverItem: (id: string) => void
 }) {
   const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
-  const [iconesExpandidos, setIconesExpandidos] = useState(false)
+  const [secaoAberta, setSecaoAberta] = useState<'orgaos'|'agentes'|'materiais'|'icones'|null>(null)
   const centro: [number, number] = plano.lat && plano.lng ? [plano.lat, plano.lng] : OURO_BRANCO_CENTER
 
   // ── Prontidão: rastreia quem está de prontidão + posições GPS ──────────
@@ -769,186 +769,135 @@ function MapaDetalhe({
 
   return (
     <>
-      {/* ── Painel: adicionar ao mapa (ACIMA do mapa) ─── */}
-      <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', marginBottom: 6 }}>
+      {/* ── Painéis recolhíveis: Órgãos / Agentes / Materiais / Ícones ── */}
+      <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', marginBottom: 4 }}>
 
-        {/* Cabeçalho + banner de posicionamento */}
-        <div style={{ padding: '0.5rem 0.85rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#1a4b8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-            🗺️ Adicionar ao mapa
-          </span>
-          <span style={{ fontSize: '0.67rem', color: '#6b7280', marginLeft: 'auto' }}>
-            Selecione um item e toque no mapa
-          </span>
-        </div>
-
+        {/* Banner de posicionamento ativo */}
         {itemSelecionado && (
-          <div style={{ margin: '0.4rem 0.85rem 0', background: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 8, padding: '0.38rem 0.7rem', fontSize: '0.8rem', fontWeight: 700, color: '#92400e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>📍 Toque no mapa: <strong>{labelSelecionado}</strong></span>
-            <button onClick={() => setItemSelecionado(null)} style={{ background: 'none', border: 'none', color: '#b45309', cursor: 'pointer', fontWeight: 900, fontSize: '1rem', lineHeight: 1, padding: '0 0.2rem' }}>✕</button>
+          <div style={{ background: '#fef3c7', borderBottom: '1.5px solid #fbbf24', padding: '0.38rem 0.75rem', fontSize: '0.76rem', fontWeight: 700, color: '#92400e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>📍 Toque no mapa para posicionar: <strong>{labelSelecionado}</strong></span>
+            <button onClick={() => setItemSelecionado(null)} style={{ background: 'none', border: 'none', color: '#b45309', cursor: 'pointer', fontWeight: 900, fontSize: '1rem', lineHeight: 1 }}>✕</button>
           </div>
         )}
 
-        {/* ── Seção: Órgãos Empenhados ── */}
-        <div style={{ borderTop: '1px solid #e5e7eb', marginTop: '0.45rem' }}>
-          <div style={{ padding: '0.35rem 0.85rem', background: 'linear-gradient(90deg,#1a3a6b,#1e40af)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'white', textTransform: 'uppercase', letterSpacing: '0.06em' }}>🏛️ Órgãos Empenhados</span>
-            <span style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.18)', color: 'white', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '0.05rem 0.45rem' }}>
-              {plano.equipe.length} {plano.equipe.length === 1 ? 'órgão' : 'órgãos'}
+        {/* ── Seção: Órgãos Empenhados (recolhível) ── */}
+        <div style={{ borderBottom: '1px solid #e5e7eb' }}>
+          <button
+            onClick={() => setSecaoAberta(secaoAberta === 'orgaos' ? null : 'orgaos')}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.75rem', background: secaoAberta === 'orgaos' ? 'linear-gradient(90deg,#1a3a6b,#1e40af)' : '#eef2ff', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: '0.88rem' }}>🏛️</span>
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: secaoAberta === 'orgaos' ? 'white' : '#1e3a8a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Órgãos Empenhados</span>
+            <span style={{ marginLeft: 'auto', background: secaoAberta === 'orgaos' ? 'rgba(255,255,255,0.22)' : '#c7d2fe', color: secaoAberta === 'orgaos' ? 'white' : '#3730a3', borderRadius: 10, fontSize: '0.62rem', fontWeight: 700, padding: '0.05rem 0.4rem' }}>
+              {plano.equipe.length}
             </span>
-          </div>
-          <div style={{ padding: '0.45rem 0.75rem' }}>
-            {plano.equipe.length === 0 ? (
-              <div style={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center', padding: '0.3rem 0' }}>
-                Nenhum órgão empenhado · edite o plano para adicionar
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                {plano.equipe.map(orgao => {
-                  const key = `orgao:${orgao}`
-                  const orgaoInfo = ORGAOS_EMPENHO.flatMap(c => c.orgaos).find(o => `${o.emoji} ${o.nome}` === orgao)
-                  const emoji = orgaoInfo?.emoji ?? '🏛️'
-                  const ativo = itemSelecionado === key
-                  return (
-                    <button
-                      key={orgao}
-                      onClick={() => setItemSelecionado(ativo ? null : key)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '0.3rem',
-                        background: ativo ? '#1e40af' : '#dbeafe',
-                        color: ativo ? 'white' : '#1e3a8a',
-                        border: ativo ? '1.5px solid #1e40af' : '1.5px solid #bfdbfe',
-                        borderRadius: 20, padding: '0.28rem 0.7rem',
-                        fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
-                        boxShadow: ativo ? '0 0 0 2px #93c5fd' : 'none',
-                        transition: 'all 0.12s',
-                      }}
-                    >
-                      {orgaoInfo?.nome === 'Defesa Civil'
-                        ? <img src="/logo-dc.png" style={{ width: 16, height: 16, objectFit: 'contain' }} alt="" />
-                        : <span style={{ fontSize: '0.95rem' }}>{emoji}</span>
-                      }
-                      {orgaoInfo?.nome ?? orgao}
-                      {ativo && <span style={{ fontSize: '0.65rem', marginLeft: 2 }}>📍</span>}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+            <span style={{ fontSize: '0.65rem', color: secaoAberta === 'orgaos' ? 'rgba(255,255,255,0.8)' : '#6b7280', fontWeight: 700, marginLeft: 2 }}>{secaoAberta === 'orgaos' ? '▲' : '▼'}</span>
+          </button>
+          {secaoAberta === 'orgaos' && (
+            <div style={{ padding: '0.4rem 0.7rem 0.5rem' }}>
+              {plano.equipe.length === 0
+                ? <div style={{ fontSize: '0.72rem', color: '#9ca3af', textAlign: 'center', padding: '0.25rem 0' }}>Nenhum órgão empenhado</div>
+                : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.28rem' }}>
+                    {plano.equipe.map(orgao => {
+                      const key = `orgao:${orgao}`
+                      const orgaoInfo = ORGAOS_EMPENHO.flatMap(c => c.orgaos).find(o => `${o.emoji} ${o.nome}` === orgao)
+                      const emoji = orgaoInfo?.emoji ?? '🏛️'
+                      const ativo = itemSelecionado === key
+                      return (
+                        <button key={orgao} onClick={() => setItemSelecionado(ativo ? null : key)} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: ativo ? '#1e40af' : '#dbeafe', color: ativo ? 'white' : '#1e3a8a', border: ativo ? '1.5px solid #1e40af' : '1.5px solid #bfdbfe', borderRadius: 20, padding: '0.22rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', boxShadow: ativo ? '0 0 0 2px #93c5fd' : 'none' }}>
+                          {orgaoInfo?.nome === 'Defesa Civil' ? <img src="/logo-dc.png" style={{ width: 14, height: 14, objectFit: 'contain' }} alt="" /> : <span style={{ fontSize: '0.88rem' }}>{emoji}</span>}
+                          {orgaoInfo?.nome ?? orgao}{ativo && <span style={{ fontSize: '0.6rem' }}>📍</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+              }
+            </div>
+          )}
         </div>
 
-        {/* ── Seção: Agentes da Defesa Civil ── */}
-        <div style={{ borderTop: '1px solid #e5e7eb' }}>
-          <div style={{ padding: '0.35rem 0.85rem', background: 'linear-gradient(90deg,#065f46,#059669)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'white', textTransform: 'uppercase', letterSpacing: '0.06em' }}>🧑‍🚒 Agentes da Defesa Civil</span>
-            <span style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.18)', color: 'white', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '0.05rem 0.45rem' }}>
-              {(plano.agentesDefesaCivil ?? []).length} {(plano.agentesDefesaCivil ?? []).length === 1 ? 'agente' : 'agentes'}
+        {/* ── Seção: Agentes da Defesa Civil (recolhível) ── */}
+        <div style={{ borderBottom: '1px solid #e5e7eb' }}>
+          <button
+            onClick={() => setSecaoAberta(secaoAberta === 'agentes' ? null : 'agentes')}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.75rem', background: secaoAberta === 'agentes' ? 'linear-gradient(90deg,#065f46,#059669)' : '#f0fdf4', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: '0.88rem' }}>🧑‍🚒</span>
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: secaoAberta === 'agentes' ? 'white' : '#166534', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Agentes da Defesa Civil</span>
+            <span style={{ marginLeft: 'auto', background: secaoAberta === 'agentes' ? 'rgba(255,255,255,0.22)' : '#bbf7d0', color: secaoAberta === 'agentes' ? 'white' : '#166534', borderRadius: 10, fontSize: '0.62rem', fontWeight: 700, padding: '0.05rem 0.4rem' }}>
+              {(plano.agentesDefesaCivil ?? []).length}
             </span>
-          </div>
-          <div style={{ padding: '0.45rem 0.75rem' }}>
-            {(plano.agentesDefesaCivil ?? []).length === 0 ? (
-              <div style={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center', padding: '0.3rem 0' }}>
-                Nenhum agente escalado · edite o plano para adicionar
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                {(plano.agentesDefesaCivil ?? []).map(ag => {
-                  const key = `agente:${ag}`
-                  const ativo = itemSelecionado === key
-                  return (
-                    <button
-                      key={ag}
-                      onClick={() => setItemSelecionado(ativo ? null : key)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '0.3rem',
-                        background: ativo ? '#059669' : '#dcfce7',
-                        color: ativo ? 'white' : '#166534',
-                        border: ativo ? '1.5px solid #059669' : '1.5px solid #bbf7d0',
-                        borderRadius: 20, padding: '0.28rem 0.7rem',
-                        fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
-                        boxShadow: ativo ? '0 0 0 2px #6ee7b7' : 'none',
-                        transition: 'all 0.12s',
-                      }}
-                    >
-                      <span style={{ fontSize: '0.95rem' }}>🧑‍🚒</span>
-                      {ag}
-                      {ativo && <span style={{ fontSize: '0.65rem', marginLeft: 2 }}>📍</span>}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+            <span style={{ fontSize: '0.65rem', color: secaoAberta === 'agentes' ? 'rgba(255,255,255,0.8)' : '#6b7280', fontWeight: 700, marginLeft: 2 }}>{secaoAberta === 'agentes' ? '▲' : '▼'}</span>
+          </button>
+          {secaoAberta === 'agentes' && (
+            <div style={{ padding: '0.4rem 0.7rem 0.5rem' }}>
+              {(plano.agentesDefesaCivil ?? []).length === 0
+                ? <div style={{ fontSize: '0.72rem', color: '#9ca3af', textAlign: 'center', padding: '0.25rem 0' }}>Nenhum agente escalado</div>
+                : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.28rem' }}>
+                    {(plano.agentesDefesaCivil ?? []).map(ag => {
+                      const key = `agente:${ag}`
+                      const ativo = itemSelecionado === key
+                      return (
+                        <button key={ag} onClick={() => setItemSelecionado(ativo ? null : key)} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: ativo ? '#059669' : '#dcfce7', color: ativo ? 'white' : '#166534', border: ativo ? '1.5px solid #059669' : '1.5px solid #bbf7d0', borderRadius: 20, padding: '0.22rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', boxShadow: ativo ? '0 0 0 2px #6ee7b7' : 'none' }}>
+                          <span style={{ fontSize: '0.88rem' }}>🧑‍🚒</span>{ag}{ativo && <span style={{ fontSize: '0.6rem' }}>📍</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+              }
+            </div>
+          )}
         </div>
 
-        {/* ── Seção: Materiais e Recursos ── */}
-        <div style={{ borderTop: '1px solid #e5e7eb' }}>
-          <div style={{ padding: '0.35rem 0.85rem', background: 'linear-gradient(90deg,#78350f,#b45309)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'white', textTransform: 'uppercase', letterSpacing: '0.06em' }}>📦 Materiais e Recursos</span>
-            <span style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.18)', color: 'white', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '0.05rem 0.45rem' }}>
-              {plano.materiais.length} {plano.materiais.length === 1 ? 'item' : 'itens'}
+        {/* ── Seção: Materiais e Recursos (recolhível) ── */}
+        <div style={{ borderBottom: '1px solid #e5e7eb' }}>
+          <button
+            onClick={() => setSecaoAberta(secaoAberta === 'materiais' ? null : 'materiais')}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.75rem', background: secaoAberta === 'materiais' ? 'linear-gradient(90deg,#78350f,#b45309)' : '#fffbeb', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: '0.88rem' }}>📦</span>
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: secaoAberta === 'materiais' ? 'white' : '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Materiais e Recursos</span>
+            <span style={{ marginLeft: 'auto', background: secaoAberta === 'materiais' ? 'rgba(255,255,255,0.22)' : '#fde68a', color: secaoAberta === 'materiais' ? 'white' : '#78350f', borderRadius: 10, fontSize: '0.62rem', fontWeight: 700, padding: '0.05rem 0.4rem' }}>
+              {plano.materiais.length}
             </span>
-          </div>
-          <div style={{ padding: '0.45rem 0.75rem' }}>
-            {plano.materiais.length === 0 ? (
-              <div style={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center', padding: '0.3rem 0' }}>
-                Nenhum material cadastrado · edite o plano para adicionar
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                {plano.materiais.map(mat => {
-                  const key = `mat:${mat.nome}`
-                  const ativo = itemSelecionado === key
-                  return (
-                    <button
-                      key={mat.id}
-                      onClick={() => setItemSelecionado(ativo ? null : key)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '0.3rem',
-                        background: ativo ? '#b45309' : '#fef3c7',
-                        color: ativo ? 'white' : '#78350f',
-                        border: ativo ? '1.5px solid #b45309' : '1.5px solid #fcd34d',
-                        borderRadius: 20, padding: '0.28rem 0.7rem',
-                        fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
-                        boxShadow: ativo ? '0 0 0 2px #fde68a' : 'none',
-                        transition: 'all 0.12s',
-                      }}
-                    >
-                      <span style={{ fontSize: '0.95rem' }}>📦</span>
-                      {mat.nome}
-                      {mat.quantidade > 1 && <span style={{ fontSize: '0.68rem', opacity: 0.75 }}>×{mat.quantidade}</span>}
-                      {ativo && <span style={{ fontSize: '0.65rem', marginLeft: 2 }}>📍</span>}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+            <span style={{ fontSize: '0.65rem', color: secaoAberta === 'materiais' ? 'rgba(255,255,255,0.8)' : '#6b7280', fontWeight: 700, marginLeft: 2 }}>{secaoAberta === 'materiais' ? '▲' : '▼'}</span>
+          </button>
+          {secaoAberta === 'materiais' && (
+            <div style={{ padding: '0.4rem 0.7rem 0.5rem' }}>
+              {plano.materiais.length === 0
+                ? <div style={{ fontSize: '0.72rem', color: '#9ca3af', textAlign: 'center', padding: '0.25rem 0' }}>Nenhum material cadastrado</div>
+                : <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.28rem' }}>
+                    {plano.materiais.map(mat => {
+                      const key = `mat:${mat.nome}`
+                      const ativo = itemSelecionado === key
+                      return (
+                        <button key={mat.id} onClick={() => setItemSelecionado(ativo ? null : key)} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: ativo ? '#b45309' : '#fef3c7', color: ativo ? 'white' : '#78350f', border: ativo ? '1.5px solid #b45309' : '1.5px solid #fcd34d', borderRadius: 20, padding: '0.22rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', boxShadow: ativo ? '0 0 0 2px #fde68a' : 'none' }}>
+                          <span style={{ fontSize: '0.88rem' }}>📦</span>{mat.nome}{mat.quantidade > 1 && <span style={{ fontSize: '0.62rem', opacity: 0.75 }}>×{mat.quantidade}</span>}{ativo && <span style={{ fontSize: '0.6rem' }}>📍</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+              }
+            </div>
+          )}
         </div>
 
         {/* ── Seção: Ícones Operacionais (recolhível) ── */}
-        <div style={{ borderTop: '1px solid #e5e7eb', marginBottom: '0.5rem' }}>
+        <div>
           <button
-            onClick={() => setIconesExpandidos(v => !v)}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.85rem', background: '#f1f5f9', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+            onClick={() => setSecaoAberta(secaoAberta === 'icones' ? null : 'icones')}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.75rem', background: secaoAberta === 'icones' ? '#e2e8f0' : '#f8fafc', border: 'none', cursor: 'pointer', textAlign: 'left' }}
           >
-            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>🗺️ Ícones Operacionais</span>
-            <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700 }}>
-              {iconesExpandidos ? '▲ Recolher' : '▼ Expandir'}
-            </span>
+            <span style={{ fontSize: '0.88rem' }}>🚧</span>
+            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ícones Operacionais</span>
+            <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: '#94a3b8', fontWeight: 700 }}>{secaoAberta === 'icones' ? '▲' : '▼'}</span>
           </button>
-          {iconesExpandidos && (
-            <div style={{ padding: '0.4rem 0.75rem' }}>
+          {secaoAberta === 'icones' && (
+            <div style={{ padding: '0.4rem 0.7rem 0.5rem' }}>
               <div className="plan-itens-grid">
                 {ITENS_POSICIONAR.map(item => (
-                  <button
-                    key={item.tipo}
-                    className={`plan-item-btn ${itemSelecionado === item.tipo ? 'ativo' : ''}`}
-                    onClick={() => setItemSelecionado(itemSelecionado === item.tipo ? null : item.tipo)}
-                  >
-                    <span className="pi-emoji">{item.emoji}</span>
-                    {item.label}
+                  <button key={item.tipo} className={`plan-item-btn ${itemSelecionado === item.tipo ? 'ativo' : ''}`} onClick={() => setItemSelecionado(itemSelecionado === item.tipo ? null : item.tipo)}>
+                    <span className="pi-emoji">{item.emoji}</span>{item.label}
                   </button>
                 ))}
               </div>
@@ -958,12 +907,12 @@ function MapaDetalhe({
 
       </div>
 
-      {/* ── Mapa tático ─── */}
+      {/* ── Mapa tático (quase tela cheia) ── */}
       <div className="plan-mapa-container" style={{ borderRadius: 12, overflow: 'hidden' }}>
       <MapContainer
         center={centro}
         zoom={plano.lat && plano.lng ? 15 : 13}
-        style={{ height: 'min(58vh, 540px)', minHeight: 380, width: '100%' }}
+        style={{ height: 'min(72dvh, 680px)', minHeight: 420, width: '100%' }}
         zoomControl={true}
         attributionControl={false}
       >
@@ -1928,7 +1877,7 @@ function FormularioPlano({
   )
 }
 
-// ── Previsão do tempo (Open-Meteo) ──────────────────────────────────────
+// ── Previsão do tempo horária (Open-Meteo) ──────────────────────────────
 const WMO_LABEL: Record<number, { emoji: string; desc: string }> = {
   0:  { emoji: '☀️',  desc: 'Céu limpo' },
   1:  { emoji: '🌤️', desc: 'Predominantemente limpo' },
@@ -1951,51 +1900,117 @@ const WMO_LABEL: Record<number, { emoji: string; desc: string }> = {
   99: { emoji: '⛈️',  desc: 'Trovoada com granizo forte' },
 }
 
-function PrevisaoTempo({ lat, lng, data }: { lat: number; lng: number; data: string }) {
-  interface DadosTempo { emoji: string; desc: string; chuva: number; prob: number }
-  const [dados, setDados] = useState<DadosTempo | null>(null)
+interface HoraDados { hora: number; emoji: string; desc: string; temp: number; precip: number; prob: number; umidade: number }
+
+function PrevisaoTempoCompleta({ lat, lng, data, horario }: { lat: number; lng: number; data: string; horario?: string }) {
+  const [horas, setHoras] = useState<HoraDados[]>([])
   const [status, setStatus] = useState<'carregando' | 'ok' | 'indisponivel'>('carregando')
+  const [expandido, setExpandido] = useState(false)
 
   useEffect(() => {
     const hoje = new Date()
     const dataEvento = new Date(data + 'T12:00:00')
     const diffDias = Math.round((dataEvento.getTime() - hoje.getTime()) / 86400000)
-    if (diffDias < -1 || diffDias > 15) { setStatus('indisponivel'); return }
+    if (diffDias < -1 || diffDias > 16) { setStatus('indisponivel'); return }
 
-    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&daily=precipitation_sum,precipitation_probability_max,weathercode&timezone=America%2FSao_Paulo&start_date=${data}&end_date=${data}`)
+    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&hourly=temperature_2m,precipitation_probability,precipitation,relativehumidity_2m,weathercode&timezone=America%2FSao_Paulo&start_date=${data}&end_date=${data}`)
       .then(r => r.json())
       .then(d => {
-        const code = d.daily?.weathercode?.[0]
-        if (code === undefined || code === null) { setStatus('indisponivel'); return }
-        const wmo = WMO_LABEL[code as number] ?? { emoji: '🌡️', desc: 'Variável' }
-        setDados({ emoji: wmo.emoji, desc: wmo.desc, chuva: d.daily.precipitation_sum[0] ?? 0, prob: d.daily.precipitation_probability_max[0] ?? 0 })
+        const times: string[] = d.hourly?.time ?? []
+        const temps: number[] = d.hourly?.temperature_2m ?? []
+        const probs: number[] = d.hourly?.precipitation_probability ?? []
+        const precips: number[] = d.hourly?.precipitation ?? []
+        const umids: number[] = d.hourly?.relativehumidity_2m ?? []
+        const codes: number[] = d.hourly?.weathercode ?? []
+        const resultado: HoraDados[] = times.map((t, i) => {
+          const hora = new Date(t).getHours()
+          const wmo = WMO_LABEL[codes[i] ?? 0] ?? { emoji: '🌡️', desc: 'Variável' }
+          return { hora, emoji: wmo.emoji, desc: wmo.desc, temp: temps[i] ?? 0, precip: precips[i] ?? 0, prob: probs[i] ?? 0, umidade: umids[i] ?? 0 }
+        })
+        setHoras(resultado)
         setStatus('ok')
       })
       .catch(() => setStatus('indisponivel'))
   }, [lat, lng, data])
 
   if (status === 'carregando') return (
-    <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '0.42rem 0.75rem', fontSize: '0.78rem', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-      <span>🌤️</span> Buscando previsão...
+    <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '0.4rem 0.75rem', fontSize: '0.75rem', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+      <span>🌤️</span> Buscando previsão do tempo...
     </div>
   )
-  if (status === 'indisponivel' || !dados) return (
-    <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.42rem 0.75rem', fontSize: '0.75rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-      <span>🌡️</span> Previsão indisponível (disponível até 15 dias à frente)
+  if (status === 'indisponivel' || horas.length === 0) return (
+    <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.4rem 0.75rem', fontSize: '0.72rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+      <span>🌡️</span> Previsão indisponível para esta data
     </div>
   )
-  const corFundo = dados.prob > 60 ? '#eff6ff' : dados.prob > 30 ? '#f0fdf4' : '#fefce8'
-  const corBorda = dados.prob > 60 ? '#bfdbfe' : dados.prob > 30 ? '#bbf7d0' : '#fde68a'
+
+  const maxTemp = Math.max(...horas.map(h => h.temp))
+  const minTemp = Math.min(...horas.map(h => h.temp))
+  const maxProb = Math.max(...horas.map(h => h.prob))
+  const totalPrecip = horas.reduce((s, h) => s + h.precip, 0)
+  const midHour = horas[12] ?? horas[0]
+  const horaEvento = horario ? parseInt(horario.split(':')[0], 10) : null
+  const corFundo = maxProb > 60 ? '#eff6ff' : maxProb > 30 ? '#f0fdf4' : '#fefce8'
+  const corBorda = maxProb > 60 ? '#bfdbfe' : maxProb > 30 ? '#bbf7d0' : '#fde68a'
+
   return (
-    <div style={{ background: corFundo, border: `1.5px solid ${corBorda}`, borderRadius: 8, padding: '0.48rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
-      <span style={{ fontSize: '1.45rem', lineHeight: 1 }}>{dados.emoji}</span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1f2937' }}>{dados.desc}</div>
-        <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 2 }}>
-          💧 {dados.chuva.toFixed(1)} mm · {dados.prob}% probabilidade de chuva
+    <div style={{ background: corFundo, border: `1.5px solid ${corBorda}`, borderRadius: 10, overflow: 'hidden' }}>
+      {/* Resumo clicável */}
+      <button
+        onClick={() => setExpandido(v => !v)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.45rem 0.75rem', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+      >
+        <span style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>{midHour.emoji}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#1f2937' }}>{midHour.desc}</div>
+          <div style={{ fontSize: '0.68rem', color: '#6b7280', marginTop: 1 }}>
+            🌡️ {minTemp.toFixed(0)}°–{maxTemp.toFixed(0)}°C · 💧 {totalPrecip.toFixed(1)}mm · ☔ {maxProb}% chuva
+          </div>
         </div>
-      </div>
-      <div style={{ fontSize: '0.6rem', color: '#9ca3af', textAlign: 'right', lineHeight: 1.4, fontWeight: 600 }}>Open-Meteo<br/>INMET</div>
+        <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 700, flexShrink: 0 }}>{expandido ? '▲' : '▼ Horas'}</span>
+      </button>
+
+      {/* Tabela horária */}
+      {expandido && (
+        <div style={{ borderTop: `1px solid ${corBorda}` }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem' }}>
+              <thead>
+                <tr style={{ background: 'rgba(0,0,0,0.05)' }}>
+                  <th style={{ padding: '0.25rem 0.5rem', textAlign: 'left', fontWeight: 700, color: '#374151' }}>Hora</th>
+                  <th style={{ padding: '0.25rem 0.35rem', textAlign: 'center' }}>Tempo</th>
+                  <th style={{ padding: '0.25rem 0.35rem', textAlign: 'center', whiteSpace: 'nowrap' }}>🌡️ Temp</th>
+                  <th style={{ padding: '0.25rem 0.35rem', textAlign: 'center', whiteSpace: 'nowrap' }}>☔ Chuva</th>
+                  <th style={{ padding: '0.25rem 0.35rem', textAlign: 'center', whiteSpace: 'nowrap' }}>💦 Umid.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {horas.map(h => {
+                  const destaque = horaEvento !== null && h.hora === horaEvento
+                  return (
+                    <tr key={h.hora} style={{ background: destaque ? '#fef9c3' : h.hora % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.02)', borderLeft: destaque ? '3px solid #f59e0b' : '3px solid transparent' }}>
+                      <td style={{ padding: '0.25rem 0.5rem', fontWeight: destaque ? 800 : 600, color: destaque ? '#92400e' : '#374151', whiteSpace: 'nowrap' }}>
+                        {String(h.hora).padStart(2,'0')}:00{destaque ? ' ⏰' : ''}
+                      </td>
+                      <td style={{ padding: '0.25rem 0.35rem', textAlign: 'center', fontSize: '0.95rem' }}>{h.emoji}</td>
+                      <td style={{ padding: '0.25rem 0.35rem', textAlign: 'center', fontWeight: 700, color: h.temp >= 32 ? '#b91c1c' : h.temp >= 28 ? '#c2410c' : h.temp >= 22 ? '#15803d' : '#1d4ed8' }}>
+                        {h.temp.toFixed(1)}°
+                      </td>
+                      <td style={{ padding: '0.25rem 0.35rem', textAlign: 'center', color: h.prob > 60 ? '#1d4ed8' : h.prob > 30 ? '#0891b2' : '#9ca3af', fontWeight: 600 }}>
+                        {h.prob}%{h.precip > 0 ? <span style={{ fontSize: '0.62rem', display: 'block', marginTop: -1 }}>{h.precip.toFixed(1)}mm</span> : ''}
+                      </td>
+                      <td style={{ padding: '0.25rem 0.35rem', textAlign: 'center', color: '#64748b', fontWeight: 600 }}>
+                        {h.umidade}%
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ padding: '0.2rem 0.65rem', fontSize: '0.58rem', color: '#9ca3af', textAlign: 'right' }}>Fonte: Open-Meteo</div>
+        </div>
+      )}
     </div>
   )
 }
@@ -2195,9 +2210,9 @@ function DetalheP({
           </div>
         )}
 
-        {/* Previsão do tempo */}
+        {/* Previsão do tempo horária */}
         {planoLocal.dataInicio && planoLocal.lat && planoLocal.lng && (
-          <PrevisaoTempo lat={planoLocal.lat} lng={planoLocal.lng} data={planoLocal.dataInicio} />
+          <PrevisaoTempoCompleta lat={planoLocal.lat} lng={planoLocal.lng} data={planoLocal.dataInicio} horario={planoLocal.horario} />
         )}
 
         {/* Prontidão — strip compacto */}
@@ -2209,26 +2224,36 @@ function DetalheP({
           display: 'flex', alignItems: 'center', gap: '0.55rem',
           flexWrap: 'wrap',
         }}>
-          <span style={{ fontSize: '0.95rem' }}>🛡️</span>
+          <span style={{ fontSize: '0.9rem' }}>🛡️</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ fontWeight: 700, fontSize: '0.82rem', color: emProntidao ? 'white' : '#374151' }}>
-              {emProntidao ? 'Em prontidão' : 'Prontidão'}
-            </span>
-            {emProntidao && (
-              <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.85)', marginLeft: '0.45rem' }}>
-                {estadoGps.status === 'ativo' ? '📡 GPS ativo' : '📵 GPS inativo'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700, fontSize: '0.8rem', color: emProntidao ? 'white' : '#374151' }}>
+                {emProntidao ? 'Em prontidão' : 'Prontidão'}
               </span>
-            )}
-            {outrosProntidao.length > 0 && (
-              <span style={{ fontSize: '0.7rem', color: emProntidao ? 'rgba(255,255,255,0.85)' : '#6b7280', marginLeft: '0.4rem' }}>
-                · {outrosProntidao.length} outro{outrosProntidao.length > 1 ? 's' : ''}
-              </span>
+              {emProntidao && (
+                <span style={{ fontSize: '0.68rem', color: estadoGps.status === 'ativo' ? '#a7f3d0' : 'rgba(255,255,255,0.7)', fontWeight: 700 }}>
+                  {estadoGps.status === 'ativo' ? '📡 GPS ativo' : estadoGps.status === 'aguardando' ? '⏳ Aguardando GPS' : '📵 GPS inativo'}
+                </span>
+              )}
+              {outrosProntidao.length > 0 && (
+                <span style={{ fontSize: '0.68rem', color: emProntidao ? 'rgba(255,255,255,0.8)' : '#6b7280' }}>
+                  · {outrosProntidao.length} outro{outrosProntidao.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            {emProntidao && estadoGps.posicao && (
+              <div style={{ fontSize: '0.65rem', color: '#a7f3d0', fontFamily: 'monospace', marginTop: 1, letterSpacing: '0.01em' }}>
+                📍 {estadoGps.posicao.lat.toFixed(5)}, {estadoGps.posicao.lng.toFixed(5)}
+                {estadoGps.posicao.precisao > 0 && estadoGps.posicao.precisao < 500 && (
+                  <span style={{ opacity: 0.75, marginLeft: 4 }}>±{Math.round(estadoGps.posicao.precisao)}m</span>
+                )}
+              </div>
             )}
           </div>
           {emProntidao && (estadoGps.status === 'inativo' || estadoGps.status === 'erro') && (
             <button
               onClick={() => ativarGps()}
-              style={{ background: '#f59e0b', color: 'white', border: 'none', borderRadius: 10, padding: '0.2rem 0.6rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
+              style={{ background: '#f59e0b', color: 'white', border: 'none', borderRadius: 10, padding: '0.2rem 0.6rem', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer' }}
             >📡 GPS</button>
           )}
           <button
@@ -2237,9 +2262,9 @@ function DetalheP({
               background: emProntidao ? 'rgba(255,255,255,0.2)' : '#1a4b8c',
               color: 'white',
               border: emProntidao ? '1.5px solid rgba(255,255,255,0.4)' : 'none',
-              borderRadius: 20, padding: '0.3rem 0.8rem',
-              fontWeight: 800, fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap',
-              display: 'flex', alignItems: 'center', gap: '0.3rem',
+              borderRadius: 20, padding: '0.28rem 0.75rem',
+              fontWeight: 800, fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap',
+              display: 'flex', alignItems: 'center', gap: '0.3rem', flexShrink: 0,
             }}
           >
             {emProntidao ? '🔴 Sair' : '📡 Entrar'}
