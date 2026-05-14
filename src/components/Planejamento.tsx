@@ -165,6 +165,7 @@ interface Plano {
   publicoEstimado: string
   status: StatusPlano
   equipe: string[]
+  agentesDefesaCivil?: string[]
   materiais: MaterialPlano[]
   itensMapa: ItemMapa[]
   pontosExtras: PontoExtra[]
@@ -390,6 +391,32 @@ function criarIconeAgente(nome: string): L.DivIcon {
   })
 }
 
+function criarIconeAgentePlanejado(nome: string): L.DivIcon {
+  const iniciais = nome.split(' ').map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('') || '?'
+  return L.divIcon({
+    className: '',
+    html: `<div style="position:relative;">
+      <div style="
+        background:#1a4b8c;width:36px;height:36px;border-radius:50%;
+        border:2.5px solid white;
+        box-shadow:0 0 0 2.5px #1a4b8c,0 3px 10px rgba(0,0,0,0.4);
+        display:flex;align-items:center;justify-content:center;
+        color:white;font-weight:800;font-size:12px;font-family:sans-serif;
+        letter-spacing:-0.02em;
+      ">${iniciais}</div>
+      <div style="position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);
+        background:rgba(26,75,140,0.92);color:white;font-size:7px;padding:1px 5px;
+        border-radius:3px;white-space:nowrap;font-family:sans-serif;max-width:64px;
+        overflow:hidden;text-overflow:ellipsis;font-weight:700;line-height:1.4;">
+        ${nome.split(' ')[0]}
+      </div>
+    </div>`,
+    iconSize: [36, 54],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -40],
+  })
+}
+
 function MapClickHandler({ onClique, ativo }: { onClique: (lat: number, lng: number) => void; ativo: boolean }) {
   useMapEvents({
     click(e) {
@@ -462,7 +489,7 @@ function MapaDetalhe({
   onRemoverItem: (id: string) => void
 }) {
   const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
-  const [abaItens, setAbaItens] = useState<'icones' | 'orgaos' | 'materiais'>('icones')
+  const [abaItens, setAbaItens] = useState<'icones' | 'orgaos' | 'materiais' | 'agentes'>('icones')
   const centro: [number, number] = plano.lat && plano.lng ? [plano.lat, plano.lng] : OURO_BRANCO_CENTER
 
   // ── Prontidão: rastreia quem está de prontidão + posições GPS ──────────
@@ -566,12 +593,20 @@ function MapaDetalhe({
       setItemSelecionado(null)
       return
     }
+    // Check as DC agent (tipo starts with 'agente:')
+    if (itemSelecionado.startsWith('agente:')) {
+      const nomeAgente = itemSelecionado.slice(7)
+      onAdicionarItem({ id: gerarId(), tipo: 'agente_dc', emoji: '🧑‍🚒', lat, lng, obs: nomeAgente })
+      setItemSelecionado(null)
+      return
+    }
   }
 
   const labelSelecionado = (() => {
     if (!itemSelecionado) return ''
     if (itemSelecionado.startsWith('orgao:')) return itemSelecionado.slice(6)
     if (itemSelecionado.startsWith('mat:')) return itemSelecionado.slice(4)
+    if (itemSelecionado.startsWith('agente:')) return itemSelecionado.slice(7)
     return ITENS_POSICIONAR.find(i => i.tipo === itemSelecionado)?.label ?? ''
   })()
 
@@ -586,7 +621,7 @@ function MapaDetalhe({
       <MapContainer
         center={centro}
         zoom={plano.lat && plano.lng ? 15 : 13}
-        style={{ height: 460, width: '100%' }}
+        style={{ height: 'min(58vh, 540px)', minHeight: 380, width: '100%' }}
         zoomControl={true}
         attributionControl={false}
       >
@@ -603,11 +638,21 @@ function MapaDetalhe({
           </Marker>
         ))}
         {plano.itensMapa.map(item => (
-          <Marker key={item.id} position={[item.lat, item.lng]} icon={criarIconeEmoji(item.emoji)}>
+          <Marker
+            key={item.id}
+            position={[item.lat, item.lng]}
+            icon={item.tipo === 'agente_dc' ? criarIconeAgentePlanejado(item.obs || item.tipo) : criarIconeEmoji(item.emoji)}
+          >
             <Popup>
               <div style={{ textAlign: 'center' }}>
-                <span style={{ fontSize: '1.5rem' }}>{item.emoji}</span>
+                {item.tipo === 'agente_dc'
+                  ? <span style={{ fontSize: '1.2rem' }}>🧑‍🚒</span>
+                  : <span style={{ fontSize: '1.5rem' }}>{item.emoji}</span>
+                }
                 <div style={{ fontWeight: 700, fontSize: '0.85rem', marginTop: 4 }}>{item.obs || item.tipo}</div>
+                {item.tipo === 'agente_dc' && (
+                  <div style={{ fontSize: '0.72rem', color: '#1a4b8c', fontWeight: 600, marginBottom: 4 }}>👷 Agente planejado</div>
+                )}
                 <button
                   onClick={() => onRemoverItem(item.id)}
                   style={{ marginTop: 6, background: '#fee2e2', border: 'none', borderRadius: 6, padding: '0.2rem 0.7rem', color: '#b91c1c', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}
@@ -656,8 +701,8 @@ function MapaDetalhe({
           🗺️ Clique num item e toque no mapa para posicionar
         </div>
         {/* Abas */}
-        <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.45rem' }}>
-          {([['icones', '🗺️ Ícones'], ['orgaos', '🏛️ Órgãos'], ['materiais', '📦 Materiais']] as const).map(([aba, label]) => (
+        <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.45rem', flexWrap: 'wrap' }}>
+          {([['icones', '🗺️ Ícones'], ['orgaos', '🏛️ Órgãos'], ['materiais', '📦 Materiais'], ['agentes', '🧑‍🚒 Agentes DC']] as const).map(([aba, label]) => (
             <button
               key={aba}
               onClick={() => setAbaItens(aba)}
@@ -725,6 +770,33 @@ function MapaDetalhe({
                     >
                       <span className="pi-emoji">📦</span>
                       {mat.nome}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {abaItens === 'agentes' && (
+          <div>
+            {(plano.agentesDefesaCivil ?? []).length === 0 ? (
+              <div style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', padding: '0.5rem' }}>
+                Nenhum agente da Defesa Civil selecionado neste plano.<br />
+                <span style={{ fontSize: '0.73rem' }}>Edite o plano para adicionar agentes.</span>
+              </div>
+            ) : (
+              <div className="plan-itens-grid">
+                {(plano.agentesDefesaCivil ?? []).map(ag => {
+                  const key = `agente:${ag}`
+                  return (
+                    <button
+                      key={ag}
+                      className={`plan-item-btn ${itemSelecionado === key ? 'ativo' : ''}`}
+                      onClick={() => setItemSelecionado(itemSelecionado === key ? null : key)}
+                    >
+                      <span className="pi-emoji">🧑‍🚒</span>
+                      {ag}
                     </button>
                   )
                 })}
@@ -1230,6 +1302,8 @@ function FormularioPlano({
   const [novoPontoLabel, setNovoPontoLabel] = useState('')
   const [clickandoPonto, setClickandoPonto] = useState(false)
 
+  const [agentesDefesaCivil, setAgentesDefesaCivil] = useState<string[]>(planoEditando?.agentesDefesaCivil ?? [])
+
   const [novoMat, setNovoMat] = useState('')
   const [novoMatQtd, setNovoMatQtd] = useState('1')
   const [novoMatUnd, setNovoMatUnd] = useState('un')
@@ -1282,6 +1356,7 @@ function FormularioPlano({
       lng,
       observacoes: observacoes.trim(),
       risco,
+      agentesDefesaCivil,
       criadoPor: planoEditando?.criadoPor ?? agente,
       criadoEm: planoEditando?.criadoEm ?? new Date().toISOString(),
     }
@@ -1455,6 +1530,45 @@ function FormularioPlano({
           <div className="plan-form-secao">🏛️ Órgãos Empenhados</div>
           <OrgaosPanel selecionados={equipe} onChange={setEquipe} />
 
+          <div className="plan-form-secao">🧑‍🚒 Agentes da Defesa Civil</div>
+          <div style={{ background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 10, padding: '0.6rem 0.7rem', marginBottom: '0.3rem' }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#166534', marginBottom: '0.45rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Selecione os agentes escalados para este planejamento
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+              {AGENTES.map(ag => {
+                const sel = agentesDefesaCivil.includes(ag)
+                return (
+                  <button
+                    key={ag}
+                    type="button"
+                    onClick={() => setAgentesDefesaCivil(prev => sel ? prev.filter(a => a !== ag) : [...prev, ag])}
+                    style={{
+                      background: sel ? '#059669' : '#f0fdf4',
+                      color: sel ? 'white' : '#166534',
+                      border: sel ? '1.5px solid #059669' : '1.5px solid #bbf7d0',
+                      borderRadius: 20,
+                      padding: '0.32rem 0.75rem',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '0.3rem',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {sel && <span style={{ fontSize: '0.75rem' }}>✓</span>}
+                    {ag}
+                  </button>
+                )
+              })}
+            </div>
+            {agentesDefesaCivil.length > 0 && (
+              <div style={{ marginTop: '0.45rem', fontSize: '0.73rem', color: '#059669', fontWeight: 600 }}>
+                ✅ {agentesDefesaCivil.length} agente{agentesDefesaCivil.length > 1 ? 's' : ''} selecionado{agentesDefesaCivil.length > 1 ? 's' : ''}
+              </div>
+            )}
+          </div>
+
           <div className="plan-form-secao">📦 Materiais e recursos</div>
           <PreListasPanel onAdicionarItens={adicionarMateriais} />
           {materiais.length > 0 && (
@@ -1605,6 +1719,25 @@ function DetalheP({
 
   function removerItem(id: string) {
     const atualizado = { ...planoLocal, itensMapa: planoLocal.itensMapa.filter(i => i.id !== id) }
+    setPlanoLocal(atualizado)
+    onAtualizar(atualizado)
+  }
+
+  function atualizarQuantidadeMaterial(matId: string, novaQtd: number) {
+    const qtd = Math.max(1, novaQtd)
+    const atualizado = {
+      ...planoLocal,
+      materiais: planoLocal.materiais.map(m => m.id === matId ? { ...m, quantidade: qtd } : m),
+    }
+    setPlanoLocal(atualizado)
+    onAtualizar(atualizado)
+  }
+
+  function removerMaterialDetalhe(matId: string) {
+    const atualizado = {
+      ...planoLocal,
+      materiais: planoLocal.materiais.filter(m => m.id !== matId),
+    }
     setPlanoLocal(atualizado)
     onAtualizar(atualizado)
   }
@@ -1829,15 +1962,46 @@ function DetalheP({
           </div>
         )}
 
+        {/* Agentes Defesa Civil */}
+        {(planoLocal.agentesDefesaCivil ?? []).length > 0 && (
+          <div className="plan-detalhe-card" style={{ overflow: 'hidden' }}>
+            <div style={{ background: 'linear-gradient(135deg,#065f46,#059669)', color: 'white', padding: '0.55rem 0.85rem', fontWeight: 800, fontSize: '0.85rem', letterSpacing: '0.01em' }}>
+              🧑‍🚒 Agentes da Defesa Civil — {(planoLocal.agentesDefesaCivil ?? []).length} escalado{(planoLocal.agentesDefesaCivil ?? []).length > 1 ? 's' : ''}
+            </div>
+            <div style={{ padding: '0.6rem 0.75rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+              {(planoLocal.agentesDefesaCivil ?? []).map(ag => (
+                <span key={ag} style={{ background: '#dcfce7', color: '#166534', borderRadius: 12, padding: '0.25rem 0.7rem', fontSize: '0.82rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  🧑‍🚒 {ag}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Materiais */}
         {planoLocal.materiais.length > 0 && (
           <div className="plan-detalhe-card">
             <div className="plan-detalhe-card-header">📦 Materiais ({pluralMat(planoLocal.materiais.length)})</div>
             <div className="plan-mat-detalhe">
               {planoLocal.materiais.map(m => (
-                <div key={m.id} className="plan-mat-detalhe-item">
+                <div key={m.id} className="plan-mat-detalhe-item" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <span className="plan-mat-detalhe-nome">{m.nome}</span>
-                  <span className="plan-mat-detalhe-qtd">{m.quantidade} {m.unidade}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginLeft: 'auto', flexShrink: 0 }}>
+                    <button
+                      onClick={() => atualizarQuantidadeMaterial(m.id, m.quantidade - 1)}
+                      style={{ width: 26, height: 26, background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, fontWeight: 800, fontSize: '1rem', cursor: 'pointer', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#374151' }}
+                    >−</button>
+                    <span style={{ minWidth: 38, textAlign: 'center', fontSize: '0.82rem', fontWeight: 700, color: '#1f2937' }}>{m.quantidade} {m.unidade}</span>
+                    <button
+                      onClick={() => atualizarQuantidadeMaterial(m.id, m.quantidade + 1)}
+                      style={{ width: 26, height: 26, background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: 6, fontWeight: 800, fontSize: '1rem', cursor: 'pointer', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1e40af' }}
+                    >+</button>
+                    <button
+                      onClick={() => removerMaterialDetalhe(m.id)}
+                      style={{ width: 24, height: 24, background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontWeight: 800, fontSize: '0.9rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Remover"
+                    >✕</button>
+                  </div>
                 </div>
               ))}
             </div>
