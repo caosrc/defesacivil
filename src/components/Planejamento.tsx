@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, Circle } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getAgenteLogado } from './Login'
 import { AGENTES } from '../types'
 import { wsOn, wsSend } from '../wsClient'
 import { ativarGps, desativarGps, subscribeGps, getEstadoGps, getDispositivoIdGlobal, getNomeAgenteGlobal } from '../gpsService'
+import { supabase } from '../supabaseClient'
 
 const ORGAOS_EMPENHO: { categoria: string; emoji: string; orgaos: { emoji: string; nome: string }[] }[] = [
   { categoria: 'Segurança Pública', emoji: '🚔', orgaos: [
@@ -175,6 +176,63 @@ interface Plano {
   risco: 'baixo' | 'medio' | 'alto'
   criadoPor: string
   criadoEm: string
+}
+
+// ── Conversão GMS (Graus, Minutos, Segundos) ─────────────────────────────
+function decimalParaGMS(decimal: number, tipo: 'lat' | 'lng'): string {
+  const abs = Math.abs(decimal)
+  const graus = Math.floor(abs)
+  const minRaw = (abs - graus) * 60
+  const minutos = Math.floor(minRaw)
+  const segundos = ((minRaw - minutos) * 60).toFixed(1)
+  const dir = tipo === 'lat' ? (decimal >= 0 ? 'N' : 'S') : (decimal >= 0 ? 'L' : 'O')
+  return `${graus}°${minutos}'${segundos}"${dir}`
+}
+
+function gmsParaDecimal(gms: string): number | null {
+  const s = gms.trim().replace(',', '.')
+  const m = s.match(/^(\d+)[°\s](\d+)['´\s](\d+\.?\d*)["'`\s]*([NSnsEeOoWwLl])?/)
+  if (!m) {
+    const d = parseFloat(s)
+    return isNaN(d) ? null : d
+  }
+  const dec = parseInt(m[1]) + parseInt(m[2]) / 60 + parseFloat(m[3]) / 3600
+  return (m[4] && 'SsOoWw'.includes(m[4])) ? -dec : dec
+}
+
+// ── Mapeamento Plano ↔ Supabase ─────────────────────────────────────────
+function planoParaSB(p: Plano): Record<string, unknown> {
+  return {
+    id: p.id, tipo: p.tipo, nome: p.nome, descricao: p.descricao, local: p.local,
+    data_inicio: p.dataInicio, data_fim: p.dataFim, horario: p.horario,
+    horario_fim: p.horarioFim, publico_estimado: p.publicoEstimado,
+    status: p.status, equipe: p.equipe,
+    agentes_defesa_civil: p.agentesDefesaCivil ?? [],
+    materiais: p.materiais, itens_mapa: p.itensMapa, pontos_extras: p.pontosExtras,
+    lat: p.lat, lng: p.lng, observacoes: p.observacoes, risco: p.risco,
+    criado_por: p.criadoPor, criado_em: p.criadoEm,
+  }
+}
+
+function sbParaPlano(row: Record<string, unknown>): Plano {
+  return {
+    id: row.id as string, tipo: row.tipo as TipoPlano, nome: row.nome as string,
+    descricao: (row.descricao as string) ?? '', local: (row.local as string) ?? '',
+    dataInicio: (row.data_inicio as string) ?? '', dataFim: (row.data_fim as string) ?? '',
+    horario: (row.horario as string) ?? '', horarioFim: (row.horario_fim as string) ?? '',
+    publicoEstimado: (row.publico_estimado as string) ?? '',
+    status: (row.status as StatusPlano) ?? 'planejado',
+    equipe: (row.equipe as string[]) ?? [],
+    agentesDefesaCivil: (row.agentes_defesa_civil as string[]) ?? [],
+    materiais: (row.materiais as MaterialPlano[]) ?? [],
+    itensMapa: (row.itens_mapa as ItemMapa[]) ?? [],
+    pontosExtras: (row.pontos_extras as PontoExtra[]) ?? [],
+    lat: (row.lat as number) ?? null, lng: (row.lng as number) ?? null,
+    observacoes: (row.observacoes as string) ?? '',
+    risco: (row.risco as 'baixo' | 'medio' | 'alto') ?? 'baixo',
+    criadoPor: (row.criado_por as string) ?? '',
+    criadoEm: (row.criado_em as string) ?? new Date().toISOString(),
+  }
 }
 
 // ── Constantes ──────────────────────────────────────────────────────────
@@ -424,6 +482,53 @@ function MapClickHandler({ onClique, ativo }: { onClique: (lat: number, lng: num
     },
   })
   return null
+}
+
+function FlyToMarca({ lat, lng }: { lat: number; lng: number }) {
+  const map = useMap()
+  useEffect(() => { map.flyTo([lat, lng], 15, { duration: 1.2 }) }, [lat, lng, map])
+  return null
+}
+
+function InputGMS({
+  valor, tipo, onChange,
+}: {
+  valor: number | null
+  tipo: 'lat' | 'lng'
+  onChange: (v: number | null) => void
+}) {
+  const [texto, setTexto] = useState(() => valor != null ? decimalParaGMS(valor, tipo) : '')
+  const [erro, setErro] = useState(false)
+
+  useEffect(() => {
+    if (valor != null) setTexto(decimalParaGMS(valor, tipo))
+    else setTexto('')
+  }, [valor, tipo])
+
+  function handleBlur() {
+    if (!texto.trim()) { onChange(null); setErro(false); return }
+    const dec = gmsParaDecimal(texto)
+    if (dec === null) { setErro(true); return }
+    setErro(false)
+    onChange(dec)
+    setTexto(decimalParaGMS(dec, tipo))
+  }
+
+  return (
+    <input
+      type="text"
+      value={texto}
+      onChange={e => { setTexto(e.target.value); setErro(false) }}
+      onBlur={handleBlur}
+      placeholder={tipo === 'lat' ? "20°31'10.5\"S" : "43°41'54.3\"O"}
+      style={{
+        width: '100%', padding: '0.38rem 0.5rem',
+        border: `1.5px solid ${erro ? '#ef4444' : '#cbd5e1'}`,
+        borderRadius: 7, fontSize: '0.8rem', outline: 'none', fontFamily: 'monospace',
+        background: erro ? '#fff1f2' : undefined,
+      }}
+    />
+  )
 }
 
 // ── Mapa no formulário (picker de localização) ──────────────────────────
@@ -1484,10 +1589,23 @@ function FormularioPlano({
           <div className="plan-form-secao">📍 Localização no mapa</div>
           {/* Mapa principal */}
           <MapaPicker lat={lat} lng={lng} onChange={(la, ln) => { setLat(la); setLng(ln) }} />
+          {/* Entrada manual de coordenadas em GMS */}
+          <div style={{ display: 'flex', gap: '0.4rem', margin: '-2px 0 8px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 140px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 600, marginBottom: 2 }}>Latitude (GMS)</div>
+              <InputGMS valor={lat} tipo="lat" onChange={v => setLat(v)} />
+            </div>
+            <div style={{ flex: '1 1 140px' }}>
+              <div style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 600, marginBottom: 2 }}>Longitude (GMS)</div>
+              <InputGMS valor={lng} tipo="lng" onChange={v => setLng(v)} />
+            </div>
+            {lat && lng && (
+              <button style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0, paddingBottom: '0.38rem', fontWeight: 700 }} onClick={() => { setLat(null); setLng(null) }}>✕ Remover</button>
+            )}
+          </div>
           {lat && lng && (
-            <div style={{ fontSize: '0.75rem', color: '#6b7280', textAlign: 'center', marginTop: -4, marginBottom: '0.4rem' }}>
-              📍 {lat.toFixed(5)}, {lng.toFixed(5)}
-              <button style={{ marginLeft: 8, background: 'none', border: 'none', color: '#ef4444', fontSize: '0.75rem', cursor: 'pointer' }} onClick={() => { setLat(null); setLng(null) }}>Remover ponto principal</button>
+            <div style={{ fontSize: '0.73rem', color: '#6b7280', textAlign: 'center', marginTop: -4, marginBottom: '0.4rem', fontFamily: 'monospace' }}>
+              📍 {decimalParaGMS(lat, 'lat')} · {decimalParaGMS(lng, 'lng')}
             </div>
           )}
 
@@ -1505,7 +1623,7 @@ function FormularioPlano({
               </div>
             )}
 
-            {/* Formulário manual */}
+            {/* Formulário manual com GMS */}
             <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
               <div style={{ flex: '1 1 120px' }}>
                 <div style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 600, marginBottom: 2 }}>Nome/referência</div>
@@ -1517,31 +1635,31 @@ function FormularioPlano({
                   style={{ width: '100%', padding: '0.38rem 0.5rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', outline: 'none' }}
                 />
               </div>
-              <div style={{ flex: '0 1 110px' }}>
-                <div style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 600, marginBottom: 2 }}>Latitude</div>
+              <div style={{ flex: '0 1 130px' }}>
+                <div style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 600, marginBottom: 2 }}>Latitude (GMS)</div>
                 <input
                   type="text"
-                  placeholder="-20.51950"
+                  placeholder={"20°31'10\"S"}
                   value={novoPontoLat}
                   onChange={e => setNovoPontoLat(e.target.value)}
-                  style={{ width: '100%', padding: '0.38rem 0.5rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', outline: 'none' }}
+                  style={{ width: '100%', padding: '0.38rem 0.5rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.79rem', outline: 'none', fontFamily: 'monospace' }}
                 />
               </div>
-              <div style={{ flex: '0 1 110px' }}>
-                <div style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 600, marginBottom: 2 }}>Longitude</div>
+              <div style={{ flex: '0 1 130px' }}>
+                <div style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 600, marginBottom: 2 }}>Longitude (GMS)</div>
                 <input
                   type="text"
-                  placeholder="-43.69830"
+                  placeholder={"43°41'54\"O"}
                   value={novoPontoLng}
                   onChange={e => setNovoPontoLng(e.target.value)}
-                  style={{ width: '100%', padding: '0.38rem 0.5rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', outline: 'none' }}
+                  style={{ width: '100%', padding: '0.38rem 0.5rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.79rem', outline: 'none', fontFamily: 'monospace' }}
                 />
               </div>
               <button
                 type="button"
                 onClick={() => {
-                  const la = parseFloat(novoPontoLat.replace(',', '.'))
-                  const ln = parseFloat(novoPontoLng.replace(',', '.'))
+                  const la = gmsParaDecimal(novoPontoLat) ?? parseFloat(novoPontoLat.replace(',', '.'))
+                  const ln = gmsParaDecimal(novoPontoLng) ?? parseFloat(novoPontoLng.replace(',', '.'))
                   if (isNaN(la) || isNaN(ln)) return
                   setPontosExtras(prev => [...prev, { id: gerarId(), lat: la, lng: ln, label: novoPontoLabel.trim() || `Ponto ${prev.length + 1}` }])
                   setNovoPontoLat(''); setNovoPontoLng(''); setNovoPontoLabel('')
@@ -1557,7 +1675,7 @@ function FormularioPlano({
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'white', borderRadius: 7, padding: '0.3rem 0.55rem', border: '1px solid #e0e7ff' }}>
                     <span style={{ fontSize: '0.9rem' }}>📌</span>
                     <span style={{ fontWeight: 700, fontSize: '0.78rem', color: '#1e40af', flex: 1 }}>{p.label}</span>
-                    <span style={{ fontSize: '0.7rem', color: '#6b7280', fontFamily: 'monospace' }}>{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</span>
+                    <span style={{ fontSize: '0.7rem', color: '#6b7280', fontFamily: 'monospace' }}>{decimalParaGMS(p.lat, 'lat')} {decimalParaGMS(p.lng, 'lng')}</span>
                     <button
                       type="button"
                       onClick={() => setPontosExtras(prev => prev.filter(x => x.id !== p.id))}
@@ -1675,6 +1793,78 @@ function FormularioPlano({
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Previsão do tempo (Open-Meteo) ──────────────────────────────────────
+const WMO_LABEL: Record<number, { emoji: string; desc: string }> = {
+  0:  { emoji: '☀️',  desc: 'Céu limpo' },
+  1:  { emoji: '🌤️', desc: 'Predominantemente limpo' },
+  2:  { emoji: '⛅',  desc: 'Parcialmente nublado' },
+  3:  { emoji: '☁️',  desc: 'Encoberto' },
+  45: { emoji: '🌫️', desc: 'Neblina' },
+  48: { emoji: '🌫️', desc: 'Neblina com gelo' },
+  51: { emoji: '🌦️', desc: 'Garoa fraca' },
+  53: { emoji: '🌦️', desc: 'Garoa moderada' },
+  55: { emoji: '🌧️', desc: 'Garoa forte' },
+  61: { emoji: '🌧️', desc: 'Chuva fraca' },
+  63: { emoji: '🌧️', desc: 'Chuva moderada' },
+  65: { emoji: '🌧️', desc: 'Chuva forte' },
+  71: { emoji: '❄️',  desc: 'Neve fraca' },
+  80: { emoji: '⛈️',  desc: 'Pancadas de chuva' },
+  81: { emoji: '⛈️',  desc: 'Pancadas moderadas' },
+  82: { emoji: '⛈️',  desc: 'Pancadas fortes' },
+  95: { emoji: '⛈️',  desc: 'Trovoada' },
+  96: { emoji: '⛈️',  desc: 'Trovoada com granizo' },
+  99: { emoji: '⛈️',  desc: 'Trovoada com granizo forte' },
+}
+
+function PrevisaoTempo({ lat, lng, data }: { lat: number; lng: number; data: string }) {
+  interface DadosTempo { emoji: string; desc: string; chuva: number; prob: number }
+  const [dados, setDados] = useState<DadosTempo | null>(null)
+  const [status, setStatus] = useState<'carregando' | 'ok' | 'indisponivel'>('carregando')
+
+  useEffect(() => {
+    const hoje = new Date()
+    const dataEvento = new Date(data + 'T12:00:00')
+    const diffDias = Math.round((dataEvento.getTime() - hoje.getTime()) / 86400000)
+    if (diffDias < -1 || diffDias > 15) { setStatus('indisponivel'); return }
+
+    fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&daily=precipitation_sum,precipitation_probability_max,weathercode&timezone=America%2FSao_Paulo&start_date=${data}&end_date=${data}`)
+      .then(r => r.json())
+      .then(d => {
+        const code = d.daily?.weathercode?.[0]
+        if (code === undefined || code === null) { setStatus('indisponivel'); return }
+        const wmo = WMO_LABEL[code as number] ?? { emoji: '🌡️', desc: 'Variável' }
+        setDados({ emoji: wmo.emoji, desc: wmo.desc, chuva: d.daily.precipitation_sum[0] ?? 0, prob: d.daily.precipitation_probability_max[0] ?? 0 })
+        setStatus('ok')
+      })
+      .catch(() => setStatus('indisponivel'))
+  }, [lat, lng, data])
+
+  if (status === 'carregando') return (
+    <div style={{ background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: 8, padding: '0.42rem 0.75rem', fontSize: '0.78rem', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+      <span>🌤️</span> Buscando previsão...
+    </div>
+  )
+  if (status === 'indisponivel' || !dados) return (
+    <div style={{ background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: 8, padding: '0.42rem 0.75rem', fontSize: '0.75rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+      <span>🌡️</span> Previsão indisponível (disponível até 15 dias à frente)
+    </div>
+  )
+  const corFundo = dados.prob > 60 ? '#eff6ff' : dados.prob > 30 ? '#f0fdf4' : '#fefce8'
+  const corBorda = dados.prob > 60 ? '#bfdbfe' : dados.prob > 30 ? '#bbf7d0' : '#fde68a'
+  return (
+    <div style={{ background: corFundo, border: `1.5px solid ${corBorda}`, borderRadius: 8, padding: '0.48rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: '1.45rem', lineHeight: 1 }}>{dados.emoji}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1f2937' }}>{dados.desc}</div>
+        <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 2 }}>
+          💧 {dados.chuva.toFixed(1)} mm · {dados.prob}% probabilidade de chuva
+        </div>
+      </div>
+      <div style={{ fontSize: '0.6rem', color: '#9ca3af', textAlign: 'right', lineHeight: 1.4, fontWeight: 600 }}>Open-Meteo<br/>INMET</div>
     </div>
   )
 }
@@ -1852,6 +2042,14 @@ function DetalheP({
                   {planoLocal.dataFim && planoLocal.dataFim !== planoLocal.dataInicio && ` → ${formatarData(planoLocal.dataFim)}`}
                   {planoLocal.horario && ` · ${planoLocal.horario}${planoLocal.horarioFim ? ` – ${planoLocal.horarioFim}` : ''}`}
                 </span>
+              </div>
+            )}
+            {planoLocal.dataInicio && planoLocal.lat && planoLocal.lng && (
+              <div className="plan-detalhe-info-row" style={{ alignItems: 'flex-start' }}>
+                <span className="plan-detalhe-info-label" style={{ paddingTop: '0.2rem' }}>🌤️ Tempo</span>
+                <div style={{ flex: 1 }}>
+                  <PrevisaoTempo lat={planoLocal.lat} lng={planoLocal.lng} data={planoLocal.dataInicio} />
+                </div>
               </div>
             )}
             {planoLocal.publicoEstimado && (
@@ -2101,8 +2299,17 @@ function MapaSecaoPlanos({
   })
   const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
   const [labelNovo, setLabelNovo] = useState('')
+  const [aba, setAba] = useState<'icones' | 'orgaos' | 'materiais' | 'agentes'>('icones')
 
   const planosDoTipo = planos.filter(p => p.tipo === tipo)
+  const planoCentral = planosDoTipo.find(p => p.lat && p.lng)
+  const centro: [number, number] = planoCentral?.lat && planoCentral?.lng
+    ? [planoCentral.lat, planoCentral.lng]
+    : OURO_BRANCO_CENTER
+
+  const todosOrgaos = [...new Set(planosDoTipo.flatMap(p => p.equipe))]
+  const todosMateriais = planosDoTipo.flatMap(p => p.materiais)
+  const todosAgentes = [...new Set(planosDoTipo.flatMap(p => p.agentesDefesaCivil ?? []))]
 
   function salvarItens(lista: ItemMapaSecao[]) {
     setItens(lista)
@@ -2111,122 +2318,195 @@ function MapaSecaoPlanos({
 
   function adicionarItemNoMapa(lat: number, lng: number) {
     if (!itemSelecionado) return
-    const cfg = ITENS_POSICIONAR.find(i => i.tipo === itemSelecionado)
-    if (!cfg) return
-    const novo: ItemMapaSecao = {
-      id: gerarId(), tipo: cfg.tipo, emoji: cfg.emoji,
-      label: labelNovo.trim() || cfg.label, lat, lng,
+    const cfgIcon = ITENS_POSICIONAR.find(i => i.tipo === itemSelecionado)
+    if (cfgIcon) {
+      salvarItens([...itens, { id: gerarId(), tipo: cfgIcon.tipo, emoji: cfgIcon.emoji, label: labelNovo.trim() || cfgIcon.label, lat, lng }])
+      setItemSelecionado(null); setLabelNovo(''); return
     }
-    salvarItens([...itens, novo])
-    setItemSelecionado(null)
-    setLabelNovo('')
+    if (itemSelecionado.startsWith('org:')) {
+      const nome = itemSelecionado.slice(4)
+      const info = ORGAOS_EMPENHO.flatMap(c => c.orgaos).find(o => `${o.emoji} ${o.nome}` === nome)
+      salvarItens([...itens, { id: gerarId(), tipo: 'orgao', emoji: info?.emoji ?? '🏛️', label: labelNovo.trim() || (info?.nome ?? nome), lat, lng }])
+      setItemSelecionado(null); setLabelNovo(''); return
+    }
+    if (itemSelecionado.startsWith('mat:')) {
+      salvarItens([...itens, { id: gerarId(), tipo: 'material', emoji: '📦', label: labelNovo.trim() || itemSelecionado.slice(4), lat, lng }])
+      setItemSelecionado(null); setLabelNovo(''); return
+    }
+    if (itemSelecionado.startsWith('ag:')) {
+      const nome = itemSelecionado.slice(3)
+      salvarItens([...itens, { id: gerarId(), tipo: 'agente', emoji: '🧑‍🚒', label: labelNovo.trim() || nome, lat, lng }])
+      setItemSelecionado(null); setLabelNovo(''); return
+    }
   }
 
   function removerItemSecao(id: string) {
     salvarItens(itens.filter(i => i.id !== id))
   }
 
-  const cfgSelecionado = ITENS_POSICIONAR.find(i => i.tipo === itemSelecionado)
+  const labelSelecionado = (() => {
+    if (!itemSelecionado) return ''
+    if (itemSelecionado.startsWith('org:')) return itemSelecionado.slice(4)
+    if (itemSelecionado.startsWith('mat:')) return itemSelecionado.slice(4)
+    if (itemSelecionado.startsWith('ag:')) return itemSelecionado.slice(3)
+    return ITENS_POSICIONAR.find(i => i.tipo === itemSelecionado)?.label ?? ''
+  })()
+
+  const btnStyle = (sel: boolean) => ({
+    background: sel ? '#1a4b8c' : '#dbeafe',
+    color: sel ? 'white' : '#1e3a8a',
+    border: 'none', borderRadius: 20,
+    padding: '0.25rem 0.65rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
+    display: 'flex', alignItems: 'center', gap: '0.2rem',
+  })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem' }}>
-      {/* Toolbar de itens */}
+      {/* Toolbar ADICIONAR NO MAPA */}
       <div style={{ background: '#f0f4ff', border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '0.6rem 0.75rem' }}>
-        <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1e40af', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          🗺️ Adicionar ao mapa — clique num item e toque no mapa para posicionar
+        <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1e40af', marginBottom: '0.42rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          🗺️ Adicionar no mapa
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: itemSelecionado ? '0.4rem' : 0 }}>
-          {ITENS_POSICIONAR.map(it => (
-            <button
-              key={it.tipo}
-              onClick={() => { setItemSelecionado(prev => prev === it.tipo ? null : it.tipo); setLabelNovo('') }}
-              style={{
-                background: itemSelecionado === it.tipo ? '#1a4b8c' : '#e0e7ff',
-                color: itemSelecionado === it.tipo ? 'white' : '#1e3a8a',
-                border: 'none', borderRadius: 20,
-                padding: '0.25rem 0.6rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: '0.2rem',
-              }}
-            >
-              <span>{it.emoji}</span> {it.label}
+
+        {/* Abas */}
+        <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.45rem', flexWrap: 'wrap' }}>
+          {([['icones','🗺️ Ícones'],['orgaos','🏛️ Órgãos'],['materiais','📦 Materiais'],['agentes','🧑‍🚒 Agentes DC']] as const).map(([a,l]) => (
+            <button key={a} onClick={() => { setAba(a); setItemSelecionado(null) }}
+              style={{ background: aba===a?'#1a4b8c':'#e0e7ff', color: aba===a?'white':'#1e3a8a', border:'none', borderRadius:20, padding:'0.22rem 0.62rem', fontSize:'0.72rem', fontWeight:700, cursor:'pointer' }}>
+              {l}
             </button>
           ))}
         </div>
-        {itemSelecionado && (
-          <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.35rem' }}>
-            <input
-              style={{ flex: 1, padding: '0.35rem 0.6rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', outline: 'none' }}
-              placeholder={`Rótulo opcional (ex: ${cfgSelecionado?.label} Principal)`}
-              value={labelNovo}
-              onChange={e => setLabelNovo(e.target.value)}
-            />
+
+        {/* Conteúdo da aba */}
+        {aba === 'icones' && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+            {ITENS_POSICIONAR.map(it => (
+              <button key={it.tipo} onClick={() => { setItemSelecionado(p => p===it.tipo?null:it.tipo); setLabelNovo('') }} style={btnStyle(itemSelecionado===it.tipo)}>
+                <span>{it.emoji}</span>{it.label}
+              </button>
+            ))}
           </div>
         )}
+        {aba === 'orgaos' && (
+          todosOrgaos.length === 0
+            ? <div style={{ fontSize:'0.78rem',color:'#9ca3af',textAlign:'center',padding:'0.4rem' }}>Nenhum órgão empenhado nos planos desta seção</div>
+            : <div style={{ display:'flex',flexWrap:'wrap',gap:'0.3rem' }}>
+                {todosOrgaos.map(orgao => {
+                  const key = `org:${orgao}`
+                  const info = ORGAOS_EMPENHO.flatMap(c=>c.orgaos).find(o=>`${o.emoji} ${o.nome}`===orgao)
+                  return <button key={orgao} onClick={() => { setItemSelecionado(p=>p===key?null:key); setLabelNovo('') }} style={btnStyle(itemSelecionado===key)}>
+                    <span>{info?.emoji??'🏛️'}</span>{info?.nome??orgao}
+                  </button>
+                })}
+              </div>
+        )}
+        {aba === 'materiais' && (
+          todosMateriais.length === 0
+            ? <div style={{ fontSize:'0.78rem',color:'#9ca3af',textAlign:'center',padding:'0.4rem' }}>Nenhum material nos planos desta seção</div>
+            : <div style={{ display:'flex',flexWrap:'wrap',gap:'0.3rem' }}>
+                {todosMateriais.map(mat => {
+                  const key = `mat:${mat.nome}`
+                  return <button key={mat.id} onClick={() => { setItemSelecionado(p=>p===key?null:key); setLabelNovo('') }} style={btnStyle(itemSelecionado===key)}>
+                    <span>📦</span>{mat.nome}
+                  </button>
+                })}
+              </div>
+        )}
+        {aba === 'agentes' && (
+          todosAgentes.length === 0
+            ? <div style={{ fontSize:'0.78rem',color:'#9ca3af',textAlign:'center',padding:'0.4rem' }}>Nenhum agente nos planos desta seção</div>
+            : <div style={{ display:'flex',flexWrap:'wrap',gap:'0.3rem' }}>
+                {todosAgentes.map(ag => {
+                  const key = `ag:${ag}`
+                  return <button key={ag} onClick={() => { setItemSelecionado(p=>p===key?null:key); setLabelNovo('') }} style={btnStyle(itemSelecionado===key)}>
+                    <span>🧑‍🚒</span>{ag}
+                  </button>
+                })}
+              </div>
+        )}
+
         {itemSelecionado && (
-          <div style={{ background: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 8, padding: '0.38rem 0.7rem', fontSize: '0.8rem', fontWeight: 600, color: '#92400e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>📍 Toque no mapa para posicionar: <strong>{cfgSelecionado?.emoji} {cfgSelecionado?.label}</strong></span>
-            <button onClick={() => setItemSelecionado(null)} style={{ background: 'none', border: 'none', color: '#b45309', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem' }}>✕</button>
-          </div>
+          <>
+            <div style={{ display:'flex', gap:'0.4rem', marginTop:'0.42rem' }}>
+              <input
+                style={{ flex:1, padding:'0.35rem 0.6rem', border:'1.5px solid #cbd5e1', borderRadius:7, fontSize:'0.8rem', outline:'none' }}
+                placeholder={`Rótulo (ex: ${labelSelecionado} Principal)`}
+                value={labelNovo}
+                onChange={e => setLabelNovo(e.target.value)}
+              />
+            </div>
+            <div style={{ background:'#fef3c7',border:'1.5px solid #fbbf24',borderRadius:8,padding:'0.38rem 0.7rem',fontSize:'0.8rem',fontWeight:600,color:'#92400e',display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'0.35rem' }}>
+              <span>📍 Toque no mapa para posicionar: <strong>{labelSelecionado}</strong></span>
+              <button onClick={() => { setItemSelecionado(null); setLabelNovo('') }} style={{ background:'none',border:'none',color:'#b45309',cursor:'pointer',fontWeight:800,fontSize:'0.9rem' }}>✕</button>
+            </div>
+          </>
         )}
       </div>
 
       {/* Mapa */}
       <div style={{ borderRadius: 12, overflow: 'hidden', border: '1.5px solid #e5e7eb' }}>
         <MapContainer
-          center={OURO_BRANCO_CENTER}
-          zoom={13}
+          center={centro}
+          zoom={planoCentral ? 15 : 13}
           style={{ height: 'min(60vh, 560px)', minHeight: 360, width: '100%' }}
           zoomControl={true}
           attributionControl={false}
         >
           <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          {planoCentral && <FlyToMarca lat={centro[0]} lng={centro[1]} />}
           <MapClickHandler ativo={!!itemSelecionado} onClique={adicionarItemNoMapa} />
 
+          {/* Marcadores dos planos */}
           {planosDoTipo.filter(p => p.lat && p.lng).map(p => (
             <Marker key={p.id} position={[p.lat!, p.lng!]} icon={criarIconePrincipal()}>
               <Popup>
-                <div style={{ textAlign: 'center', minWidth: 100 }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{TIPOS_CONFIG[p.tipo].emoji} {p.nome}</div>
-                  {p.local && <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 2 }}>📍 {p.local}</div>}
-                  {p.dataInicio && <div style={{ fontSize: '0.73rem', color: '#9ca3af', marginTop: 1 }}>📅 {formatarData(p.dataInicio)}</div>}
+                <div style={{ textAlign:'center', minWidth:100 }}>
+                  <div style={{ fontWeight:700,fontSize:'0.88rem' }}>{TIPOS_CONFIG[p.tipo].emoji} {p.nome}</div>
+                  {p.local && <div style={{ fontSize:'0.78rem',color:'#6b7280',marginTop:2 }}>📍 {p.local}</div>}
+                  {p.dataInicio && <div style={{ fontSize:'0.73rem',color:'#9ca3af',marginTop:1 }}>📅 {formatarData(p.dataInicio)}</div>}
+                  <div style={{ fontSize:'0.68rem',color:'#9ca3af',marginTop:2,fontFamily:'monospace' }}>{decimalParaGMS(p.lat!,'lat')} {decimalParaGMS(p.lng!,'lng')}</div>
                 </div>
               </Popup>
             </Marker>
           ))}
 
-          {planosDoTipo.flatMap(p => (p.pontosExtras ?? []).map(pe => ({ ...pe, planoNome: p.nome }))).map(pe => (
-            <Marker key={pe.id} position={[pe.lat, pe.lng]} icon={criarIconeEmoji('📌')}>
+          {/* Pontos extras dos planos */}
+          {planosDoTipo.flatMap(p=>(p.pontosExtras??[]).map(pe=>({...pe,planoNome:p.nome}))).map(pe => (
+            <Marker key={pe.id} position={[pe.lat,pe.lng]} icon={criarIconeEmoji('📌')}>
               <Popup>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>📌 {pe.label}</div>
-                  <div style={{ fontSize: '0.72rem', color: '#6b7280' }}>{pe.planoNome}</div>
+                <div style={{ textAlign:'center' }}>
+                  <div style={{ fontWeight:700,fontSize:'0.82rem' }}>📌 {pe.label}</div>
+                  <div style={{ fontSize:'0.72rem',color:'#6b7280' }}>{pe.planoNome}</div>
                 </div>
               </Popup>
             </Marker>
           ))}
 
-          {planosDoTipo.flatMap(p => p.itensMapa.map(it => ({ ...it, planoNome: p.nome }))).map(item => (
-            <Marker key={item.id} position={[item.lat, item.lng]} icon={criarIconeEmoji(item.emoji)}>
+          {/* Itens de mapa individuais dos planos */}
+          {planosDoTipo.flatMap(p=>p.itensMapa.map(it=>({...it,planoNome:p.nome}))).map(item => (
+            <Marker key={item.id} position={[item.lat,item.lng]} icon={item.tipo==='agente_dc'?criarIconeAgentePlanejado(item.obs||item.tipo):criarIconeEmoji(item.emoji)}>
               <Popup>
-                <div style={{ textAlign: 'center' }}>
-                  <span style={{ fontSize: '1.3rem' }}>{item.emoji}</span>
-                  <div style={{ fontWeight: 700, fontSize: '0.82rem', marginTop: 2 }}>{item.obs || item.tipo}</div>
-                  <div style={{ fontSize: '0.72rem', color: '#6b7280' }}>{item.planoNome}</div>
+                <div style={{ textAlign:'center' }}>
+                  <span style={{ fontSize:'1.3rem' }}>{item.emoji}</span>
+                  <div style={{ fontWeight:700,fontSize:'0.82rem',marginTop:2 }}>{item.obs||item.tipo}</div>
+                  <div style={{ fontSize:'0.72rem',color:'#6b7280' }}>{item.planoNome}</div>
                 </div>
               </Popup>
             </Marker>
           ))}
 
+          {/* Itens posicionados na seção */}
           {itens.map(item => (
-            <Marker key={item.id} position={[item.lat, item.lng]} icon={criarIconeEmoji(item.emoji)}>
+            <Marker key={item.id} position={[item.lat,item.lng]} icon={item.tipo==='agente'?criarIconeAgentePlanejado(item.label):criarIconeEmoji(item.emoji)}>
               <Popup>
-                <div style={{ textAlign: 'center' }}>
-                  <span style={{ fontSize: '1.3rem' }}>{item.emoji}</span>
-                  <div style={{ fontWeight: 700, fontSize: '0.82rem', marginTop: 2 }}>{item.label}</div>
-                  <button
-                    onClick={() => removerItemSecao(item.id)}
-                    style={{ marginTop: 6, background: '#fee2e2', border: 'none', borderRadius: 6, padding: '0.2rem 0.7rem', color: '#b91c1c', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}
-                  >🗑️ Remover</button>
+                <div style={{ textAlign:'center' }}>
+                  <span style={{ fontSize:'1.3rem' }}>{item.emoji}</span>
+                  <div style={{ fontWeight:700,fontSize:'0.82rem',marginTop:2 }}>{item.label}</div>
+                  <button onClick={() => removerItemSecao(item.id)}
+                    style={{ marginTop:6,background:'#fee2e2',border:'none',borderRadius:6,padding:'0.2rem 0.7rem',color:'#b91c1c',fontWeight:700,fontSize:'0.78rem',cursor:'pointer' }}>
+                    🗑️ Remover
+                  </button>
                 </div>
               </Popup>
             </Marker>
@@ -2235,21 +2515,21 @@ function MapaSecaoPlanos({
       </div>
 
       {planosDoTipo.filter(p => !p.lat || !p.lng).length > 0 && (
-        <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8, padding: '0.4rem 0.75rem', fontSize: '0.75rem', color: '#92400e' }}>
-          ℹ️ {planosDoTipo.filter(p => !p.lat || !p.lng).length} plano(s) sem localização definida não aparecem no mapa. Edite-os para adicionar coordenadas.
+        <div style={{ background:'#fef3c7',border:'1px solid #fcd34d',borderRadius:8,padding:'0.4rem 0.75rem',fontSize:'0.75rem',color:'#92400e' }}>
+          ℹ️ {planosDoTipo.filter(p=>!p.lat||!p.lng).length} plano(s) sem localização não aparecem no mapa. Edite-os para adicionar coordenadas.
         </div>
       )}
 
       {itens.length > 0 && (
-        <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 10, padding: '0.5rem 0.75rem' }}>
-          <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
-            📌 Itens posicionados nesta seção ({itens.length})
+        <div style={{ background:'#f8fafc',border:'1.5px solid #e5e7eb',borderRadius:10,padding:'0.5rem 0.75rem' }}>
+          <div style={{ fontSize:'0.7rem',fontWeight:800,color:'#1e40af',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:'0.35rem' }}>
+            📌 Itens posicionados ({itens.length})
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+          <div style={{ display:'flex',flexWrap:'wrap',gap:'0.25rem' }}>
             {itens.map(item => (
-              <span key={item.id} style={{ background: '#dbeafe', color: '#1e3a8a', borderRadius: 12, padding: '0.2rem 0.55rem', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <span key={item.id} style={{ background:'#dbeafe',color:'#1e3a8a',borderRadius:12,padding:'0.2rem 0.55rem',fontSize:'0.75rem',fontWeight:600,display:'flex',alignItems:'center',gap:'0.3rem' }}>
                 {item.emoji} {item.label}
-                <button onClick={() => removerItemSecao(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e40af', fontWeight: 900, fontSize: '0.7rem', padding: 0, lineHeight: 1 }}>✕</button>
+                <button onClick={() => removerItemSecao(item.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#1e40af',fontWeight:900,fontSize:'0.7rem',padding:0,lineHeight:1 }}>✕</button>
               </span>
             ))}
           </div>
@@ -2355,6 +2635,28 @@ export default function Planejamento() {
 
   useEffect(() => { salvarPlanos(planos) }, [planos])
 
+  useEffect(() => {
+    supabase.from('planejamentos').select('*').order('criado_em', { ascending: false }).limit(500)
+      .then(({ data, error }) => {
+        if (error || !data) return
+        const remote = data.map(row => sbParaPlano(row as Record<string, unknown>))
+        setPlanos(prev => {
+          const map = new Map(prev.map(p => [p.id, p]))
+          remote.forEach(r => { if (!map.has(r.id)) map.set(r.id, r) })
+          return Array.from(map.values()).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
+        })
+      })
+      .catch(() => {})
+  }, [])
+
+  async function sincSB(plano: Plano) {
+    try { await supabase.from('planejamentos').upsert(planoParaSB(plano)) } catch { /* silencioso */ }
+  }
+
+  async function deletarSB(id: string) {
+    try { await supabase.from('planejamentos').delete().eq('id', id) } catch { /* silencioso */ }
+  }
+
   const salvarPlano = useCallback((plano: Plano) => {
     setPlanos(prev => {
       const existe = prev.findIndex(p => p.id === plano.id)
@@ -2367,16 +2669,19 @@ export default function Planejamento() {
     })
     setCriando(false)
     setAberto(plano)
+    sincSB(plano)
   }, [])
 
   const atualizarPlano = useCallback((plano: Plano) => {
     setPlanos(prev => prev.map(p => p.id === plano.id ? plano : p))
     setAberto(plano)
+    sincSB(plano)
   }, [])
 
   const deletarPlano = useCallback((id: string) => {
     setPlanos(prev => prev.filter(p => p.id !== id))
     setAberto(null)
+    deletarSB(id)
   }, [])
 
   const totalPorTipo = (t: TipoPlano) => planos.filter(p => p.tipo === t).length
