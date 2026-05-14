@@ -284,6 +284,54 @@ interface DadosClima {
   horario: string | null
   fonte: string
   cache?: boolean
+  weatherCode: number | null
+  tempMin: number | null
+  tempMax: number | null
+}
+
+interface DiaPrevisao {
+  data: string
+  weatherCode: number
+  tempMin: number
+  tempMax: number
+  precip: number
+}
+
+function wmoEmoji(code: number | null): string {
+  if (code === null) return '🌡️'
+  if (code === 0) return '☀️'
+  if (code <= 2) return '🌤️'
+  if (code === 3) return '☁️'
+  if (code <= 48) return '🌫️'
+  if (code <= 55) return '🌦️'
+  if (code <= 65) return '🌧️'
+  if (code <= 67) return '🌨️'
+  if (code <= 77) return '❄️'
+  if (code <= 82) return '🌦️'
+  if (code <= 86) return '🌨️'
+  if (code <= 99) return '⛈️'
+  return '🌡️'
+}
+
+function wmoDesc(code: number | null): string {
+  if (code === null) return '–'
+  if (code === 0) return 'Céu limpo'
+  if (code === 1) return 'Principalmente limpo'
+  if (code === 2) return 'Parcialmente nublado'
+  if (code === 3) return 'Nublado'
+  if (code === 45 || code === 48) return 'Neblina'
+  if (code >= 51 && code <= 55) return 'Garoa'
+  if (code >= 61 && code <= 65) return 'Chuva'
+  if (code >= 80 && code <= 82) return 'Pancadas de chuva'
+  if (code === 95) return 'Tempestade'
+  if (code >= 96) return 'Tempestade c/ granizo'
+  return 'Variável'
+}
+
+function nomeDiaSemana(dateStr: string): string {
+  const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+  const d = new Date(dateStr + 'T12:00:00')
+  return dias[d.getDay()]
 }
 
 const OURO_BRANCO: [number, number] = [-20.5195, -43.6983]
@@ -335,6 +383,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
 
   // Clima INMET
   const [clima, setClima] = useState<DadosClima | null>(null)
+  const [previsao, setPrevisao] = useState<DiaPrevisao[]>([])
   const [climaCarregando, setClimaCarregando] = useState(false)
   const [climaAberto, setClimaAberto] = useState(false)
 
@@ -359,19 +408,28 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   // Mantém ref sempre atualizada com o nome atual
   useEffect(() => { nomeLocalRef.current = nomeLocal }, [nomeLocal])
 
-  // ── Clima (Open-Meteo, dados assimilados de estações INMET) ──────
+  // ── Clima (Open-Meteo) ──────────────────────────────────────────
   const buscarClima = useCallback(async () => {
     setClimaCarregando(true)
     try {
       const lat = OURO_BRANCO[0]
       const lon = OURO_BRANCO[1]
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,precipitation&timezone=America%2FSao_Paulo&wind_speed_unit=ms`
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,precipitation,weather_code&daily=temperature_2m_max,temperature_2m_min,weather_code,precipitation_sum&timezone=America%2FSao_Paulo&wind_speed_unit=ms&forecast_days=7`
       const resp = await fetch(url)
       if (!resp.ok) return
       const json = await resp.json()
       const c = json?.current
       if (!c) return
       const ventoVel = c.wind_speed_10m != null ? parseFloat(c.wind_speed_10m) : null
+      const d = json?.daily
+      const diasPrevisao: DiaPrevisao[] = d ? (d.time || []).map((dt: string, i: number) => ({
+        data: dt,
+        weatherCode: d.weather_code?.[i] ?? 0,
+        tempMin: d.temperature_2m_min?.[i] ?? 0,
+        tempMax: d.temperature_2m_max?.[i] ?? 0,
+        precip: d.precipitation_sum?.[i] ?? 0,
+      })) : []
+      setPrevisao(diasPrevisao)
       setClima({
         temperatura: c.temperature_2m != null ? parseFloat(c.temperature_2m) : null,
         umidade: c.relative_humidity_2m != null ? parseFloat(c.relative_humidity_2m) : null,
@@ -379,7 +437,10 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         ventoDir: c.wind_direction_10m != null ? parseFloat(c.wind_direction_10m) : null,
         chuva: c.precipitation != null ? parseFloat(c.precipitation) : null,
         horario: c.time || null,
-        fonte: 'INMET',
+        fonte: 'Open-Meteo',
+        weatherCode: c.weather_code != null ? parseInt(c.weather_code) : null,
+        tempMin: diasPrevisao[0]?.tempMin ?? null,
+        tempMax: diasPrevisao[0]?.tempMax ?? null,
       })
     } catch { /* silencioso */ } finally {
       setClimaCarregando(false)
@@ -1324,7 +1385,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         )}
       </div>
 
-      {/* Widget Clima INMET */}
+      {/* Widget Clima */}
       <div className="mapa-clima-widget">
         <button
           className="mapa-clima-btn"
@@ -1335,8 +1396,8 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
             <span className="mapa-gps-spinner" />
           ) : (
             <>
-              <span>🌡️</span>
-              <span>{clima?.temperatura != null ? `${clima.temperatura.toFixed(1)}°C` : '–'}</span>
+              <span>{wmoEmoji(clima?.weatherCode ?? null)}</span>
+              <span style={{ fontWeight: 700 }}>{clima?.temperatura != null ? `${Math.round(clima.temperatura)}°` : '–'}</span>
               <span className="mapa-clima-btn-sep">|</span>
               <span>💧{clima?.umidade != null ? `${Math.round(clima.umidade)}%` : '–'}</span>
             </>
@@ -1345,52 +1406,57 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
 
         {climaAberto && (
           <div className="mapa-clima-painel">
+            {/* Cabeçalho */}
             <div className="mapa-clima-painel-header">
               <div>
-                <span className="mapa-clima-titulo">🌤️ Clima – Ouro Branco, MG</span>
+                <span className="mapa-clima-titulo">Ouro Branco, MG</span>
                 {clima?.horario && (
-                  <span className="mapa-clima-horario">Medição: {clima.horario}</span>
+                  <span className="mapa-clima-horario">{clima.horario.replace('T', ' ').slice(0, 16)}</span>
                 )}
               </div>
               <button onClick={() => setClimaAberto(false)}>✕</button>
             </div>
 
-            <div className="mapa-clima-grid">
-              <div className="mapa-clima-card">
-                <span className="mapa-clima-card-icone">🌡️</span>
-                <span className="mapa-clima-card-val">
-                  {clima?.temperatura != null ? `${clima.temperatura.toFixed(1)}°C` : '–'}
+            {/* Condições atuais */}
+            <div className="mapa-clima-atual">
+              <span className="mapa-clima-icone-grande">{wmoEmoji(clima?.weatherCode ?? null)}</span>
+              <span className="mapa-clima-temp-grande">
+                {clima?.temperatura != null ? `${Math.round(clima.temperatura)}°` : '–'}
+              </span>
+              <span className="mapa-clima-condicao">{wmoDesc(clima?.weatherCode ?? null)}</span>
+              {(clima?.tempMin != null || clima?.tempMax != null) && (
+                <span className="mapa-clima-minmax">
+                  {clima.tempMin != null ? `↓${Math.round(clima.tempMin)}°` : ''}
+                  {clima.tempMin != null && clima.tempMax != null ? '  ' : ''}
+                  {clima.tempMax != null ? `↑${Math.round(clima.tempMax)}°` : ''}
                 </span>
-                <span className="mapa-clima-card-label">Temperatura</span>
-              </div>
-              <div className="mapa-clima-card">
-                <span className="mapa-clima-card-icone">💧</span>
-                <span className="mapa-clima-card-val">
-                  {clima?.umidade != null ? `${Math.round(clima.umidade)}%` : '–'}
-                </span>
-                <span className="mapa-clima-card-label">Umidade</span>
-              </div>
-              <div className="mapa-clima-card">
-                <span className="mapa-clima-card-icone">💨</span>
-                <span className="mapa-clima-card-val">
-                  {clima?.ventoKmh != null ? `${clima.ventoKmh} km/h` : '–'}
-                  {clima?.ventoDir != null && (
-                    <span className="mapa-clima-vento-dir"> {direcaoVento(clima.ventoDir)}</span>
-                  )}
-                </span>
-                <span className="mapa-clima-card-label">Vento</span>
-              </div>
-              <div className="mapa-clima-card">
-                <span className="mapa-clima-card-icone">🌧️</span>
-                <span className="mapa-clima-card-val">
-                  {clima?.chuva != null ? `${clima.chuva.toFixed(1)} mm` : '–'}
-                </span>
-                <span className="mapa-clima-card-label">Chuva (hora)</span>
-              </div>
+              )}
+              <span className="mapa-clima-extra">
+                💧{clima?.umidade != null ? `${Math.round(clima.umidade)}%` : '–'}
+                {' · '}
+                💨{clima?.ventoKmh != null ? `${clima.ventoKmh} km/h` : '–'}
+                {clima?.ventoDir != null ? ` ${direcaoVento(clima.ventoDir)}` : ''}
+                {clima?.chuva != null && clima.chuva > 0 ? ` · 🌧️${clima.chuva.toFixed(1)}mm` : ''}
+              </span>
             </div>
 
+            {/* Previsão 7 dias */}
+            {previsao.length > 0 && (
+              <div className="mapa-clima-previsao">
+                {previsao.map((dia, i) => (
+                  <div key={dia.data} className={`mapa-clima-dia${i === 0 ? ' hoje' : ''}`}>
+                    <span className="mapa-clima-dia-nome">{i === 0 ? 'Hoje' : nomeDiaSemana(dia.data)}</span>
+                    <span className="mapa-clima-dia-icone">{wmoEmoji(dia.weatherCode)}</span>
+                    <span className="mapa-clima-dia-max">{Math.round(dia.tempMax)}°</span>
+                    <span className="mapa-clima-dia-min">{Math.round(dia.tempMin)}°</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Rodapé */}
             <div className="mapa-clima-rodape">
-              <span>Fonte: INMET – Est. A513, Ouro Branco/MG</span>
+              <span>Open-Meteo / INMET</span>
               <button
                 className="mapa-clima-atualizar"
                 onClick={buscarClima}

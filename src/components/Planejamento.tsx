@@ -476,6 +476,20 @@ function criarIconeAgentePlanejado(nome: string): L.DivIcon {
 }
 
 function MapClickHandler({ onClique, ativo }: { onClique: (lat: number, lng: number) => void; ativo: boolean }) {
+  const map = useMap()
+  useEffect(() => {
+    if (ativo) {
+      map.dragging.disable()
+      map.getContainer().style.cursor = 'crosshair'
+    } else {
+      map.dragging.enable()
+      map.getContainer().style.cursor = ''
+    }
+    return () => {
+      map.dragging.enable()
+      map.getContainer().style.cursor = ''
+    }
+  }, [ativo, map])
   useMapEvents({
     click(e) {
       if (ativo) onClique(e.latlng.lat, e.latlng.lng)
@@ -624,7 +638,7 @@ function MapaDetalhe({
   onRemoverItem: (id: string) => void
 }) {
   const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
-  const [secaoAberta, setSecaoAberta] = useState<'orgaos'|'agentes'|'materiais'|'icones'|null>(null)
+  const [secaoAberta, setSecaoAberta] = useState<'orgaos'|'agentes'|'materiais'|'icones'|null>('icones')
   const centro: [number, number] = plano.lat && plano.lng ? [plano.lat, plano.lng] : OURO_BRANCO_CENTER
 
   // ── Prontidão: rastreia quem está de prontidão + posições GPS ──────────
