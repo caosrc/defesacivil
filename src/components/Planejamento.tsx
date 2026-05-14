@@ -2136,7 +2136,7 @@ function DetalheP({
       </div>
 
       <div className="plan-detalhe-body">
-        {/* Status */}
+        {/* Status + Risco */}
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {(Object.keys(STATUS_CONFIG) as StatusPlano[]).map(s => {
             const sc = STATUS_CONFIG[s]
@@ -2155,52 +2155,50 @@ function DetalheP({
           </span>
         </div>
 
-        {/* Informações */}
-        <div className="plan-detalhe-card">
-          <div className="plan-detalhe-card-header">📋 Informações</div>
-          <div className="plan-detalhe-card-body">
-            {planoLocal.local && (
-              <div className="plan-detalhe-info-row">
-                <span className="plan-detalhe-info-label">📍 Local</span>
-                <span className="plan-detalhe-info-val">{planoLocal.local}</span>
-              </div>
-            )}
-            {planoLocal.dataInicio && (
-              <div className="plan-detalhe-info-row">
-                <span className="plan-detalhe-info-label">📅 Data</span>
-                <span className="plan-detalhe-info-val">
-                  {formatarData(planoLocal.dataInicio)}
-                  {planoLocal.dataFim && planoLocal.dataFim !== planoLocal.dataInicio && ` → ${formatarData(planoLocal.dataFim)}`}
-                  {planoLocal.horario && ` · ${planoLocal.horario}${planoLocal.horarioFim ? ` – ${planoLocal.horarioFim}` : ''}`}
-                </span>
-              </div>
-            )}
-            {planoLocal.dataInicio && planoLocal.lat && planoLocal.lng && (
-              <div className="plan-detalhe-info-row" style={{ alignItems: 'flex-start' }}>
-                <span className="plan-detalhe-info-label" style={{ paddingTop: '0.2rem' }}>🌤️ Tempo</span>
-                <div style={{ flex: 1 }}>
-                  <PrevisaoTempo lat={planoLocal.lat} lng={planoLocal.lng} data={planoLocal.dataInicio} />
+        {/* Info resumida */}
+        {(planoLocal.local || planoLocal.dataInicio || planoLocal.descricao) && (
+          <div className="plan-detalhe-card">
+            <div className="plan-detalhe-card-body" style={{ padding: '0.5rem 0.85rem' }}>
+              {planoLocal.local && (
+                <div className="plan-detalhe-info-row">
+                  <span className="plan-detalhe-info-label">📍 Local</span>
+                  <span className="plan-detalhe-info-val">{planoLocal.local}</span>
                 </div>
+              )}
+              {planoLocal.dataInicio && (
+                <div className="plan-detalhe-info-row">
+                  <span className="plan-detalhe-info-label">📅 Data</span>
+                  <span className="plan-detalhe-info-val">
+                    {formatarData(planoLocal.dataInicio)}
+                    {planoLocal.dataFim && planoLocal.dataFim !== planoLocal.dataInicio && ` → ${formatarData(planoLocal.dataFim)}`}
+                    {planoLocal.horario && ` · ${planoLocal.horario}${planoLocal.horarioFim ? ` – ${planoLocal.horarioFim}` : ''}`}
+                  </span>
+                </div>
+              )}
+              {planoLocal.descricao && (
+                <div className="plan-detalhe-info-row">
+                  <span className="plan-detalhe-info-label">📝 Desc.</span>
+                  <span className="plan-detalhe-info-val">{planoLocal.descricao}</span>
+                </div>
+              )}
+              {planoLocal.publicoEstimado && (
+                <div className="plan-detalhe-info-row">
+                  <span className="plan-detalhe-info-label">👥 Público</span>
+                  <span className="plan-detalhe-info-val">{planoLocal.publicoEstimado} pessoas</span>
+                </div>
+              )}
+              <div className="plan-detalhe-info-row" style={{ borderBottom: 'none' }}>
+                <span className="plan-detalhe-info-label">👤 Criado</span>
+                <span className="plan-detalhe-info-val">{planoLocal.criadoPor} · {new Date(planoLocal.criadoEm).toLocaleDateString('pt-BR')}</span>
               </div>
-            )}
-            {planoLocal.publicoEstimado && (
-              <div className="plan-detalhe-info-row">
-                <span className="plan-detalhe-info-label">👥 Público</span>
-                <span className="plan-detalhe-info-val">{planoLocal.publicoEstimado} pessoas</span>
-              </div>
-            )}
-            {planoLocal.descricao && (
-              <div className="plan-detalhe-info-row">
-                <span className="plan-detalhe-info-label">📝 Desc.</span>
-                <span className="plan-detalhe-info-val">{planoLocal.descricao}</span>
-              </div>
-            )}
-            <div className="plan-detalhe-info-row">
-              <span className="plan-detalhe-info-label">👤 Criado</span>
-              <span className="plan-detalhe-info-val">{planoLocal.criadoPor} · {new Date(planoLocal.criadoEm).toLocaleDateString('pt-BR')}</span>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Previsão do tempo */}
+        {planoLocal.dataInicio && planoLocal.lat && planoLocal.lng && (
+          <PrevisaoTempo lat={planoLocal.lat} lng={planoLocal.lng} data={planoLocal.dataInicio} />
+        )}
 
         {/* Prontidão — strip compacto */}
         <div style={{
@@ -2248,113 +2246,18 @@ function DetalheP({
           </button>
         </div>
 
-        {/* Mapa tático */}
+        {/* ── Órgãos + Agentes + Materiais + Mapa (integrado) ── */}
         <div className="plan-detalhe-card" style={{ overflow: 'hidden' }}>
-          <div className="plan-detalhe-card-header">
-            🗺️ Mapa tático
+          <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#123b73,#1a6bbf)', color: 'white', border: 'none' }}>
+            🗺️ Equipe, Recursos e Mapa
             {planoLocal.itensMapa.length > 0 && (
-              <span style={{ marginLeft: 'auto', fontWeight: 600, fontSize: '0.72rem', color: '#6b7280' }}>
-                {planoLocal.itensMapa.length} {planoLocal.itensMapa.length === 1 ? 'item' : 'itens'}
+              <span style={{ marginLeft: 'auto', fontWeight: 600, fontSize: '0.72rem', color: 'rgba(255,255,255,0.85)' }}>
+                {planoLocal.itensMapa.length} {planoLocal.itensMapa.length === 1 ? 'item' : 'itens'} no mapa
               </span>
             )}
           </div>
           <MapaDetalhe plano={planoLocal} onAdicionarItem={adicionarItem} onRemoverItem={removerItem} />
         </div>
-
-        {/* Órgãos Empenhados */}
-        {planoLocal.equipe.length > 0 && (
-          <div className="plan-detalhe-card" style={{ overflow: 'hidden' }}>
-            <div style={{ background: 'linear-gradient(135deg,#1a3a6b,#1e40af)', color: 'white', padding: '0.55rem 0.85rem', fontWeight: 800, fontSize: '0.85rem', letterSpacing: '0.01em' }}>
-              🏛️ Sistema Integrado de Resposta Operacional — {planoLocal.equipe.length} órgão{planoLocal.equipe.length > 1 ? 's' : ''} empenhado{planoLocal.equipe.length > 1 ? 's' : ''}
-            </div>
-            {/* Agrupa por categoria para exibição */}
-            {(() => {
-              const orgaosNaLista = new Map(ORGAOS_EMPENHO.flatMap(c => c.orgaos.map(o => [`${o.emoji} ${o.nome}`, c.categoria])))
-              const grupos: Record<string, string[]> = {}
-              const extras: string[] = []
-              planoLocal.equipe.forEach(e => {
-                const cat = orgaosNaLista.get(e)
-                if (cat) { if (!grupos[cat]) grupos[cat] = []; grupos[cat].push(e) }
-                else extras.push(e)
-              })
-              return (
-                <div style={{ padding: '0.6rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {Object.entries(grupos).map(([cat, orgaos]) => {
-                    const catInfo = ORGAOS_EMPENHO.find(c => c.categoria === cat)
-                    return (
-                      <div key={cat}>
-                        <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>
-                          {catInfo?.emoji} {cat}
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                          {orgaos.map(o => (
-                            <span key={o} style={{ background: '#dbeafe', color: '#1e3a8a', borderRadius: 12, padding: '0.22rem 0.6rem', fontSize: '0.78rem', fontWeight: 600 }}>{o}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {extras.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>✏️ Outros</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                        {extras.map(o => (
-                          <span key={o} style={{ background: '#fef3c7', color: '#92400e', borderRadius: 12, padding: '0.22rem 0.6rem', fontSize: '0.78rem', fontWeight: 600 }}>{o}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )
-            })()}
-          </div>
-        )}
-
-        {/* Agentes Defesa Civil */}
-        {(planoLocal.agentesDefesaCivil ?? []).length > 0 && (
-          <div className="plan-detalhe-card" style={{ overflow: 'hidden' }}>
-            <div style={{ background: 'linear-gradient(135deg,#065f46,#059669)', color: 'white', padding: '0.55rem 0.85rem', fontWeight: 800, fontSize: '0.85rem', letterSpacing: '0.01em' }}>
-              🧑‍🚒 Agentes da Defesa Civil — {(planoLocal.agentesDefesaCivil ?? []).length} escalado{(planoLocal.agentesDefesaCivil ?? []).length > 1 ? 's' : ''}
-            </div>
-            <div style={{ padding: '0.6rem 0.75rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-              {(planoLocal.agentesDefesaCivil ?? []).map(ag => (
-                <span key={ag} style={{ background: '#dcfce7', color: '#166534', borderRadius: 12, padding: '0.25rem 0.7rem', fontSize: '0.82rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                  🧑‍🚒 {ag}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Materiais */}
-        {planoLocal.materiais.length > 0 && (
-          <div className="plan-detalhe-card">
-            <div className="plan-detalhe-card-header">📦 Materiais ({pluralMat(planoLocal.materiais.length)})</div>
-            <div className="plan-mat-detalhe">
-              {planoLocal.materiais.map(m => (
-                <div key={m.id} className="plan-mat-detalhe-item" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <span className="plan-mat-detalhe-nome">{m.nome}</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginLeft: 'auto', flexShrink: 0 }}>
-                    <button
-                      onClick={() => atualizarQuantidadeMaterial(m.id, m.quantidade - 1)}
-                      style={{ width: 26, height: 26, background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, fontWeight: 800, fontSize: '1rem', cursor: 'pointer', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#374151' }}
-                    >−</button>
-                    <span style={{ minWidth: 38, textAlign: 'center', fontSize: '0.82rem', fontWeight: 700, color: '#1f2937' }}>{m.quantidade} {m.unidade}</span>
-                    <button
-                      onClick={() => atualizarQuantidadeMaterial(m.id, m.quantidade + 1)}
-                      style={{ width: 26, height: 26, background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: 6, fontWeight: 800, fontSize: '1rem', cursor: 'pointer', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1e40af' }}
-                    >+</button>
-                    <button
-                      onClick={() => removerMaterialDetalhe(m.id)}
-                      style={{ width: 24, height: 24, background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', fontWeight: 800, fontSize: '0.9rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      title="Remover"
-                    >✕</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Observações */}
         {planoLocal.observacoes && (
