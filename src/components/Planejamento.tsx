@@ -2078,6 +2078,187 @@ function DetalheP({
   )
 }
 
+// ── Mapa compartilhado da seção (nível de lista) ────────────────────────
+interface ItemMapaSecao {
+  id: string
+  tipo: string
+  emoji: string
+  label: string
+  lat: number
+  lng: number
+}
+
+function MapaSecaoPlanos({
+  tipo,
+  planos,
+}: {
+  tipo: TipoPlano
+  planos: Plano[]
+}) {
+  const chave = `dc-mapa-secao-${tipo}-v1`
+  const [itens, setItens] = useState<ItemMapaSecao[]>(() => {
+    try { return JSON.parse(localStorage.getItem(chave) || '[]') } catch { return [] }
+  })
+  const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
+  const [labelNovo, setLabelNovo] = useState('')
+
+  const planosDoTipo = planos.filter(p => p.tipo === tipo)
+
+  function salvarItens(lista: ItemMapaSecao[]) {
+    setItens(lista)
+    localStorage.setItem(chave, JSON.stringify(lista))
+  }
+
+  function adicionarItemNoMapa(lat: number, lng: number) {
+    if (!itemSelecionado) return
+    const cfg = ITENS_POSICIONAR.find(i => i.tipo === itemSelecionado)
+    if (!cfg) return
+    const novo: ItemMapaSecao = {
+      id: gerarId(), tipo: cfg.tipo, emoji: cfg.emoji,
+      label: labelNovo.trim() || cfg.label, lat, lng,
+    }
+    salvarItens([...itens, novo])
+    setItemSelecionado(null)
+    setLabelNovo('')
+  }
+
+  function removerItemSecao(id: string) {
+    salvarItens(itens.filter(i => i.id !== id))
+  }
+
+  const cfgSelecionado = ITENS_POSICIONAR.find(i => i.tipo === itemSelecionado)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.75rem' }}>
+      {/* Toolbar de itens */}
+      <div style={{ background: '#f0f4ff', border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '0.6rem 0.75rem' }}>
+        <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#1e40af', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          🗺️ Adicionar ao mapa — clique num item e toque no mapa para posicionar
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: itemSelecionado ? '0.4rem' : 0 }}>
+          {ITENS_POSICIONAR.map(it => (
+            <button
+              key={it.tipo}
+              onClick={() => { setItemSelecionado(prev => prev === it.tipo ? null : it.tipo); setLabelNovo('') }}
+              style={{
+                background: itemSelecionado === it.tipo ? '#1a4b8c' : '#e0e7ff',
+                color: itemSelecionado === it.tipo ? 'white' : '#1e3a8a',
+                border: 'none', borderRadius: 20,
+                padding: '0.25rem 0.6rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.2rem',
+              }}
+            >
+              <span>{it.emoji}</span> {it.label}
+            </button>
+          ))}
+        </div>
+        {itemSelecionado && (
+          <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.35rem' }}>
+            <input
+              style={{ flex: 1, padding: '0.35rem 0.6rem', border: '1.5px solid #cbd5e1', borderRadius: 7, fontSize: '0.8rem', outline: 'none' }}
+              placeholder={`Rótulo opcional (ex: ${cfgSelecionado?.label} Principal)`}
+              value={labelNovo}
+              onChange={e => setLabelNovo(e.target.value)}
+            />
+          </div>
+        )}
+        {itemSelecionado && (
+          <div style={{ background: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 8, padding: '0.38rem 0.7rem', fontSize: '0.8rem', fontWeight: 600, color: '#92400e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>📍 Toque no mapa para posicionar: <strong>{cfgSelecionado?.emoji} {cfgSelecionado?.label}</strong></span>
+            <button onClick={() => setItemSelecionado(null)} style={{ background: 'none', border: 'none', color: '#b45309', cursor: 'pointer', fontWeight: 800, fontSize: '0.9rem' }}>✕</button>
+          </div>
+        )}
+      </div>
+
+      {/* Mapa */}
+      <div style={{ borderRadius: 12, overflow: 'hidden', border: '1.5px solid #e5e7eb' }}>
+        <MapContainer
+          center={OURO_BRANCO_CENTER}
+          zoom={13}
+          style={{ height: 'min(60vh, 560px)', minHeight: 360, width: '100%' }}
+          zoomControl={true}
+          attributionControl={false}
+        >
+          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+          <MapClickHandler ativo={!!itemSelecionado} onClique={adicionarItemNoMapa} />
+
+          {planosDoTipo.filter(p => p.lat && p.lng).map(p => (
+            <Marker key={p.id} position={[p.lat!, p.lng!]} icon={criarIconePrincipal()}>
+              <Popup>
+                <div style={{ textAlign: 'center', minWidth: 100 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{TIPOS_CONFIG[p.tipo].emoji} {p.nome}</div>
+                  {p.local && <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: 2 }}>📍 {p.local}</div>}
+                  {p.dataInicio && <div style={{ fontSize: '0.73rem', color: '#9ca3af', marginTop: 1 }}>📅 {formatarData(p.dataInicio)}</div>}
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
+          {planosDoTipo.flatMap(p => (p.pontosExtras ?? []).map(pe => ({ ...pe, planoNome: p.nome }))).map(pe => (
+            <Marker key={pe.id} position={[pe.lat, pe.lng]} icon={criarIconeEmoji('📌')}>
+              <Popup>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>📌 {pe.label}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#6b7280' }}>{pe.planoNome}</div>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
+          {planosDoTipo.flatMap(p => p.itensMapa.map(it => ({ ...it, planoNome: p.nome }))).map(item => (
+            <Marker key={item.id} position={[item.lat, item.lng]} icon={criarIconeEmoji(item.emoji)}>
+              <Popup>
+                <div style={{ textAlign: 'center' }}>
+                  <span style={{ fontSize: '1.3rem' }}>{item.emoji}</span>
+                  <div style={{ fontWeight: 700, fontSize: '0.82rem', marginTop: 2 }}>{item.obs || item.tipo}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#6b7280' }}>{item.planoNome}</div>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+
+          {itens.map(item => (
+            <Marker key={item.id} position={[item.lat, item.lng]} icon={criarIconeEmoji(item.emoji)}>
+              <Popup>
+                <div style={{ textAlign: 'center' }}>
+                  <span style={{ fontSize: '1.3rem' }}>{item.emoji}</span>
+                  <div style={{ fontWeight: 700, fontSize: '0.82rem', marginTop: 2 }}>{item.label}</div>
+                  <button
+                    onClick={() => removerItemSecao(item.id)}
+                    style={{ marginTop: 6, background: '#fee2e2', border: 'none', borderRadius: 6, padding: '0.2rem 0.7rem', color: '#b91c1c', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer' }}
+                  >🗑️ Remover</button>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
+      </div>
+
+      {planosDoTipo.filter(p => !p.lat || !p.lng).length > 0 && (
+        <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', borderRadius: 8, padding: '0.4rem 0.75rem', fontSize: '0.75rem', color: '#92400e' }}>
+          ℹ️ {planosDoTipo.filter(p => !p.lat || !p.lng).length} plano(s) sem localização definida não aparecem no mapa. Edite-os para adicionar coordenadas.
+        </div>
+      )}
+
+      {itens.length > 0 && (
+        <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 10, padding: '0.5rem 0.75rem' }}>
+          <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
+            📌 Itens posicionados nesta seção ({itens.length})
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+            {itens.map(item => (
+              <span key={item.id} style={{ background: '#dbeafe', color: '#1e3a8a', borderRadius: 12, padding: '0.2rem 0.55rem', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                {item.emoji} {item.label}
+                <button onClick={() => removerItemSecao(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e40af', fontWeight: 900, fontSize: '0.7rem', padding: 0, lineHeight: 1 }}>✕</button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Lista de planos por tipo ────────────────────────────────────────────
 function ListaPlanos({
   tipo,
@@ -2165,9 +2346,12 @@ function ListaPlanos({
 // ── Componente principal ────────────────────────────────────────────────
 export default function Planejamento() {
   const [subAba, setSubAba] = useState<TipoPlano>('evento')
+  const [viewMode, setViewMode] = useState<'lista' | 'mapa'>('lista')
   const [planos, setPlanos] = useState<Plano[]>(() => carregarPlanos())
   const [criando, setCriando] = useState(false)
   const [aberto, setAberto] = useState<Plano | null>(null)
+
+  useEffect(() => { setViewMode('lista') }, [subAba])
 
   useEffect(() => { salvarPlanos(planos) }, [planos])
 
@@ -2236,14 +2420,54 @@ export default function Planejamento() {
           </Suspense>
         </div>
       ) : (
-        <div style={{ flex: 1, overflowY: 'auto' }}>
-          <ListaPlanos
-            tipo={subAba}
-            planos={planos}
-            onNovo={() => setCriando(true)}
-            onAbrir={p => setAberto(p)}
-          />
-        </div>
+        <>
+          {/* Toggle Lista / Mapa */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.75rem', borderBottom: '1px solid #e5e7eb', background: '#f8fafc', flexShrink: 0 }}>
+            <button
+              onClick={() => setViewMode('lista')}
+              style={{
+                background: viewMode === 'lista' ? '#1a4b8c' : '#e0e7ff',
+                color: viewMode === 'lista' ? 'white' : '#1e3a8a',
+                border: 'none', borderRadius: 20, padding: '0.28rem 0.75rem',
+                fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem',
+              }}
+            >
+              📋 Lista
+            </button>
+            <button
+              onClick={() => setViewMode('mapa')}
+              style={{
+                background: viewMode === 'mapa' ? '#1a4b8c' : '#e0e7ff',
+                color: viewMode === 'mapa' ? 'white' : '#1e3a8a',
+                border: 'none', borderRadius: 20, padding: '0.28rem 0.75rem',
+                fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem',
+              }}
+            >
+              🗺️ Mapa
+            </button>
+            {viewMode === 'lista' && (
+              <button
+                style={{ marginLeft: 'auto', background: '#1a4b8c', color: 'white', border: 'none', borderRadius: 20, padding: '0.28rem 0.85rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
+                onClick={() => setCriando(true)}
+              >
+                + Novo
+              </button>
+            )}
+          </div>
+
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {viewMode === 'lista' ? (
+              <ListaPlanos
+                tipo={subAba}
+                planos={planos}
+                onNovo={() => setCriando(true)}
+                onAbrir={p => setAberto(p)}
+              />
+            ) : (
+              <MapaSecaoPlanos tipo={subAba} planos={planos} />
+            )}
+          </div>
+        </>
       )}
 
       {subAba !== 'emergencia' && criando && (
