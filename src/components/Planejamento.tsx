@@ -738,6 +738,7 @@ function MapaDetalhe({
   })()
 
   return (
+    <>
     <div className="plan-mapa-container" style={{ borderRadius: 12, overflow: 'hidden' }}>
       {itemSelecionado && (
         <div className="plan-mapa-picker-info">
@@ -846,8 +847,10 @@ function MapaDetalhe({
         </div>
       )}
 
+    </div>
+
       {/* ── Painel: adicionar ao mapa ───────────────────────────── */}
-      <div style={{ background: '#f8fafc', borderTop: '1.5px solid #e5e7eb' }}>
+      <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', marginTop: 4 }}>
 
         {/* Cabeçalho + banner de posicionamento */}
         <div style={{ padding: '0.5rem 0.85rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1034,7 +1037,7 @@ function MapaDetalhe({
         </div>
 
       </div>
-    </div>
+    </>
   )
 }
 
