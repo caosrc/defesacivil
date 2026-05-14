@@ -594,7 +594,7 @@ function MapaDetalhe({
   onRemoverItem: (id: string) => void
 }) {
   const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
-  const [abaItens, setAbaItens] = useState<'icones' | 'orgaos' | 'materiais' | 'agentes'>('icones')
+  const [iconesExpandidos, setIconesExpandidos] = useState(false)
   const centro: [number, number] = plano.lat && plano.lng ? [plano.lat, plano.lng] : OURO_BRANCO_CENTER
 
   // ── Prontidão: rastreia quem está de prontidão + posições GPS ──────────
@@ -846,114 +846,193 @@ function MapaDetalhe({
         </div>
       )}
 
-      <div style={{ background: '#f8fafc', borderTop: '1px solid #e5e7eb', padding: '0.5rem 0.85rem' }}>
-        <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1a4b8c', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          🗺️ Clique num item e toque no mapa para posicionar
-        </div>
-        {/* Abas */}
-        <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.45rem', flexWrap: 'wrap' }}>
-          {([['icones', '🗺️ Ícones'], ['orgaos', '🏛️ Órgãos'], ['materiais', '📦 Materiais'], ['agentes', '🧑‍🚒 Agentes DC']] as const).map(([aba, label]) => (
-            <button
-              key={aba}
-              onClick={() => setAbaItens(aba)}
-              style={{ background: abaItens === aba ? '#1a4b8c' : '#e0e7ff', color: abaItens === aba ? 'white' : '#1e3a8a', border: 'none', borderRadius: 20, padding: '0.22rem 0.6rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}
-            >
-              {label}
-            </button>
-          ))}
+      {/* ── Painel: adicionar ao mapa ───────────────────────────── */}
+      <div style={{ background: '#f8fafc', borderTop: '1.5px solid #e5e7eb' }}>
+
+        {/* Cabeçalho + banner de posicionamento */}
+        <div style={{ padding: '0.5rem 0.85rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#1a4b8c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            🗺️ Adicionar ao mapa
+          </span>
+          <span style={{ fontSize: '0.67rem', color: '#6b7280', marginLeft: 'auto' }}>
+            Selecione um item e toque no mapa
+          </span>
         </div>
 
-        {abaItens === 'icones' && (
-          <div className="plan-itens-grid">
-            {ITENS_POSICIONAR.map(item => (
-              <button
-                key={item.tipo}
-                className={`plan-item-btn ${itemSelecionado === item.tipo ? 'ativo' : ''}`}
-                onClick={() => setItemSelecionado(itemSelecionado === item.tipo ? null : item.tipo)}
-              >
-                <span className="pi-emoji">{item.emoji}</span>
-                {item.label}
-              </button>
-            ))}
+        {itemSelecionado && (
+          <div style={{ margin: '0.4rem 0.85rem 0', background: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 8, padding: '0.38rem 0.7rem', fontSize: '0.8rem', fontWeight: 700, color: '#92400e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>📍 Toque no mapa: <strong>{labelSelecionado}</strong></span>
+            <button onClick={() => setItemSelecionado(null)} style={{ background: 'none', border: 'none', color: '#b45309', cursor: 'pointer', fontWeight: 900, fontSize: '1rem', lineHeight: 1, padding: '0 0.2rem' }}>✕</button>
           </div>
         )}
 
-        {abaItens === 'orgaos' && (
-          <div>
+        {/* ── Seção: Órgãos Empenhados ── */}
+        <div style={{ borderTop: '1px solid #e5e7eb', marginTop: '0.45rem' }}>
+          <div style={{ padding: '0.35rem 0.85rem', background: 'linear-gradient(90deg,#1a3a6b,#1e40af)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'white', textTransform: 'uppercase', letterSpacing: '0.06em' }}>🏛️ Órgãos Empenhados</span>
+            <span style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.18)', color: 'white', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '0.05rem 0.45rem' }}>
+              {plano.equipe.length} {plano.equipe.length === 1 ? 'órgão' : 'órgãos'}
+            </span>
+          </div>
+          <div style={{ padding: '0.45rem 0.75rem' }}>
             {plano.equipe.length === 0 ? (
-              <div style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', padding: '0.5rem' }}>Nenhum órgão empenhado neste plano</div>
+              <div style={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center', padding: '0.3rem 0' }}>
+                Nenhum órgão empenhado · edite o plano para adicionar
+              </div>
             ) : (
-              <div className="plan-itens-grid">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
                 {plano.equipe.map(orgao => {
                   const key = `orgao:${orgao}`
                   const orgaoInfo = ORGAOS_EMPENHO.flatMap(c => c.orgaos).find(o => `${o.emoji} ${o.nome}` === orgao)
                   const emoji = orgaoInfo?.emoji ?? '🏛️'
+                  const ativo = itemSelecionado === key
                   return (
                     <button
                       key={orgao}
-                      className={`plan-item-btn ${itemSelecionado === key ? 'ativo' : ''}`}
-                      onClick={() => setItemSelecionado(itemSelecionado === key ? null : key)}
+                      onClick={() => setItemSelecionado(ativo ? null : key)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.3rem',
+                        background: ativo ? '#1e40af' : '#dbeafe',
+                        color: ativo ? 'white' : '#1e3a8a',
+                        border: ativo ? '1.5px solid #1e40af' : '1.5px solid #bfdbfe',
+                        borderRadius: 20, padding: '0.28rem 0.7rem',
+                        fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
+                        boxShadow: ativo ? '0 0 0 2px #93c5fd' : 'none',
+                        transition: 'all 0.12s',
+                      }}
                     >
-                      <span className="pi-emoji">{orgaoInfo?.nome === 'Defesa Civil' ? <img src="/logo-dc.png" style={{ width: 20, height: 20, objectFit: 'contain', verticalAlign: 'middle' }} /> : emoji}</span>
+                      {orgaoInfo?.nome === 'Defesa Civil'
+                        ? <img src="/logo-dc.png" style={{ width: 16, height: 16, objectFit: 'contain' }} alt="" />
+                        : <span style={{ fontSize: '0.95rem' }}>{emoji}</span>
+                      }
                       {orgaoInfo?.nome ?? orgao}
+                      {ativo && <span style={{ fontSize: '0.65rem', marginLeft: 2 }}>📍</span>}
                     </button>
                   )
                 })}
               </div>
             )}
           </div>
-        )}
+        </div>
 
-        {abaItens === 'materiais' && (
-          <div>
-            {plano.materiais.length === 0 ? (
-              <div style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', padding: '0.5rem' }}>Nenhum material cadastrado neste plano</div>
-            ) : (
-              <div className="plan-itens-grid">
-                {plano.materiais.map(mat => {
-                  const key = `mat:${mat.nome}`
-                  return (
-                    <button
-                      key={mat.id}
-                      className={`plan-item-btn ${itemSelecionado === key ? 'ativo' : ''}`}
-                      onClick={() => setItemSelecionado(itemSelecionado === key ? null : key)}
-                    >
-                      <span className="pi-emoji">📦</span>
-                      {mat.nome}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+        {/* ── Seção: Agentes da Defesa Civil ── */}
+        <div style={{ borderTop: '1px solid #e5e7eb' }}>
+          <div style={{ padding: '0.35rem 0.85rem', background: 'linear-gradient(90deg,#065f46,#059669)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'white', textTransform: 'uppercase', letterSpacing: '0.06em' }}>🧑‍🚒 Agentes da Defesa Civil</span>
+            <span style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.18)', color: 'white', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '0.05rem 0.45rem' }}>
+              {(plano.agentesDefesaCivil ?? []).length} {(plano.agentesDefesaCivil ?? []).length === 1 ? 'agente' : 'agentes'}
+            </span>
           </div>
-        )}
-
-        {abaItens === 'agentes' && (
-          <div>
+          <div style={{ padding: '0.45rem 0.75rem' }}>
             {(plano.agentesDefesaCivil ?? []).length === 0 ? (
-              <div style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', padding: '0.5rem' }}>
-                Nenhum agente da Defesa Civil selecionado neste plano.<br />
-                <span style={{ fontSize: '0.73rem' }}>Edite o plano para adicionar agentes.</span>
+              <div style={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center', padding: '0.3rem 0' }}>
+                Nenhum agente escalado · edite o plano para adicionar
               </div>
             ) : (
-              <div className="plan-itens-grid">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
                 {(plano.agentesDefesaCivil ?? []).map(ag => {
                   const key = `agente:${ag}`
+                  const ativo = itemSelecionado === key
                   return (
                     <button
                       key={ag}
-                      className={`plan-item-btn ${itemSelecionado === key ? 'ativo' : ''}`}
-                      onClick={() => setItemSelecionado(itemSelecionado === key ? null : key)}
+                      onClick={() => setItemSelecionado(ativo ? null : key)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.3rem',
+                        background: ativo ? '#059669' : '#dcfce7',
+                        color: ativo ? 'white' : '#166534',
+                        border: ativo ? '1.5px solid #059669' : '1.5px solid #bbf7d0',
+                        borderRadius: 20, padding: '0.28rem 0.7rem',
+                        fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
+                        boxShadow: ativo ? '0 0 0 2px #6ee7b7' : 'none',
+                        transition: 'all 0.12s',
+                      }}
                     >
-                      <span className="pi-emoji">🧑‍🚒</span>
+                      <span style={{ fontSize: '0.95rem' }}>🧑‍🚒</span>
                       {ag}
+                      {ativo && <span style={{ fontSize: '0.65rem', marginLeft: 2 }}>📍</span>}
                     </button>
                   )
                 })}
               </div>
             )}
           </div>
-        )}
+        </div>
+
+        {/* ── Seção: Materiais e Recursos ── */}
+        <div style={{ borderTop: '1px solid #e5e7eb' }}>
+          <div style={{ padding: '0.35rem 0.85rem', background: 'linear-gradient(90deg,#78350f,#b45309)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'white', textTransform: 'uppercase', letterSpacing: '0.06em' }}>📦 Materiais e Recursos</span>
+            <span style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.18)', color: 'white', borderRadius: 10, fontSize: '0.65rem', fontWeight: 700, padding: '0.05rem 0.45rem' }}>
+              {plano.materiais.length} {plano.materiais.length === 1 ? 'item' : 'itens'}
+            </span>
+          </div>
+          <div style={{ padding: '0.45rem 0.75rem' }}>
+            {plano.materiais.length === 0 ? (
+              <div style={{ fontSize: '0.75rem', color: '#9ca3af', textAlign: 'center', padding: '0.3rem 0' }}>
+                Nenhum material cadastrado · edite o plano para adicionar
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                {plano.materiais.map(mat => {
+                  const key = `mat:${mat.nome}`
+                  const ativo = itemSelecionado === key
+                  return (
+                    <button
+                      key={mat.id}
+                      onClick={() => setItemSelecionado(ativo ? null : key)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '0.3rem',
+                        background: ativo ? '#b45309' : '#fef3c7',
+                        color: ativo ? 'white' : '#78350f',
+                        border: ativo ? '1.5px solid #b45309' : '1.5px solid #fcd34d',
+                        borderRadius: 20, padding: '0.28rem 0.7rem',
+                        fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer',
+                        boxShadow: ativo ? '0 0 0 2px #fde68a' : 'none',
+                        transition: 'all 0.12s',
+                      }}
+                    >
+                      <span style={{ fontSize: '0.95rem' }}>📦</span>
+                      {mat.nome}
+                      {mat.quantidade > 1 && <span style={{ fontSize: '0.68rem', opacity: 0.75 }}>×{mat.quantidade}</span>}
+                      {ativo && <span style={{ fontSize: '0.65rem', marginLeft: 2 }}>📍</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Seção: Ícones Operacionais (recolhível) ── */}
+        <div style={{ borderTop: '1px solid #e5e7eb', marginBottom: '0.5rem' }}>
+          <button
+            onClick={() => setIconesExpandidos(v => !v)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.35rem 0.85rem', background: '#f1f5f9', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+          >
+            <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>🗺️ Ícones Operacionais</span>
+            <span style={{ marginLeft: 'auto', fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700 }}>
+              {iconesExpandidos ? '▲ Recolher' : '▼ Expandir'}
+            </span>
+          </button>
+          {iconesExpandidos && (
+            <div style={{ padding: '0.4rem 0.75rem' }}>
+              <div className="plan-itens-grid">
+                {ITENS_POSICIONAR.map(item => (
+                  <button
+                    key={item.tipo}
+                    className={`plan-item-btn ${itemSelecionado === item.tipo ? 'ativo' : ''}`}
+                    onClick={() => setItemSelecionado(itemSelecionado === item.tipo ? null : item.tipo)}
+                  >
+                    <span className="pi-emoji">{item.emoji}</span>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   )
@@ -2626,12 +2705,9 @@ function ListaPlanos({
 // ── Componente principal ────────────────────────────────────────────────
 export default function Planejamento() {
   const [subAba, setSubAba] = useState<TipoPlano>('evento')
-  const [viewMode, setViewMode] = useState<'lista' | 'mapa'>('lista')
   const [planos, setPlanos] = useState<Plano[]>(() => carregarPlanos())
   const [criando, setCriando] = useState(false)
   const [aberto, setAberto] = useState<Plano | null>(null)
-
-  useEffect(() => { setViewMode('lista') }, [subAba])
 
   useEffect(() => { salvarPlanos(planos) }, [planos])
 
@@ -2726,51 +2802,25 @@ export default function Planejamento() {
         </div>
       ) : (
         <>
-          {/* Toggle Lista / Mapa */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.45rem 0.75rem', borderBottom: '1px solid #e5e7eb', background: '#f8fafc', flexShrink: 0 }}>
+            <span style={{ fontSize: '0.78rem', color: '#6b7280', fontWeight: 600 }}>
+              📋 {TIPOS_CONFIG[subAba].label}
+            </span>
             <button
-              onClick={() => setViewMode('lista')}
-              style={{
-                background: viewMode === 'lista' ? '#1a4b8c' : '#e0e7ff',
-                color: viewMode === 'lista' ? 'white' : '#1e3a8a',
-                border: 'none', borderRadius: 20, padding: '0.28rem 0.75rem',
-                fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem',
-              }}
+              style={{ marginLeft: 'auto', background: '#1a4b8c', color: 'white', border: 'none', borderRadius: 20, padding: '0.28rem 0.85rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
+              onClick={() => setCriando(true)}
             >
-              📋 Lista
+              + Novo
             </button>
-            <button
-              onClick={() => setViewMode('mapa')}
-              style={{
-                background: viewMode === 'mapa' ? '#1a4b8c' : '#e0e7ff',
-                color: viewMode === 'mapa' ? 'white' : '#1e3a8a',
-                border: 'none', borderRadius: 20, padding: '0.28rem 0.75rem',
-                fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem',
-              }}
-            >
-              🗺️ Mapa
-            </button>
-            {viewMode === 'lista' && (
-              <button
-                style={{ marginLeft: 'auto', background: '#1a4b8c', color: 'white', border: 'none', borderRadius: 20, padding: '0.28rem 0.85rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
-                onClick={() => setCriando(true)}
-              >
-                + Novo
-              </button>
-            )}
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto' }}>
-            {viewMode === 'lista' ? (
-              <ListaPlanos
-                tipo={subAba}
-                planos={planos}
-                onNovo={() => setCriando(true)}
-                onAbrir={p => setAberto(p)}
-              />
-            ) : (
-              <MapaSecaoPlanos tipo={subAba} planos={planos} />
-            )}
+            <ListaPlanos
+              tipo={subAba}
+              planos={planos}
+              onNovo={() => setCriando(true)}
+              onAbrir={p => setAberto(p)}
+            />
           </div>
         </>
       )}
