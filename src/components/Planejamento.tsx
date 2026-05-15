@@ -570,6 +570,19 @@ function FlyToMarca({ lat, lng }: { lat: number; lng: number }) {
   return null
 }
 
+function FlyToMe({ posicao, ativo }: { posicao: { lat: number; lng: number } | null | undefined; ativo: boolean }) {
+  const map = useMap()
+  const jaCentralizou = useRef(false)
+  useEffect(() => {
+    if (!ativo) { jaCentralizou.current = false; return }
+    if (posicao && !jaCentralizou.current) {
+      jaCentralizou.current = true
+      map.flyTo([posicao.lat, posicao.lng], Math.max(map.getZoom(), 16), { duration: 1.4 })
+    }
+  }, [posicao, ativo, map])
+  return null
+}
+
 function InputGMS({
   valor, tipo, onChange,
 }: {
@@ -1010,6 +1023,7 @@ function MapaDetalhe({
           />
         )}
         <MapClickHandler ativo={!!itemSelecionado} onClique={handleCliqueMapa} />
+        <FlyToMe posicao={posicaoPropria} ativo={!!posicaoPropria} />
         {plano.lat && plano.lng && (
           <Marker position={[plano.lat, plano.lng]} icon={criarIconePrincipal()}>
             <Popup><strong>{plano.nome}</strong><br />📍 Local principal</Popup>
