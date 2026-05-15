@@ -263,7 +263,7 @@ const ITENS_POSICIONAR = [
   { tipo: 'bombeiro',    emoji: '🚒', label: 'Bombeiro' },
   { tipo: 'samu',        emoji: '🚑', label: 'SAMU' },
   { tipo: 'interdicao',  emoji: '🚧', label: 'Interdição' },
-  { tipo: 'cone',        emoji: '🟧', label: 'Cone' },
+  { tipo: 'cone',        emoji: '🔶', label: 'Cone' },
   { tipo: 'info',        emoji: '📢', label: 'Info' },
   { tipo: 'alimentacao', emoji: '🍞', label: 'Alimentação' },
   { tipo: 'medico',      emoji: '🏥', label: 'Apoio Méd.' },
@@ -282,7 +282,7 @@ function getEmojiMaterial(nome: string): string {
   if (/tenda|barraca|acampamento/.test(n)) return '⛺'
   if (/extintor/.test(n)) return '🧯'
   if (/gerador|energia/.test(n)) return '⚡'
-  if (/cone/.test(n)) return '🟧'
+  if (/cone/.test(n)) return '🔶'
   if (/banheiro|sanitari|wc|toalet/.test(n)) return '🚻'
   if (/agua|hidrat|caixa.*agua|ponto.*agua/.test(n)) return '💧'
   if (/copo|garrafa/.test(n)) return '🥤'
@@ -358,12 +358,10 @@ const PRE_LISTAS: { nome: string; emoji: string; itens: { emoji: string; label: 
     { emoji: '🚻', label: 'Banheiro químico' },
   ]},
   { nome: 'Apoio Operacional', emoji: '🤝', itens: [
-    { emoji: '🛡️', label: 'Defesa Civil' },
-    { emoji: '🚓', label: 'PM' },
-    { emoji: '🚒', label: 'Bombeiros' },
-    { emoji: '🚔', label: 'Guarda Municipal' },
-    { emoji: '👷', label: 'Brigadistas' },
     { emoji: '🤲', label: 'Apoio social' },
+    { emoji: '🏘️', label: 'Vizinhança' },
+    { emoji: '🙋', label: 'Voluntários' },
+    { emoji: '🧑‍⚕️', label: 'Assistência social' },
   ]},
   { nome: 'Hidratação', emoji: '💧', itens: [
     { emoji: '🚰', label: 'Ponto de água' },
@@ -452,6 +450,7 @@ function criarIconePrincipal(): L.DivIcon {
 
 function criarIconeEu(nome: string): L.DivIcon {
   const iniciais = nome.split(' ').map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('') || 'EU'
+  const primeiroNome = nome.split(' ')[0] || nome
   return L.divIcon({
     className: '',
     html: `<div style="position:relative;">
@@ -464,9 +463,9 @@ function criarIconeEu(nome: string): L.DivIcon {
       ">${iniciais}</div>
       <div style="position:absolute;bottom:-17px;left:50%;transform:translateX(-50%);
         background:rgba(217,119,6,0.95);color:white;font-size:7px;padding:1px 5px;
-        border-radius:3px;white-space:nowrap;font-family:sans-serif;
-        font-weight:800;line-height:1.4;">
-        VOCÊ
+        border-radius:3px;white-space:nowrap;font-family:sans-serif;max-width:64px;
+        overflow:hidden;text-overflow:ellipsis;font-weight:800;line-height:1.4;">
+        ${primeiroNome}
       </div>
     </div>`,
     iconSize: [38, 56],
@@ -539,6 +538,32 @@ function criarIconeAgentePlanejado(nome: string): L.DivIcon {
     iconAnchor: [18, 36],
     popupAnchor: [0, -40],
   })
+}
+
+function criarIconeCone(): L.DivIcon {
+  return L.divIcon({
+    html: `<div style="width:36px;height:44px;display:flex;align-items:flex-end;justify-content:center;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.45))">
+      <svg viewBox="0 0 36 46" width="34" height="42" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="18,2 33,40 3,40" fill="#e85d04" stroke="none"/>
+        <rect x="8" y="28" width="20" height="3.5" rx="1.5" fill="white" opacity="0.92"/>
+        <rect x="11" y="20" width="14" height="3" rx="1.5" fill="white" opacity="0.92"/>
+        <rect x="2" y="40" width="32" height="5" rx="2.5" fill="#555" stroke="none"/>
+      </svg>
+    </div>`,
+    className: '',
+    iconSize: [36, 44],
+    iconAnchor: [18, 44],
+    popupAnchor: [0, -46],
+  })
+}
+
+function MapInvalidateSize({ trigger }: { trigger?: unknown }) {
+  const map = useMap()
+  useEffect(() => {
+    const id = setTimeout(() => map.invalidateSize(), 200)
+    return () => clearTimeout(id)
+  }, [map, trigger])
+  return null
 }
 
 function MapClickHandler({ onClique, ativo }: { onClique: (lat: number, lng: number) => void; ativo: boolean }) {
@@ -844,7 +869,7 @@ function MapaDetalhe({
     // Check as material (tipo starts with 'mat:')
     if (itemSelecionado.startsWith('mat:')) {
       const nomeMat = itemSelecionado.slice(4)
-      onAdicionarItem({ id: gerarId(), tipo: 'material', emoji: '📦', lat, lng, obs: nomeMat })
+      onAdicionarItem({ id: gerarId(), tipo: 'material', emoji: getEmojiMaterial(nomeMat), lat, lng, obs: nomeMat })
       setItemSelecionado(null)
       return
     }
@@ -1034,11 +1059,12 @@ function MapaDetalhe({
             <Popup><strong>📌 {p.label || 'Ponto extra'}</strong><br />{p.lat.toFixed(5)}, {p.lng.toFixed(5)}</Popup>
           </Marker>
         ))}
+        <MapInvalidateSize trigger={itemSelecionado} />
         {plano.itensMapa.map(item => (
           <Marker
             key={item.id}
             position={[item.lat, item.lng]}
-            icon={item.tipo === 'agente_dc' ? criarIconeAgentePlanejado(item.obs || item.tipo) : criarIconeEmoji(item.emoji)}
+            icon={item.tipo === 'agente_dc' ? criarIconeAgentePlanejado(item.obs || item.tipo) : item.tipo === 'cone' ? criarIconeCone() : criarIconeEmoji(item.emoji)}
           >
             <Popup>
               <div style={{ textAlign: 'center' }}>
@@ -2235,16 +2261,35 @@ function DetalheP({
     onAtualizar(atualizado)
   }
 
+  useEffect(() => {
+    const offAdd = wsOn('plano_item_adicionado', (msg) => {
+      if (String(msg.planoId) !== plano.id) return
+      const item = msg.item as ItemMapa
+      setPlanoLocal(prev => {
+        if (prev.itensMapa.some(i => i.id === item.id)) return prev
+        return { ...prev, itensMapa: [...prev.itensMapa, item] }
+      })
+    })
+    const offRem = wsOn('plano_item_removido', (msg) => {
+      if (String(msg.planoId) !== plano.id) return
+      const itemId = String(msg.itemId)
+      setPlanoLocal(prev => ({ ...prev, itensMapa: prev.itensMapa.filter(i => i.id !== itemId) }))
+    })
+    return () => { offAdd(); offRem() }
+  }, [plano.id])
+
   function adicionarItem(item: ItemMapa) {
     const atualizado = { ...planoLocal, itensMapa: [...planoLocal.itensMapa, item] }
     setPlanoLocal(atualizado)
     onAtualizar(atualizado)
+    wsSend({ tipo: 'plano_item_adicionado', planoId: plano.id, item })
   }
 
   function removerItem(id: string) {
     const atualizado = { ...planoLocal, itensMapa: planoLocal.itensMapa.filter(i => i.id !== id) }
     setPlanoLocal(atualizado)
     onAtualizar(atualizado)
+    wsSend({ tipo: 'plano_item_removido', planoId: plano.id, itemId: id })
   }
 
   function atualizarQuantidadeMaterial(matId: string, novaQtd: number) {
@@ -2670,9 +2715,10 @@ function MapaSecaoPlanos({
             </Marker>
           ))}
 
+          <MapInvalidateSize trigger={itemSelecionado} />
           {/* Itens de mapa individuais dos planos */}
           {planosDoTipo.flatMap(p=>p.itensMapa.map(it=>({...it,planoNome:p.nome}))).map(item => (
-            <Marker key={item.id} position={[item.lat,item.lng]} icon={item.tipo==='agente_dc'?criarIconeAgentePlanejado(item.obs||item.tipo):criarIconeEmoji(item.emoji)}>
+            <Marker key={item.id} position={[item.lat,item.lng]} icon={item.tipo==='agente_dc'?criarIconeAgentePlanejado(item.obs||item.tipo):item.tipo==='cone'?criarIconeCone():criarIconeEmoji(item.emoji)}>
               <Popup>
                 <div style={{ textAlign:'center' }}>
                   <span style={{ fontSize:'1.3rem' }}>{item.emoji}</span>
@@ -2685,7 +2731,7 @@ function MapaSecaoPlanos({
 
           {/* Itens posicionados na seção */}
           {itens.map(item => (
-            <Marker key={item.id} position={[item.lat,item.lng]} icon={item.tipo==='agente'?criarIconeAgentePlanejado(item.label):criarIconeEmoji(item.emoji)}>
+            <Marker key={item.id} position={[item.lat,item.lng]} icon={item.tipo==='agente'?criarIconeAgentePlanejado(item.label):item.tipo==='cone'?criarIconeCone():criarIconeEmoji(item.emoji)}>
               <Popup>
                 <div style={{ textAlign:'center' }}>
                   <span style={{ fontSize:'1.3rem' }}>{item.emoji}</span>
