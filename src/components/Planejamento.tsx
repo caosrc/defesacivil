@@ -639,6 +639,7 @@ function MapaDetalhe({
 }) {
   const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
   const [secaoAberta, setSecaoAberta] = useState<'orgaos'|'agentes'|'materiais'|'icones'|null>('icones')
+  const [camadaMapa, setCamadaMapa] = useState<'padrao' | 'satelite'>('padrao')
   const centro: [number, number] = plano.lat && plano.lng ? [plano.lat, plano.lng] : OURO_BRANCO_CENTER
 
   // ── Prontidão: rastreia quem está de prontidão + posições GPS ──────────
@@ -922,6 +923,19 @@ function MapaDetalhe({
       </div>
 
       {/* ── Mapa tático (quase tela cheia) ── */}
+      <div style={{ position: 'relative', borderRadius: 12 }}>
+        {/* Botões de camada — igual ao Mapa de Emergências */}
+        <div className="mapa-camadas" style={{ top: 10 }}>
+          <button
+            className={`mapa-camada-btn ${camadaMapa === 'padrao' ? 'ativo' : ''}`}
+            onClick={() => setCamadaMapa('padrao')}
+          >🗺️ Mapa</button>
+          <button
+            className={`mapa-camada-btn ${camadaMapa === 'satelite' ? 'ativo' : ''}`}
+            onClick={() => setCamadaMapa('satelite')}
+          >🛰️ Satélite</button>
+        </div>
+
       <div className="plan-mapa-container" style={{ borderRadius: 12, overflow: 'hidden' }}>
       <MapContainer
         center={centro}
@@ -930,7 +944,24 @@ function MapaDetalhe({
         zoomControl={true}
         attributionControl={false}
       >
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        {camadaMapa === 'padrao' ? (
+          <TileLayer
+            key="mapa-padrao"
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            subdomains={['a', 'b', 'c']}
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            maxZoom={19}
+            keepBuffer={4}
+          />
+        ) : (
+          <TileLayer
+            key="mapa-satelite"
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            attribution='Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics'
+            maxZoom={19}
+            keepBuffer={4}
+          />
+        )}
         <MapClickHandler ativo={!!itemSelecionado} onClique={handleCliqueMapa} />
         {plano.lat && plano.lng && (
           <Marker position={[plano.lat, plano.lng]} icon={criarIconePrincipal()}>
@@ -1025,6 +1056,7 @@ function MapaDetalhe({
       )}
 
     </div>
+      </div>{/* fecha position:relative wrapper */}
 
     </>
   )
