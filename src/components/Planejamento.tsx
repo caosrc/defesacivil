@@ -241,7 +241,7 @@ const STORAGE_KEY = 'defesacivil-planejamentos-v1'
 const TIPOS_CONFIG: Record<TipoPlano, { label: string; emoji: string; cor: string; descricao: string }> = {
   evento:     { label: 'Eventos',    emoji: '🎪', cor: '#1a6bbf', descricao: 'Festas, shows, feiras e grandes concentrações' },
   operacao:   { label: 'Operações',  emoji: '🚨', cor: '#dc2626', descricao: 'Resposta a enchentes, deslizamentos, incêndios' },
-  simulado:   { label: 'Simulados',  emoji: '🧪', cor: '#7c3aed', descricao: 'Exercícios e treinamentos de emergência' },
+  simulado:   { label: 'Simulados',  emoji: '⛑️', cor: '#7c3aed', descricao: 'Exercícios e treinamentos de emergência' },
   emergencia: { label: 'Emergencial', emoji: '⚠️', cor: '#ea580c', descricao: 'Plano de emergência municipal' },
 }
 
