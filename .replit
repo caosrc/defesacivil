@@ -40,10 +40,6 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 5004
-externalPort = 3002
-
-[[ports]]
 localPort = 5005
 externalPort = 5000
 
@@ -58,8 +54,5 @@ build = ["npx", "vite", "build"]
 VITE_VAPID_PUBLIC_KEY = "BEFNjV7YK4n7Y4dRNMQ31iy15_4K-PkB_9AeRpbDYdJHaGwcsJZDLyqwcbku5TuJh3VFBdZ8C-x5v75AHWTCM70"
 VAPID_PUBLIC_KEY = "BEFNjV7YK4n7Y4dRNMQ31iy15_4K-PkB_9AeRpbDYdJHaGwcsJZDLyqwcbku5TuJh3VFBdZ8C-x5v75AHWTCM70"
 VAPID_SUBJECT = "mailto:defesacivilob@gmail.com"
-PORT = "3001"
 NODE_ENV = "development"
-VITE_SUPABASE_URL = "https://sjdpsplbcrlkekdfnnlj.supabase.co"
-VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqZHBzcGxiY3Jsa2VrZGZubmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5ODExOTcsImV4cCI6MjA5MjU1NzE5N30.Y5-_Z6Yg99i0hHQBZjTMxBFo0TONMCiicHnjkyj_AH8"
 VITE_USE_SUPABASE = "false"
