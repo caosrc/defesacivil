@@ -277,6 +277,46 @@ const RISCO_CONFIG = {
   alto:  { label: 'Alto',  cor: '#dc2626', bg: '#fee2e2' },
 }
 
+function getEmojiMaterial(nome: string): string {
+  const n = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  if (/tenda|barraca|acampamento/.test(n)) return '⛺'
+  if (/extintor/.test(n)) return '🧯'
+  if (/gerador|energia/.test(n)) return '⚡'
+  if (/cone/.test(n)) return '🟧'
+  if (/banheiro|sanitari|wc|toalet/.test(n)) return '🚻'
+  if (/agua|hidrat|caixa.*agua|ponto.*agua/.test(n)) return '💧'
+  if (/copo|garrafa/.test(n)) return '🥤'
+  if (/ambulancia|samu/.test(n)) return '🚑'
+  if (/posto.*medic|medic|saude/.test(n)) return '🏥'
+  if (/maca|leito|cama/.test(n)) return '🛏️'
+  if (/dea|desfibrilador/.test(n)) return '❤️'
+  if (/kit|primeiros.*socorro|socorros/.test(n)) return '🧰'
+  if (/epi|colete|capacete|vestimenta/.test(n)) return '🦺'
+  if (/radio|ht|walkie/.test(n)) return '📻'
+  if (/iluminac|luz|reflet|lampada/.test(n)) return '💡'
+  if (/fita|zebrada|barreira|bloqueio/.test(n)) return '🚧'
+  if (/grade/.test(n)) return '🚏'
+  if (/cavalete/.test(n)) return '🐴'
+  if (/placa|sinalizac|sinalizacao/.test(n)) return '🪧'
+  if (/palco|microfone|som|audio/.test(n)) return '🎤'
+  if (/cadeira/.test(n)) return '🪑'
+  if (/mesa/.test(n)) return '🪑'
+  if (/abrigo|casa/.test(n)) return '🏠'
+  if (/alimentac|comida|refeic|marmita|lanche|genero/.test(n)) return '🍞'
+  if (/bombeir/.test(n)) return '🚒'
+  if (/policia|pm|viatura.*policia/.test(n)) return '🚓'
+  if (/guarda.*municipal|guarda/.test(n)) return '🚔'
+  if (/computador|notebook|tablet/.test(n)) return '💻'
+  if (/caminhao|caminhão|caminhonete/.test(n)) return '🚚'
+  if (/moto/.test(n)) return '🏍️'
+  if (/carro|veiculo|veículo/.test(n)) return '🚗'
+  if (/maquina|equipamento/.test(n)) return '⚙️'
+  if (/lona|cobertura/.test(n)) return '🏕️'
+  if (/corda|cabo/.test(n)) return '🪢'
+  if (/pá|enxada|ferramenta/.test(n)) return '⛏️'
+  return '📦'
+}
+
 const PRE_LISTAS: { nome: string; emoji: string; itens: { emoji: string; label: string }[] }[] = [
   { nome: 'Segurança', emoji: '🛡️', itens: [
     { emoji: '🟧', label: 'Cones' },
@@ -917,35 +957,12 @@ function MapaDetalhe({
                       const ativo = itemSelecionado === key
                       return (
                         <button key={mat.id} onClick={() => setItemSelecionado(ativo ? null : key)} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: ativo ? '#b45309' : '#fef3c7', color: ativo ? 'white' : '#78350f', border: ativo ? '1.5px solid #b45309' : '1.5px solid #fcd34d', borderRadius: 20, padding: '0.22rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', boxShadow: ativo ? '0 0 0 2px #fde68a' : 'none' }}>
-                          <span style={{ fontSize: '0.88rem' }}>📦</span>{mat.nome}{mat.quantidade > 1 && <span style={{ fontSize: '0.62rem', opacity: 0.75 }}>×{mat.quantidade}</span>}{ativo && <span style={{ fontSize: '0.6rem' }}>📍</span>}
+                          <span style={{ fontSize: '0.88rem' }}>{getEmojiMaterial(mat.nome)}</span>{mat.nome}{mat.quantidade > 1 && <span style={{ fontSize: '0.62rem', opacity: 0.75 }}>×{mat.quantidade}</span>}{ativo && <span style={{ fontSize: '0.6rem' }}>📍</span>}
                         </button>
                       )
                     })}
                   </div>
               }
-            </div>
-          )}
-        </div>
-
-        {/* ── Seção: Ícones Operacionais (recolhível) ── */}
-        <div>
-          <button
-            onClick={() => setSecaoAberta(secaoAberta === 'icones' ? null : 'icones')}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.4rem 0.75rem', background: secaoAberta === 'icones' ? '#e2e8f0' : '#f8fafc', border: 'none', cursor: 'pointer', textAlign: 'left' }}
-          >
-            <span style={{ fontSize: '0.88rem' }}>🚧</span>
-            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Ícones Operacionais</span>
-            <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: '#94a3b8', fontWeight: 700 }}>{secaoAberta === 'icones' ? '▲' : '▼'}</span>
-          </button>
-          {secaoAberta === 'icones' && (
-            <div style={{ padding: '0.4rem 0.7rem 0.5rem' }}>
-              <div className="plan-itens-grid">
-                {ITENS_POSICIONAR.map(item => (
-                  <button key={item.tipo} className={`plan-item-btn ${itemSelecionado === item.tipo ? 'ativo' : ''}`} onClick={() => setItemSelecionado(itemSelecionado === item.tipo ? null : item.tipo)}>
-                    <span className="pi-emoji">{item.emoji}</span>{item.label}
-                  </button>
-                ))}
-              </div>
             </div>
           )}
         </div>
@@ -1553,20 +1570,26 @@ ${(plano.lat && plano.lng) || plano.itensMapa.length > 0 || (plano.pontosExtras 
   bounds.push([${p.lat},${p.lng}]);
   `).join('')}
   ${plano.itensMapa.map(it => `
-  L.marker([${it.lat},${it.lng}], {icon: L.divIcon({html:'<div style="font-size:1.4rem;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">${it.emoji}</div>',className:'',iconAnchor:[12,12]})}).addTo(map)
-    .bindPopup('<strong>${it.emoji} ${(it.obs || it.tipo).replace(/'/g, "\\'")}</strong>');
+  L.marker([${it.lat},${it.lng}], {icon: L.divIcon({
+    html:'<div style="width:38px;height:38px;display:flex;align-items:center;justify-content:center;font-size:1.5rem;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.5))">${it.emoji}</div>',
+    className:'',iconSize:[38,38],iconAnchor:[19,19],popupAnchor:[0,-20]
+  })}).addTo(map)
+    .bindPopup('<b>${it.emoji} ${(it.obs || it.tipo).replace(/'/g, "\\'")}</b>');
   bounds.push([${it.lat},${it.lng}]);
   `).join('')}
   if(bounds.length > 0) {
     if(bounds.length === 1) { map.setView(bounds[0], 15); }
-    else { map.fitBounds(bounds, {padding:[40,40]}); }
+    else { map.fitBounds(bounds, {padding:[50,50]}); }
   } else { map.setView([-20.5195,-43.6983], 13); }
+  var _printed = false;
+  function _doPrint() { if(_printed) return; _printed=true; setTimeout(function(){ window.print(); }, 600); }
+  map.on('load', _doPrint);
+  setTimeout(_doPrint, 4500);
 })();
 <\/script>
 </div>
-` : ''}
+` : `<script>setTimeout(function(){window.print();},1800)<\/script>`}
 
-<script>setTimeout(()=>window.print(),2000)</script>
 </body></html>`
 
   const w = window.open('', '_blank')
@@ -2472,7 +2495,8 @@ function MapaSecaoPlanos({
       setItemSelecionado(null); setLabelNovo(''); return
     }
     if (itemSelecionado.startsWith('mat:')) {
-      salvarItens([...itens, { id: gerarId(), tipo: 'material', emoji: '📦', label: labelNovo.trim() || itemSelecionado.slice(4), lat, lng }])
+      const matNome = itemSelecionado.slice(4)
+      salvarItens([...itens, { id: gerarId(), tipo: 'material', emoji: getEmojiMaterial(matNome), label: labelNovo.trim() || matNome, lat, lng }])
       setItemSelecionado(null); setLabelNovo(''); return
     }
     if (itemSelecionado.startsWith('ag:')) {
@@ -2550,7 +2574,7 @@ function MapaSecaoPlanos({
                 {todosMateriais.map(mat => {
                   const key = `mat:${mat.nome}`
                   return <button key={mat.id} onClick={() => { setItemSelecionado(p=>p===key?null:key); setLabelNovo('') }} style={btnStyle(itemSelecionado===key)}>
-                    <span>📦</span>{mat.nome}
+                    <span>{getEmojiMaterial(mat.nome)}</span>{mat.nome}
                   </button>
                 })}
               </div>
