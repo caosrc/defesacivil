@@ -785,7 +785,7 @@ function MapaDetalhe({
   return (
     <>
       {/* ── Painéis recolhíveis: Órgãos / Agentes / Materiais / Ícones ── */}
-      <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', marginBottom: 4 }}>
+      <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', marginBottom: 4, position: 'sticky', top: 0, zIndex: 999, boxShadow: '0 2px 10px rgba(0,0,0,0.13)' }}>
 
         {/* Banner de posicionamento ativo */}
         {itemSelecionado && (
@@ -2318,7 +2318,7 @@ function DetalheP({
         </div>
 
         {/* ── Órgãos + Agentes + Materiais + Mapa (integrado) ── */}
-        <div className="plan-detalhe-card" style={{ overflow: 'hidden' }}>
+        <div className="plan-detalhe-card" style={{ overflow: 'visible' }}>
           <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#123b73,#1a6bbf)', color: 'white', border: 'none' }}>
             🗺️ Equipe, Recursos e Mapa
             {planoLocal.itensMapa.length > 0 && (
