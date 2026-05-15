@@ -393,9 +393,10 @@ function pluralMat(n: number): string {
 // ── Ícone personalizado para itens no mapa ──────────────────────────────
 function criarIconeEmoji(emoji: string): L.DivIcon {
   return L.divIcon({
-    html: `<div style="font-size:1.6rem;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">${emoji}</div>`,
+    html: `<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:1.6rem;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4))">${emoji}</div>`,
     className: '',
-    iconAnchor: [16, 16],
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
     popupAnchor: [0, -20],
   })
 }
@@ -406,6 +407,31 @@ function criarIconePrincipal(): L.DivIcon {
     className: '',
     iconAnchor: [14, 14],
     popupAnchor: [0, -18],
+  })
+}
+
+function criarIconeEu(nome: string): L.DivIcon {
+  const iniciais = nome.split(' ').map(w => w[0]?.toUpperCase() || '').slice(0, 2).join('') || 'EU'
+  return L.divIcon({
+    className: '',
+    html: `<div style="position:relative;">
+      <div style="
+        background:#d97706;width:38px;height:38px;border-radius:50%;
+        border:3px solid white;
+        box-shadow:0 0 0 3px #d97706,0 3px 12px rgba(0,0,0,0.45);
+        display:flex;align-items:center;justify-content:center;
+        color:white;font-weight:900;font-size:12px;font-family:sans-serif;
+      ">${iniciais}</div>
+      <div style="position:absolute;bottom:-17px;left:50%;transform:translateX(-50%);
+        background:rgba(217,119,6,0.95);color:white;font-size:7px;padding:1px 5px;
+        border-radius:3px;white-space:nowrap;font-family:sans-serif;
+        font-weight:800;line-height:1.4;">
+        VOCÊ
+      </div>
+    </div>`,
+    iconSize: [38, 56],
+    iconAnchor: [19, 38],
+    popupAnchor: [0, -42],
   })
 }
 
@@ -632,10 +658,14 @@ function MapaDetalhe({
   plano,
   onAdicionarItem,
   onRemoverItem,
+  posicaoPropria,
+  nomeProprio,
 }: {
   plano: Plano
   onAdicionarItem: (item: ItemMapa) => void
   onRemoverItem: (id: string) => void
+  posicaoPropria?: { lat: number; lng: number; precisao: number } | null
+  nomeProprio?: string
 }) {
   const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
   const [secaoAberta, setSecaoAberta] = useState<'orgaos'|'agentes'|'materiais'|'icones'|null>('icones')
@@ -1019,6 +1049,29 @@ function MapaDetalhe({
             )}
           </Marker>
         ))}
+
+        {/* Marcador da posição própria (quando em prontidão com GPS ativo) */}
+        {posicaoPropria && (
+          <Marker position={[posicaoPropria.lat, posicaoPropria.lng]} icon={criarIconeEu(nomeProprio || 'Você')}>
+            <Popup>
+              <div style={{ textAlign: 'center', minWidth: 120 }}>
+                <div style={{ fontSize: '1.2rem' }}>📍</div>
+                <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{nomeProprio || 'Você'}</div>
+                <div style={{ fontSize: '0.75rem', color: '#d97706', fontWeight: 600, marginTop: 2 }}>✅ Em prontidão · Sua posição</div>
+                {posicaoPropria.precisao > 0 && posicaoPropria.precisao < 500 && (
+                  <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 1 }}>±{Math.round(posicaoPropria.precisao)}m</div>
+                )}
+              </div>
+            </Popup>
+            {posicaoPropria.precisao > 0 && posicaoPropria.precisao < 300 && (
+              <Circle
+                center={[posicaoPropria.lat, posicaoPropria.lng]}
+                radius={posicaoPropria.precisao}
+                pathOptions={{ color: '#d97706', fillColor: '#d97706', fillOpacity: 0.15, weight: 2 }}
+              />
+            )}
+          </Marker>
+        )}
       </MapContainer>
 
       {(agProntidao.size > 0 || posicoesPront.size > 0) && (
@@ -2001,33 +2054,40 @@ function PrevisaoTempoCompleta({ lat, lng, data, horario }: { lat: number; lng: 
 
   return (
     <div style={{ background: corFundo, border: `1.5px solid ${corBorda}`, borderRadius: 10, overflow: 'hidden' }}>
+      {/* Cabeçalho */}
+      <div style={{ padding: '0.3rem 0.75rem 0', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+        <span style={{ fontSize: '0.62rem', fontWeight: 800, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          🌤️ Previsão do Tempo no dia do Evento
+        </span>
+      </div>
+
       {/* Resumo clicável */}
       <button
         onClick={() => setExpandido(v => !v)}
-        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.45rem 0.75rem', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.3rem 0.75rem 0.38rem', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
       >
-        <span style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }}>{midHour.emoji}</span>
+        <span style={{ fontSize: '1.25rem', lineHeight: 1, flexShrink: 0 }}>{midHour.emoji}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#1f2937' }}>{midHour.desc}</div>
-          <div style={{ fontSize: '0.68rem', color: '#6b7280', marginTop: 1 }}>
-            🌡️ {minTemp.toFixed(0)}°–{maxTemp.toFixed(0)}°C · 💧 {totalPrecip.toFixed(1)}mm · ☔ {maxProb}% chuva
+          <div style={{ fontWeight: 700, fontSize: '0.75rem', color: '#1f2937' }}>{midHour.desc}</div>
+          <div style={{ fontSize: '0.63rem', color: '#6b7280', marginTop: 1 }}>
+            🌡️ {minTemp.toFixed(0)}°–{maxTemp.toFixed(0)}°C · 💧 {totalPrecip.toFixed(1)}mm · ☔ {maxProb}%
           </div>
         </div>
-        <span style={{ fontSize: '0.62rem', color: '#9ca3af', fontWeight: 700, flexShrink: 0 }}>{expandido ? '▲' : '▼ Horas'}</span>
+        <span style={{ fontSize: '0.58rem', color: '#9ca3af', fontWeight: 700, flexShrink: 0 }}>{expandido ? '▲' : '▼ Horas'}</span>
       </button>
 
       {/* Tabela horária */}
       {expandido && (
         <div style={{ borderTop: `1px solid ${corBorda}` }}>
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.7rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.65rem' }}>
               <thead>
                 <tr style={{ background: 'rgba(0,0,0,0.05)' }}>
-                  <th style={{ padding: '0.25rem 0.5rem', textAlign: 'left', fontWeight: 700, color: '#374151' }}>Hora</th>
-                  <th style={{ padding: '0.25rem 0.35rem', textAlign: 'center' }}>Tempo</th>
-                  <th style={{ padding: '0.25rem 0.35rem', textAlign: 'center', whiteSpace: 'nowrap' }}>🌡️ Temp</th>
-                  <th style={{ padding: '0.25rem 0.35rem', textAlign: 'center', whiteSpace: 'nowrap' }}>☔ Chuva</th>
-                  <th style={{ padding: '0.25rem 0.35rem', textAlign: 'center', whiteSpace: 'nowrap' }}>💦 Umid.</th>
+                  <th style={{ padding: '0.2rem 0.4rem', textAlign: 'left', fontWeight: 700, color: '#374151' }}>Hora</th>
+                  <th style={{ padding: '0.2rem 0.3rem', textAlign: 'center' }}>Tempo</th>
+                  <th style={{ padding: '0.2rem 0.3rem', textAlign: 'center', whiteSpace: 'nowrap' }}>🌡️</th>
+                  <th style={{ padding: '0.2rem 0.3rem', textAlign: 'center', whiteSpace: 'nowrap' }}>☔</th>
+                  <th style={{ padding: '0.2rem 0.3rem', textAlign: 'center', whiteSpace: 'nowrap' }}>💦</th>
                 </tr>
               </thead>
               <tbody>
@@ -2035,17 +2095,17 @@ function PrevisaoTempoCompleta({ lat, lng, data, horario }: { lat: number; lng: 
                   const destaque = horaEvento !== null && h.hora === horaEvento
                   return (
                     <tr key={h.hora} style={{ background: destaque ? '#fef9c3' : h.hora % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.02)', borderLeft: destaque ? '3px solid #f59e0b' : '3px solid transparent' }}>
-                      <td style={{ padding: '0.25rem 0.5rem', fontWeight: destaque ? 800 : 600, color: destaque ? '#92400e' : '#374151', whiteSpace: 'nowrap' }}>
-                        {String(h.hora).padStart(2,'0')}:00{destaque ? ' ⏰' : ''}
+                      <td style={{ padding: '0.18rem 0.4rem', fontWeight: destaque ? 800 : 600, color: destaque ? '#92400e' : '#374151', whiteSpace: 'nowrap' }}>
+                        {String(h.hora).padStart(2,'0')}h{destaque ? ' ⏰' : ''}
                       </td>
-                      <td style={{ padding: '0.25rem 0.35rem', textAlign: 'center', fontSize: '0.95rem' }}>{h.emoji}</td>
-                      <td style={{ padding: '0.25rem 0.35rem', textAlign: 'center', fontWeight: 700, color: h.temp >= 32 ? '#b91c1c' : h.temp >= 28 ? '#c2410c' : h.temp >= 22 ? '#15803d' : '#1d4ed8' }}>
-                        {h.temp.toFixed(1)}°
+                      <td style={{ padding: '0.18rem 0.3rem', textAlign: 'center', fontSize: '0.85rem' }}>{h.emoji}</td>
+                      <td style={{ padding: '0.18rem 0.3rem', textAlign: 'center', fontWeight: 700, color: h.temp >= 32 ? '#b91c1c' : h.temp >= 28 ? '#c2410c' : h.temp >= 22 ? '#15803d' : '#1d4ed8' }}>
+                        {h.temp.toFixed(0)}°
                       </td>
-                      <td style={{ padding: '0.25rem 0.35rem', textAlign: 'center', color: h.prob > 60 ? '#1d4ed8' : h.prob > 30 ? '#0891b2' : '#9ca3af', fontWeight: 600 }}>
-                        {h.prob}%{h.precip > 0 ? <span style={{ fontSize: '0.62rem', display: 'block', marginTop: -1 }}>{h.precip.toFixed(1)}mm</span> : ''}
+                      <td style={{ padding: '0.18rem 0.3rem', textAlign: 'center', color: h.prob > 60 ? '#1d4ed8' : h.prob > 30 ? '#0891b2' : '#9ca3af', fontWeight: 600 }}>
+                        {h.prob}%{h.precip > 0 ? <span style={{ fontSize: '0.55rem', display: 'block' }}>{h.precip.toFixed(1)}mm</span> : ''}
                       </td>
-                      <td style={{ padding: '0.25rem 0.35rem', textAlign: 'center', color: '#64748b', fontWeight: 600 }}>
+                      <td style={{ padding: '0.18rem 0.3rem', textAlign: 'center', color: '#64748b', fontWeight: 600 }}>
                         {h.umidade}%
                       </td>
                     </tr>
@@ -2054,7 +2114,7 @@ function PrevisaoTempoCompleta({ lat, lng, data, horario }: { lat: number; lng: 
               </tbody>
             </table>
           </div>
-          <div style={{ padding: '0.2rem 0.65rem', fontSize: '0.58rem', color: '#9ca3af', textAlign: 'right' }}>Fonte: Open-Meteo</div>
+          <div style={{ padding: '0.15rem 0.65rem', fontSize: '0.55rem', color: '#9ca3af', textAlign: 'right' }}>Fonte: Open-Meteo</div>
         </div>
       )}
     </div>
@@ -2211,9 +2271,6 @@ function DetalheP({
               </button>
             )
           })}
-          <span style={{ marginLeft: 'auto', fontSize: '0.78rem', fontWeight: 700, padding: '0.3rem 0.7rem', borderRadius: 20, background: riscoCfg.bg, color: riscoCfg.cor }}>
-            ⚠️ Risco {riscoCfg.label}
-          </span>
         </div>
 
         {/* Info resumida */}
@@ -2327,7 +2384,13 @@ function DetalheP({
               </span>
             )}
           </div>
-          <MapaDetalhe plano={planoLocal} onAdicionarItem={adicionarItem} onRemoverItem={removerItem} />
+          <MapaDetalhe
+            plano={planoLocal}
+            onAdicionarItem={adicionarItem}
+            onRemoverItem={removerItem}
+            posicaoPropria={emProntidao && estadoGps.posicao ? estadoGps.posicao : null}
+            nomeProprio={getNomeAgenteGlobal()}
+          />
         </div>
 
         {/* Observações */}
