@@ -28,7 +28,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run start"
+args = "npm install && npm run build && node server/index.js"
 waitForPort = 5000
 
 [[ports]]
@@ -38,10 +38,6 @@ externalPort = 3001
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 5005
-externalPort = 5000
 
 [deployment]
 deploymentTarget = "autoscale"
@@ -54,5 +50,6 @@ build = ["npx", "vite", "build"]
 VITE_VAPID_PUBLIC_KEY = "BEFNjV7YK4n7Y4dRNMQ31iy15_4K-PkB_9AeRpbDYdJHaGwcsJZDLyqwcbku5TuJh3VFBdZ8C-x5v75AHWTCM70"
 VAPID_PUBLIC_KEY = "BEFNjV7YK4n7Y4dRNMQ31iy15_4K-PkB_9AeRpbDYdJHaGwcsJZDLyqwcbku5TuJh3VFBdZ8C-x5v75AHWTCM70"
 VAPID_SUBJECT = "mailto:defesacivilob@gmail.com"
-NODE_ENV = "development"
+NODE_ENV = "production"
 VITE_USE_SUPABASE = "false"
+PORT = "5000"

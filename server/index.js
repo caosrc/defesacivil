@@ -1531,7 +1531,7 @@ if (existsSync(distPath)) {
   })
 }
 
-const PORT = process.env.PORT || 5000
+const PORT = parseInt(process.env.PORT || '5000', 10)
 
 try {
   await initDb()
