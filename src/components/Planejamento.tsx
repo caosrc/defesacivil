@@ -2337,8 +2337,15 @@ function DetalheP({
         )}
 
         {/* Previsão do tempo horária */}
-        {planoLocal.dataInicio && planoLocal.lat && planoLocal.lng && (
-          <PrevisaoTempoCompleta lat={planoLocal.lat} lng={planoLocal.lng} data={planoLocal.dataInicio} horario={planoLocal.horario} />
+        {planoLocal.dataInicio && (
+          <div style={{ position: 'relative', zIndex: 1000 }}>
+            <PrevisaoTempoCompleta
+              lat={planoLocal.lat ?? OURO_BRANCO_CENTER[0]}
+              lng={planoLocal.lng ?? OURO_BRANCO_CENTER[1]}
+              data={planoLocal.dataInicio}
+              horario={planoLocal.horario}
+            />
+          </div>
         )}
 
         {/* Prontidão — strip compacto */}
