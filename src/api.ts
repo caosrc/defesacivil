@@ -98,8 +98,18 @@ const CAMPOS_LISTA_OCORRENCIA_BASE =
   'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,agentes,responsavel_registro,focos_incendio,created_at'
 
 function isColumnMissingError(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e)
-  return msg.includes('does not exist') || msg.includes('42703')
+  if (e instanceof Error) {
+    return e.message.includes('does not exist') || e.message.includes('42703')
+  }
+  // Supabase retorna plain objects {code, message} — não são instâncias de Error
+  if (e && typeof e === 'object') {
+    const err = e as Record<string, unknown>
+    const code = String(err.code ?? '')
+    const message = String(err.message ?? '')
+    return code === '42703' || message.includes('does not exist')
+  }
+  const s = String(e)
+  return s.includes('does not exist') || s.includes('42703')
 }
 
 export async function listarOcorrencias(): Promise<Ocorrencia[]> {
