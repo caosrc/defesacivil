@@ -7,17 +7,6 @@ const FERIADOS_FIXOS_SET = new Set([
 
 const AGENTES_SEM_SOBREAVISO = new Set(['Talita', 'Cristiane', 'Sócrates'])
 
-// Multiplicador de dia para Talita/Cristiane/Sócrates: sábado ×1,5 · domingo ×2
-function multiplicadorDiaTCS(dataStr: string): number {
-  if (!dataStr) return 1
-  const [y, m, d] = dataStr.split('-').map(Number)
-  if (isNaN(y) || isNaN(m) || isNaN(d)) return 1
-  const dow = new Date(y, m - 1, d).getDay()
-  if (dow === 0) return 2.0   // Domingo
-  if (dow === 6) return 1.5   // Sábado
-  return 1.0
-}
-
 function chaveDataDt(dt: Date): string {
   const y = dt.getFullYear()
   const m = String(dt.getMonth() + 1).padStart(2, '0')
@@ -121,59 +110,37 @@ export async function sincronizarHorasEscala(params: {
   } catch { dados = {} }
 
   if (!dados.horasTrabalhadasSobreaviso) dados.horasTrabalhadasSobreaviso = {}
-  if (!dados.horasExtrasSimples) dados.horasExtrasSimples = {}
   if (!dados.justificativasSobreaviso) dados.justificativasSobreaviso = {}
-  if (!dados.justificativasExtrasSimples) dados.justificativasExtrasSimples = {}
 
   const hts = dados.horasTrabalhadasSobreaviso as Record<string, Record<string, number>>
-  const hes = dados.horasExtrasSimples as Record<string, Record<string, number>>
   const js = dados.justificativasSobreaviso as Record<string, Record<string, string>>
-  const jes = dados.justificativasExtrasSimples as Record<string, Record<string, string>>
 
-  // Remove horas antigas se for edição
+  // Remove horas antigas se for edição — subtrai da data acumulada
   if (oldHorasSobreaviso && oldHorasSobreaviso > 0 && oldAgentes && oldDataStr) {
-    const chaveAntiga = `oc-${ocId}`
     for (const agente of oldAgentes) {
-      const ehSimples = AGENTES_SEM_SOBREAVISO.has(agente)
-      if (ehSimples) {
-        if (hes[agente]?.[chaveAntiga] != null) {
-          delete hes[agente][chaveAntiga]
-        }
-      } else {
-        if (hts[agente]?.[chaveAntiga] != null) {
-          delete hts[agente][chaveAntiga]
-        }
+      if (hts[agente]?.[oldDataStr] != null) {
+        const restante = Math.max(0, (hts[agente][oldDataStr] ?? 0) - oldHorasSobreaviso)
+        if (restante <= 0) delete hts[agente][oldDataStr]
+        else hts[agente][oldDataStr] = Math.round(restante * 100) / 100
       }
     }
   }
 
-  // Adiciona novas horas (somente se > 0)
+  // Adiciona novas horas (somente se > 0) — usa dataStr como chave para que
+  // multiplicadores de sábado/domingo funcionem corretamente na exibição para TODOS os agentes
   if (horasSobreaviso > 0 && dataStr) {
-    const chave = `oc-${ocId}`
-    const justificativa = `Oc.#${ocId} (${dataStr}): ${natureza}`
+    const justificativa = `Oc.#${ocId}: ${natureza}`
     for (const agente of agentes) {
-      const ehSimples = AGENTES_SEM_SOBREAVISO.has(agente)
-      if (ehSimples) {
-        if (!hes[agente]) hes[agente] = {}
-        const mult = multiplicadorDiaTCS(dataStr)
-        const horasComMult = Math.round(horasSobreaviso * mult * 100) / 100
-        hes[agente][chave] = horasComMult
-        if (!jes[agente]) jes[agente] = {}
-        const multTexto = mult === 2 ? ' (×2 domingo)' : mult === 1.5 ? ' (×1,5 sábado)' : ''
-        jes[agente][chave] = `Oc.#${ocId} (${dataStr}): ${natureza}${multTexto}`
-      } else {
-        if (!hts[agente]) hts[agente] = {}
-        hts[agente][chave] = horasSobreaviso
-        if (!js[agente]) js[agente] = {}
-        js[agente][chave] = justificativa
-      }
+      if (!hts[agente]) hts[agente] = {}
+      hts[agente][dataStr] = Math.round(((hts[agente][dataStr] ?? 0) + horasSobreaviso) * 100) / 100
+      if (!js[agente]) js[agente] = {}
+      const existente = js[agente][dataStr] ?? ''
+      js[agente][dataStr] = existente ? `${existente}; Oc.#${ocId}: ${natureza}` : justificativa
     }
   }
 
   dados.horasTrabalhadasSobreaviso = hts
-  dados.horasExtrasSimples = hes
   dados.justificativasSobreaviso = js
-  dados.justificativasExtrasSimples = jes
 
   localStorage.setItem('escala-data-v3', JSON.stringify(dados))
 

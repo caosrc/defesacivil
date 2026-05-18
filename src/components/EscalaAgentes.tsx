@@ -606,13 +606,14 @@ interface BancoHorasAgenteProps {
   feriadosCustom: string[]
   onUpdateHoras: (data: string, horas: number) => void
   onUpdateJustificativa: (data: string, justificativa: string) => void
+  hideSobreaviso?: boolean
 }
 
 function fmtH(h: number): string {
   return h % 1 === 0 ? String(h) : h.toFixed(1)
 }
 
-function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, onUpdateHoras, onUpdateJustificativa }: BancoHorasAgenteProps) {
+function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, onUpdateHoras, onUpdateJustificativa, hideSobreaviso = false }: BancoHorasAgenteProps) {
   const info = AGENTE_MAP[agente]
   const hoje = hojeStr()
   const horasAgente = horasTrabalhadasSobreaviso[agente] ?? {}
@@ -700,7 +701,7 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
         </div>
       )}
 
-      <div className="bh-bloco">
+      {!hideSobreaviso && <div className="bh-bloco">
         <div className="bh-bloco-header">
           <span className="bh-bloco-icone">📟</span>
           <span className="bh-bloco-titulo">Banco de Horas</span>
@@ -819,7 +820,7 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
             })}
           </div>
         )}
-      </div>
+      </div>}
 
       <div className="bh-bloco bh-bloco-sabado">
         <div className="bh-bloco-header">
@@ -1083,16 +1084,18 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
         ) : (
           <div className="bh-domfer-lista">
             {entradas.map(([data, h]) => {
-              const [y, m, d] = data.split('-').map(Number)
-              const dow = new Date(y, m - 1, d).getDay()
-              const nomeDia = DIAS_SEMANA_NOMES[dow]
+              const isDateKey = /^\d{4}-\d{2}-\d{2}/.test(data)
+              const [y, m, d] = isDateKey ? data.split('-').map(Number) : [0, 0, 0]
+              const dow = isDateKey ? new Date(y, m - 1, d).getDay() : -1
+              const nomeDia = isDateKey ? DIAS_SEMANA_NOMES[dow] : '—'
+              const dataDisplay = isDateKey ? `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}` : data
               const justif = justifAgente[data]
               const estaEditando = editandoData === data
               return (
                 <div key={data} className="bh-domfer-row bh-domfer-row--justif">
                   <div className="bh-domfer-row-topo">
                     <span className="bh-domfer-dia">{nomeDia}</span>
-                    <span className="bh-domfer-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}/{y}</span>
+                    <span className="bh-domfer-data">{dataDisplay}</span>
                     {estaEditando ? (
                       <div className="bh-extra-edit-inline">
                         <input
@@ -1193,8 +1196,10 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
       return { ...ag, total, calculado, ajuste, diasFolga, horasFolga, desobreaviso, temFolga, tipo: 'sobreaviso' as const }
     })
     const extras = AGENTES_HORAS_EXTRAS.map(ag => {
-      const horas = horasExtrasSimples[ag.nome] ?? {}
-      const calculado = Object.values(horas).reduce((acc, h) => acc + h, 0)
+      // Horas de ocorrências em horasTrabalhadasSobreaviso (percSobreaviso=0) + entradas manuais
+      const calculadoOc = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, 0, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
+      const horasManuais = horasExtrasSimples[ag.nome] ?? {}
+      const calculado = calculadoOc + Object.values(horasManuais).reduce((acc, h) => acc + h, 0)
       const ajuste = ajustesBanco[ag.nome] ?? 0
       const total = calculado + ajuste
       const horasFolga = horasPorFolga(ag.nome)
@@ -2143,8 +2148,14 @@ async function exportarEscalaMensalExcel(dados: EscalaData, ano: number, mes: nu
     const ehExtra = AGENTES_SEM_SOBREAVISO.has(ag.nome)
     let calc = 0
     if (ehExtra) {
-      const horas = dados.horasExtrasSimples[ag.nome] ?? {}
-      calc = Object.values(horas).reduce((a, h) => a + h, 0)
+      // TCS: horas de ocorrências em horasTrabalhadasSobreaviso (percSobreaviso=0, sáb ×1,5, dom ×2) + entradas manuais
+      calc = calcularBancoHoras(
+        ag.nome, dados.sobreaviso, dados.horasTrabalhadasSobreaviso,
+        dados.percDomingoFeriado, 0, dados.percSabado,
+        dados.feriadosCustom, dados.descontosFolgaBanco, dados.folgas, hoje,
+      )
+      const horasManuais = dados.horasExtrasSimples?.[ag.nome] ?? {}
+      calc += Object.values(horasManuais).reduce((a, h) => a + h, 0)
     } else {
       calc = calcularBancoHoras(
         ag.nome, dados.sobreaviso, dados.horasTrabalhadasSobreaviso,
@@ -2544,7 +2555,26 @@ export default function EscalaAgentes() {
         />
       )}
 
-      {/* Banco de Horas Extras — Talita / Cristiane / Sócrates */}
+      {/* Banco de Horas de Ocorrências — Talita / Cristiane / Sócrates (sábado ×1,5 · domingo ×2) */}
+      {!isMoises && isHorasExtras && (
+        <BancoHorasAgente
+          agente={agenteLogado}
+          sobreavisoSemanal={dados.sobreaviso}
+          horasTrabalhadasSobreaviso={dados.horasTrabalhadasSobreaviso}
+          justificativasSobreaviso={dados.justificativasSobreaviso ?? {}}
+          descontosFolgaBanco={dados.descontosFolgaBanco}
+          folgas={dados.folgas}
+          percDomingoFeriado={dados.percDomingoFeriado}
+          percSobreaviso={0}
+          percSabado={dados.percSabado}
+          feriadosCustom={dados.feriadosCustom}
+          onUpdateHoras={atualizarHorasTrabalhadasSobreaviso}
+          onUpdateJustificativa={atualizarJustificativaSobreaviso}
+          hideSobreaviso={true}
+        />
+      )}
+
+      {/* Banco de Horas Extras Manuais — Talita / Cristiane / Sócrates */}
       {!isMoises && isHorasExtras && (
         <BancoHorasExtraSimples
           agente={agenteLogado}
