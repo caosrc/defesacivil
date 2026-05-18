@@ -48,6 +48,7 @@ export const AGENTE_SENHAS: Record<string, string> = {
   'Vânia': '1210',
   'Valteir': '1234',
   'Talita': '1234',
+  'Graça': '1122',
 }
 
 export function getSenhaAgente(nome: string): string | null {
