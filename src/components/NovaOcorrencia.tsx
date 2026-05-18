@@ -7,6 +7,7 @@ import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
 import { geocodificarEndereco } from '../offline'
 import { formatarCoordenadas, adicionarMarcaDagua, mensagemErroGps } from '../utils'
+import { calcularHorasTotal, calcularHorasSobreaviso, formatarHoras, sincronizarHorasEscala } from '../horasUtils'
 
 // Fix Leaflet default icon
 ;(function fixLeafletIcon() {
@@ -43,6 +44,8 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const [nivelRisco, setNivelRisco] = useState<NivelRisco>('baixo')
   const [statusOc, setStatusOc] = useState<StatusOc>('ativo')
   const [dataOcorrencia, setDataOcorrencia] = useState(hoje)
+  const [horaInicio, setHoraInicio] = useState('')
+  const [horaFim, setHoraFim] = useState('')
   const [fotos, setFotos] = useState<string[]>([])
   const [fotoAmpliada, setFotoAmpliada] = useState<number | null>(null)
   const [lat, setLat] = useState<number | null>(null)
@@ -205,6 +208,11 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       ? focosIncendio.filter(f => f.lat != null && f.lng != null).map(f => ({ lat: f.lat!, lng: f.lng! }))
       : null
 
+    const horasTotal = (horaInicio && horaFim) ? calcularHorasTotal(horaInicio, horaFim) : null
+    const horasSobreaviso = (horaInicio && horaFim && dataOcorrencia)
+      ? calcularHorasSobreaviso(dataOcorrencia, horaInicio, horaFim)
+      : null
+
     const payload = {
       tipo: tipoFinal,
       natureza,
@@ -212,6 +220,10 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       nivel_risco: nivelRisco,
       status_oc: statusOc,
       data_ocorrencia: dataOcorrencia || null,
+      hora_inicio: horaInicio || null,
+      hora_fim: horaFim || null,
+      horas_total: horasTotal,
+      horas_sobreaviso: horasSobreaviso,
       fotos,
       lat: finalLat,
       lng: finalLng,
@@ -229,6 +241,18 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       const resultado = await criarOcorrencia(payload as any)
       setSalvando(false)
       const foiOffline = !!(resultado as any)._offline
+
+      // Atualiza banco de horas dos agentes se houver horas de sobreaviso
+      if (!foiOffline && horasSobreaviso && horasSobreaviso > 0 && agentes.length > 0 && dataOcorrencia) {
+        sincronizarHorasEscala({
+          agentes,
+          dataStr: dataOcorrencia,
+          horasSobreaviso,
+          ocId: (resultado as any).id ?? 'novo',
+          natureza,
+        }).catch(() => {})
+      }
+
       onSalvo(foiOffline)
     } catch (e: any) {
       setSalvando(false)
@@ -385,6 +409,45 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
               max={new Date().toISOString().split('T')[0]}
               onChange={(e) => setDataOcorrencia(e.target.value)}
             />
+          </div>
+
+          {/* 5b - Horário inicial e final */}
+          <div className="campo">
+            <label className="campo-label">5b — Horário da Ocorrência (opcional)</label>
+            <div className="horario-row">
+              <div className="horario-item">
+                <label className="horario-sublabel">Início</label>
+                <input
+                  className="campo-input"
+                  type="time"
+                  value={horaInicio}
+                  onChange={(e) => setHoraInicio(e.target.value)}
+                />
+              </div>
+              <div className="horario-item">
+                <label className="horario-sublabel">Fim</label>
+                <input
+                  className="campo-input"
+                  type="time"
+                  value={horaFim}
+                  onChange={(e) => setHoraFim(e.target.value)}
+                />
+              </div>
+            </div>
+            {horaInicio && horaFim && (() => {
+              const total = calcularHorasTotal(horaInicio, horaFim)
+              const sobreaviso = calcularHorasSobreaviso(dataOcorrencia, horaInicio, horaFim)
+              return (
+                <div className="horario-resumo">
+                  <span className="horario-total">⏱ Total: <strong>{formatarHoras(total)}</strong></span>
+                  {sobreaviso > 0
+                    ? <span className="horario-sobreaviso">🌙 Sobreaviso: <strong>{formatarHoras(sobreaviso)}</strong></span>
+                    : <span className="horario-sem-sobreaviso">☀️ Sem horas de sobreaviso (horário comercial)</span>
+                  }
+                </div>
+              )
+            })()}
+            <div className="geo-dica">💡 Horas fora do horário comercial (Seg–Sex 07h–17h) ou em finais de semana e feriados entram no banco de horas</div>
           </div>
 
           {/* 6 - Fotos */}

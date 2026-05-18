@@ -318,6 +318,48 @@ input, select, textarea { font-family: inherit; }
   font-style: italic;
 }
 
+/* ── Horário da Ocorrência ─────────────────────────────────────── */
+.horario-row {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.4rem;
+}
+.horario-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.horario-sublabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.horario-resumo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #f0f7ff;
+  border-radius: 8px;
+  border: 1px solid #bfdbfe;
+}
+.horario-total {
+  font-size: 0.85rem;
+  color: #374151;
+}
+.horario-sobreaviso {
+  font-size: 0.85rem;
+  color: #1d4ed8;
+}
+.horario-sem-sobreaviso {
+  font-size: 0.85rem;
+  color: #9ca3af;
+}
+
 /* ── Header ───────────────────────────────────────────────────── */
 .header {
   background: linear-gradient(100deg, #1a3a6c 0%, #1a6bbf 100%);

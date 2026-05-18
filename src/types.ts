@@ -25,6 +25,10 @@ export interface Ocorrencia {
   recomendacao: string | null
   conclusao: string | null
   data_ocorrencia: string | null
+  hora_inicio: string | null
+  hora_fim: string | null
+  horas_total: number | null
+  horas_sobreaviso: number | null
   created_at: string
   agentes: string[]
   responsavel_registro: string | null
@@ -73,6 +77,7 @@ export const NATUREZAS = [
   'Interdição de Via',
   'Acidente de Trânsito',
   'Sinalização de Segurança',
+  'Eventos',
 ]
 
 export const NATUREZA_ICONE: Record<string, string> = {
@@ -96,6 +101,7 @@ export const NATUREZA_ICONE: Record<string, string> = {
   'Interdição de Via': '🚧',
   'Acidente de Trânsito': '🚗',
   'Sinalização de Segurança': '🚦',
+  'Eventos': '🎪',
 }
 
 export const NATUREZA_COR: Record<string, string> = {
@@ -119,4 +125,5 @@ export const NATUREZA_COR: Record<string, string> = {
   'Interdição de Via': '#c2410c',
   'Acidente de Trânsito': '#ef4444',
   'Sinalização de Segurança': '#f59e0b',
+  'Eventos': '#0891b2',
 }

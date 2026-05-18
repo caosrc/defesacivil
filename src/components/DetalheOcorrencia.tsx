@@ -7,6 +7,7 @@ import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
 import { formatarCoordenadas, parseDateLocal, mensagemErroGps, adicionarMarcaDagua } from '../utils'
 import ModalSenha from './ModalSenha'
+import { calcularHorasTotal, calcularHorasSobreaviso, formatarHoras, sincronizarHorasEscala } from '../horasUtils'
 
 interface Props {
   ocorrencia: Ocorrencia
@@ -137,6 +138,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [eNivel, setENivel] = useState<NivelRisco>(o.nivel_risco)
   const [eStatus, setEStatus] = useState<StatusOc>(o.status_oc)
   const [eDataOcorrencia, setEDataOcorrencia] = useState(o.data_ocorrencia ?? '')
+  const [eHoraInicio, setEHoraInicio] = useState(o.hora_inicio ?? '')
+  const [eHoraFim, setEHoraFim] = useState(o.hora_fim ?? '')
   const _endParts = (o.endereco ?? '').split(', ')
   const [eRua, setERua] = useState(_endParts[0] ?? '')
   const [eNumero, setENumero] = useState(_endParts[1] ?? '')
@@ -165,6 +168,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setENivel(o.nivel_risco)
     setEStatus(o.status_oc)
     setEDataOcorrencia(o.data_ocorrencia ?? '')
+    setEHoraInicio(o.hora_inicio ?? '')
+    setEHoraFim(o.hora_fim ?? '')
     const partes = (o.endereco ?? '').split(', ')
     setERua(partes[0] ?? '')
     setENumero(partes[1] ?? '')
@@ -246,6 +251,11 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setSalvando(true)
     setErroEdit('')
     try {
+      const horasTotal = (eHoraInicio && eHoraFim) ? calcularHorasTotal(eHoraInicio, eHoraFim) : null
+      const horasSobreaviso = (eHoraInicio && eHoraFim && eDataOcorrencia)
+        ? calcularHorasSobreaviso(eDataOcorrencia, eHoraInicio, eHoraFim)
+        : null
+
       const dadosEditados = {
         tipo: tipoFinal,
         natureza: eNatureza,
@@ -253,6 +263,10 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         nivel_risco: eNivel,
         status_oc: eStatus,
         data_ocorrencia: eDataOcorrencia || null,
+        hora_inicio: eHoraInicio || null,
+        hora_fim: eHoraFim || null,
+        horas_total: horasTotal,
+        horas_sobreaviso: horasSobreaviso,
         fotos: eFotos,
         lat: finalLat,
         lng: finalLng,
@@ -270,6 +284,21 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
       } else {
         atualizado = await atualizarOcorrencia(o.id, dadosEditados)
       }
+
+      // Sincroniza banco de horas dos agentes (remove antigas, adiciona novas)
+      if (!o._offline) {
+        sincronizarHorasEscala({
+          agentes: eAgentes,
+          dataStr: eDataOcorrencia || '',
+          horasSobreaviso: horasSobreaviso ?? 0,
+          ocId: o.id,
+          natureza: eNatureza,
+          oldAgentes: Array.isArray(o.agentes) ? o.agentes : [],
+          oldDataStr: o.data_ocorrencia ?? '',
+          oldHorasSobreaviso: o.horas_sobreaviso ? Number(o.horas_sobreaviso) : 0,
+        }).catch(() => {})
+      }
+
       setO(atualizado)
       onAtualizado(atualizado)
       setEditando(false)
@@ -461,6 +490,34 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                   <InfoRow icone="📅" label="Data da Ocorrência"
                     valor={parseDateLocal(o.data_ocorrencia)?.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' }) ?? '—'}
                   />
+                )}
+
+                {(o.hora_inicio || o.hora_fim) && (
+                  <div className="info-row">
+                    <span className="info-icone">🕐</span>
+                    <div>
+                      <div className="info-label">Horário da Ocorrência</div>
+                      <div className="info-valor">
+                        {o.hora_inicio && o.hora_fim
+                          ? `${o.hora_inicio} → ${o.hora_fim}`
+                          : o.hora_inicio ? `Início: ${o.hora_inicio}` : `Fim: ${o.hora_fim}`
+                        }
+                        {o.horas_total != null && o.horas_total > 0 && (
+                          <span style={{ marginLeft: '0.6rem', color: '#6b7280' }}>({formatarHoras(Number(o.horas_total))} no total)</span>
+                        )}
+                      </div>
+                      {o.horas_sobreaviso != null && Number(o.horas_sobreaviso) > 0 && (
+                        <div className="info-valor" style={{ color: '#1d4ed8', fontWeight: 700, marginTop: '0.15rem' }}>
+                          🌙 {formatarHoras(Number(o.horas_sobreaviso))} de sobreaviso — lançado no banco de horas
+                        </div>
+                      )}
+                      {o.horas_sobreaviso === 0 && o.horas_total != null && o.horas_total > 0 && (
+                        <div className="info-valor" style={{ color: '#9ca3af', marginTop: '0.15rem' }}>
+                          ☀️ Horário comercial — sem horas de sobreaviso
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
 
                 {(o.lat && o.lng) && (
@@ -712,6 +769,44 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                     max={new Date().toISOString().split('T')[0]}
                     onChange={(e) => setEDataOcorrencia(e.target.value)}
                   />
+                </div>
+
+                {/* Horário */}
+                <div className="campo campo-edit">
+                  <label className="campo-label">🕐 Horário da Ocorrência (opcional)</label>
+                  <div className="horario-row">
+                    <div className="horario-item">
+                      <label className="horario-sublabel">Início</label>
+                      <input
+                        className="campo-input"
+                        type="time"
+                        value={eHoraInicio}
+                        onChange={(e) => setEHoraInicio(e.target.value)}
+                      />
+                    </div>
+                    <div className="horario-item">
+                      <label className="horario-sublabel">Fim</label>
+                      <input
+                        className="campo-input"
+                        type="time"
+                        value={eHoraFim}
+                        onChange={(e) => setEHoraFim(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  {eHoraInicio && eHoraFim && (() => {
+                    const total = calcularHorasTotal(eHoraInicio, eHoraFim)
+                    const sobreaviso = calcularHorasSobreaviso(eDataOcorrencia, eHoraInicio, eHoraFim)
+                    return (
+                      <div className="horario-resumo">
+                        <span className="horario-total">⏱ Total: <strong>{formatarHoras(total)}</strong></span>
+                        {sobreaviso > 0
+                          ? <span className="horario-sobreaviso">🌙 Sobreaviso: <strong>{formatarHoras(sobreaviso)}</strong></span>
+                          : <span className="horario-sem-sobreaviso">☀️ Sem horas de sobreaviso</span>
+                        }
+                      </div>
+                    )
+                  })()}
                 </div>
 
                 {/* Endereço */}

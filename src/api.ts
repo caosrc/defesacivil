@@ -64,6 +64,10 @@ function buildPayload(dados: Omit<Ocorrencia, 'id' | 'created_at'>) {
     recomendacao: dados.recomendacao ?? null,
     conclusao: dados.conclusao ?? null,
     data_ocorrencia: dados.data_ocorrencia ?? null,
+    hora_inicio: dados.hora_inicio ?? null,
+    hora_fim: dados.hora_fim ?? null,
+    horas_total: dados.horas_total ?? null,
+    horas_sobreaviso: dados.horas_sobreaviso ?? null,
     agentes: Array.isArray(dados.agentes) ? dados.agentes : [],
     responsavel_registro: dados.responsavel_registro ?? null,
     vistorias: Array.isArray(dados.vistorias) ? dados.vistorias : [],
@@ -87,7 +91,7 @@ export class ApiError extends Error {
 
 // Campos leves para listagem/mapa — exclui fotos e vistorias (base64 pesado)
 const CAMPOS_LISTA_OCORRENCIA =
-  'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,agentes,responsavel_registro,focos_incendio,created_at'
+  'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,hora_inicio,hora_fim,horas_total,horas_sobreaviso,agentes,responsavel_registro,focos_incendio,created_at'
 
 export async function listarOcorrencias(): Promise<Ocorrencia[]> {
   // Supabase direto quando disponível (Netlify)
