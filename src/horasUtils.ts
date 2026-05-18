@@ -7,6 +7,17 @@ const FERIADOS_FIXOS_SET = new Set([
 
 const AGENTES_SEM_SOBREAVISO = new Set(['Talita', 'Cristiane', 'Sócrates'])
 
+// Multiplicador de dia para Talita/Cristiane/Sócrates: sábado ×1,5 · domingo ×2
+function multiplicadorDiaTCS(dataStr: string): number {
+  if (!dataStr) return 1
+  const [y, m, d] = dataStr.split('-').map(Number)
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return 1
+  const dow = new Date(y, m - 1, d).getDay()
+  if (dow === 0) return 2.0   // Domingo
+  if (dow === 6) return 1.5   // Sábado
+  return 1.0
+}
+
 function chaveDataDt(dt: Date): string {
   const y = dt.getFullYear()
   const m = String(dt.getMonth() + 1).padStart(2, '0')
@@ -144,9 +155,12 @@ export async function sincronizarHorasEscala(params: {
       const ehSimples = AGENTES_SEM_SOBREAVISO.has(agente)
       if (ehSimples) {
         if (!hes[agente]) hes[agente] = {}
-        hes[agente][chave] = horasSobreaviso
+        const mult = multiplicadorDiaTCS(dataStr)
+        const horasComMult = Math.round(horasSobreaviso * mult * 100) / 100
+        hes[agente][chave] = horasComMult
         if (!jes[agente]) jes[agente] = {}
-        jes[agente][chave] = justificativa
+        const multTexto = mult === 2 ? ' (×2 domingo)' : mult === 1.5 ? ' (×1,5 sábado)' : ''
+        jes[agente][chave] = `Oc.#${ocId} (${dataStr}): ${natureza}${multTexto}`
       } else {
         if (!hts[agente]) hts[agente] = {}
         hts[agente][chave] = horasSobreaviso

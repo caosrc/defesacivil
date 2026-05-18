@@ -503,12 +503,12 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                           : o.hora_inicio ? `Início: ${o.hora_inicio}` : `Fim: ${o.hora_fim}`
                         }
                         {o.horas_total != null && o.horas_total > 0 && (
-                          <span style={{ marginLeft: '0.6rem', color: '#6b7280' }}>({formatarHoras(Number(o.horas_total))} no total)</span>
+                          <span style={{ marginLeft: '0.6rem', color: '#6b7280' }}>({formatarHoras(Number(o.horas_total))} de ocorrência)</span>
                         )}
                       </div>
-                      {o.horas_sobreaviso != null && Number(o.horas_sobreaviso) > 0 && (
+                      {o.horas_total != null && o.horas_total > 0 && Number(o.horas_sobreaviso) > 0 && (
                         <div className="info-valor" style={{ color: '#1d4ed8', fontWeight: 700, marginTop: '0.15rem' }}>
-                          🌙 {formatarHoras(Number(o.horas_sobreaviso))} de sobreaviso — lançado no banco de horas
+                          ⏱ {formatarHoras(Number(o.horas_total))} de ocorrência — lançado no banco de horas
                         </div>
                       )}
                       {o.horas_sobreaviso === 0 && o.horas_total != null && o.horas_total > 0 && (

@@ -1026,7 +1026,7 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
       <div className="bh-bloco">
         <div className="bh-bloco-header">
           <span className="bh-bloco-icone">⏱️</span>
-          <span className="bh-bloco-titulo">Horas extras (sem multiplicador)</span>
+          <span className="bh-bloco-titulo">Horas extras (×1 dia útil · ×1,5 sábado · ×2 domingo)</span>
           <span className="bh-bloco-total">{fmtH(total)}h</span>
         </div>
 
