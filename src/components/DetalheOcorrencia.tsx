@@ -773,7 +773,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
 
                 {/* Horário */}
                 <div className="campo campo-edit">
-                  <label className="campo-label">🕐 Horário da Ocorrência (opcional)</label>
+                  <label className="campo-label">🕐 Horário da Ocorrência</label>
                   <div className="horario-row">
                     <div className="horario-item">
                       <label className="horario-sublabel">Início</label>

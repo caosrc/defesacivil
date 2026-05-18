@@ -254,11 +254,15 @@ export async function atualizarOcorrencia(
   id: number,
   dados: Partial<Ocorrencia>
 ): Promise<Ocorrencia> {
-  const { id: _i, created_at: _c, _offline: _o, _localId: _l, ...payload } = dados as Record<string, unknown>
+  const { id: _i, created_at: _c, _offline: _o, _localId: _l, ...payloadRaw } = dados as Record<string, unknown>
   void _i; void _c; void _o; void _l
 
   // Supabase direto quando disponível (Netlify)
   if (supabaseDisponivel) {
+    // Comprime fotos antes de enviar para evitar payload > 10 MB no Supabase
+    const fotosComprimidas = await comprimirFotos(Array.isArray(payloadRaw.fotos) ? payloadRaw.fotos as unknown[] : [])
+    const payload = { ...payloadRaw, fotos: fotosComprimidas }
+
     let { data, error } = await supabase
       .from('ocorrencias')
       .update(payload)

@@ -413,7 +413,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
 
           {/* 5b - Horário inicial e final */}
           <div className="campo">
-            <label className="campo-label">5b — Horário da Ocorrência (opcional)</label>
+            <label className="campo-label">5b — Horário da Ocorrência</label>
             <div className="horario-row">
               <div className="horario-item">
                 <label className="horario-sublabel">Início</label>
