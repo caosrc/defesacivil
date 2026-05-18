@@ -93,6 +93,15 @@ export class ApiError extends Error {
 const CAMPOS_LISTA_OCORRENCIA =
   'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,hora_inicio,hora_fim,horas_total,horas_sobreaviso,agentes,responsavel_registro,focos_incendio,created_at'
 
+// Fallback sem colunas que podem não existir em Supabase mais antigo
+const CAMPOS_LISTA_OCORRENCIA_BASE =
+  'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,agentes,responsavel_registro,focos_incendio,created_at'
+
+function isColumnMissingError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e)
+  return msg.includes('does not exist') || msg.includes('42703')
+}
+
 export async function listarOcorrencias(): Promise<Ocorrencia[]> {
   // Supabase direto quando disponível (Netlify)
   if (supabaseDisponivel) {
@@ -102,9 +111,32 @@ export async function listarOcorrencias(): Promise<Ocorrencia[]> {
         .select(CAMPOS_LISTA_OCORRENCIA)
         .order('created_at', { ascending: false })
         .limit(500)
-      if (error) throw new Error(error.message)
+      if (error) {
+        // Colunas ainda não adicionadas ao Supabase — tenta query base sem hora_*
+        if (isColumnMissingError(error)) {
+          console.warn('[api] Supabase sem colunas hora_* — usando query base. Execute o SQL de migração no Supabase.')
+          const { data: data2, error: error2 } = await supabase
+            .from('ocorrencias')
+            .select(CAMPOS_LISTA_OCORRENCIA_BASE)
+            .order('created_at', { ascending: false })
+            .limit(500)
+          if (error2) throw new Error(error2.message)
+          return (data2 || []) as Ocorrencia[]
+        }
+        throw new Error(error.message)
+      }
       return (data || []) as Ocorrencia[]
     } catch (e) {
+      if (isColumnMissingError(e)) {
+        try {
+          const { data: data2, error: error2 } = await supabase
+            .from('ocorrencias')
+            .select(CAMPOS_LISTA_OCORRENCIA_BASE)
+            .order('created_at', { ascending: false })
+            .limit(500)
+          if (!error2) return (data2 || []) as Ocorrencia[]
+        } catch { /* segue para Express */ }
+      }
       console.warn('[api] listarOcorrencias Supabase falhou:', e)
     }
   }
@@ -158,14 +190,22 @@ export async function enviarOcorrenciaServidor(
     const dadosComprimidos = { ...dados, fotos: fotosComprimidas }
     const payload = buildPayload(dadosComprimidos)
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('ocorrencias')
       .insert(payload)
       .select()
       .single()
+    if (error && isColumnMissingError(error)) {
+      // Colunas hora_* não existem no Supabase — tenta sem elas
+      console.warn('[api] Supabase insert: colunas hora_* ausentes, tentando sem elas. Execute o SQL de migração.')
+      const { hora_inicio: _hi, hora_fim: _hf, horas_total: _ht, horas_sobreaviso: _hs, ...payloadBase } = payload as Record<string, unknown>
+      void _hi; void _hf; void _ht; void _hs
+      const r2 = await supabase.from('ocorrencias').insert(payloadBase).select().single()
+      data = r2.data
+      error = r2.error
+    }
     if (error) {
       console.error('[api] Supabase insert error:', error)
-      // Inclui o código do erro para facilitar diagnóstico
       const detalhe = error.code ? `[${error.code}] ${error.message}` : error.message
       throw new ApiError(500, detalhe)
     }
@@ -219,12 +259,20 @@ export async function atualizarOcorrencia(
 
   // Supabase direto quando disponível (Netlify)
   if (supabaseDisponivel) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('ocorrencias')
       .update(payload)
       .eq('id', id)
       .select()
       .single()
+    if (error && isColumnMissingError(error)) {
+      // Colunas hora_* ausentes no Supabase — tenta sem elas
+      const { hora_inicio: _hi, hora_fim: _hf, horas_total: _ht, horas_sobreaviso: _hs, ...payloadBase } = payload as Record<string, unknown>
+      void _hi; void _hf; void _ht; void _hs
+      const r2 = await supabase.from('ocorrencias').update(payloadBase).eq('id', id).select().single()
+      data = r2.data
+      error = r2.error
+    }
     if (error) throw new Error(error.message)
     if (!data) throw new Error('Ocorrência não encontrada')
     return data as Ocorrencia
@@ -251,6 +299,36 @@ export async function atualizarOcorrencia(
   }
 
   throw new Error('Servidor indisponível')
+}
+
+// Busca fotos e vistorias em lote para exportação (evita N chamadas individuais)
+export async function buscarFotosOcorrencias(
+  ids: number[]
+): Promise<Record<number, { fotos: string[]; vistorias: unknown[] }>> {
+  if (ids.length === 0) return {}
+
+  // Supabase — busca apenas os campos pesados num único SELECT
+  if (supabaseDisponivel) {
+    try {
+      const { data } = await supabase
+        .from('ocorrencias')
+        .select('id,fotos,vistorias')
+        .in('id', ids)
+      const result: Record<number, { fotos: string[]; vistorias: unknown[] }> = {}
+      for (const row of data ?? []) {
+        result[row.id] = {
+          fotos: Array.isArray(row.fotos) ? row.fotos : [],
+          vistorias: Array.isArray(row.vistorias) ? row.vistorias : [],
+        }
+      }
+      return result
+    } catch {
+      return {}
+    }
+  }
+
+  // Express — o /api/ocorrencias já retorna tudo; retorna vazio (fotos já estão na lista)
+  return {}
 }
 
 export async function deletarOcorrencia(id: number): Promise<void> {
