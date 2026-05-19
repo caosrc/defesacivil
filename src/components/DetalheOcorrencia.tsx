@@ -286,15 +286,18 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
       }
 
       // Sincroniza banco de horas dos agentes (remove antigas, adiciona novas)
+      // Usa sempre a data de criação (created_at) como chave no banco de horas,
+      // para que editar data_ocorrencia NÃO mova as horas para outro dia.
       if (!o._offline) {
+        const dataParaBanco = o.created_at ? o.created_at.slice(0, 10) : (eDataOcorrencia || '')
         sincronizarHorasEscala({
           agentes: eAgentes,
-          dataStr: eDataOcorrencia || '',
+          dataStr: dataParaBanco,
           horasSobreaviso: horasSobreaviso ?? 0,
           ocId: o.id,
           natureza: eNatureza,
           oldAgentes: Array.isArray(o.agentes) ? o.agentes : [],
-          oldDataStr: o.data_ocorrencia ?? '',
+          oldDataStr: dataParaBanco,
           oldHorasSobreaviso: o.horas_sobreaviso ? Number(o.horas_sobreaviso) : 0,
         }).catch(() => {})
       }

@@ -186,24 +186,31 @@ export function dispararSos(
       // 2. Obtém GPS e bateria EM PARALELO enquanto o agente fala
       const [gps, bateria] = await Promise.all([lerGps(), lerBateria()])
 
-      // 3. Aguarda o áudio terminar (timer de 10 s interno ao MediaRecorder)
-      audio = await gravacao.audioPromise
-      clearInterval(tick)
+      if (abortado) { clearInterval(tick); gravacao.abortar(); resolverEnviado(null); return null }
 
-      if (abortado) { resolverEnviado(null); return null }
-
-      // 4. Envia tudo junto com áudio já incluído
-      const alertaFinal: SosAlerta = {
+      // 3. Envia o alerta IMEDIATAMENTE após obter GPS/bateria (sem esperar o áudio)
+      //    → outros agentes recebem o alerta em poucos segundos
+      const alertaInicial: SosAlerta = {
         id, agente,
         lat: gps?.lat ?? null,
         lng: gps?.lng ?? null,
         bateria,
-        audio,
+        audio: null,
         timestamp,
       }
-      enviarSosTodosOsCanais({ tipo: 'sos', ...alertaFinal })
-      resolverEnviado(alertaFinal)
-      return alertaFinal
+      enviarSosTodosOsCanais({ tipo: 'sos', ...alertaInicial })
+      resolverEnviado(alertaInicial)
+
+      // 4. Aguarda o áudio terminar (timer de 10 s interno ao MediaRecorder)
+      audio = await gravacao.audioPromise
+      clearInterval(tick)
+
+      // 5. Envia o áudio como atualização separada
+      if (!abortado && audio) {
+        enviarSosTodosOsCanais({ tipo: 'sos-audio', id, audio })
+      }
+
+      return { ...alertaInicial, audio }
 
     } else {
       // Sem microfone: notifica e envia somente com GPS

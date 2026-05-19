@@ -10,6 +10,18 @@ const openHandlers = new Set<OpenHandler>()
 let ws: WebSocket | null = null
 let isOpen = false
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let pingTimer: ReturnType<typeof setInterval> | null = null
+
+function iniciarPingOnline() {
+  if (pingTimer) clearInterval(pingTimer)
+  pingTimer = setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      const id = getMeuId()
+      const nome = getMeuNome()
+      ws.send(JSON.stringify({ tipo: 'online_ping', id, nome }))
+    }
+  }, 30_000)
+}
 
 // Mapa local de agentes online para o path Supabase Realtime
 const sbAgentesOnline = new Map<string, { nome: string; ts: number }>()
@@ -88,6 +100,7 @@ function connect() {
     const nome = getMeuNome()
     ws!.send(JSON.stringify({ tipo: 'online', id, nome }))
     openHandlers.forEach(h => { try { h() } catch { /* ignore */ } })
+    iniciarPingOnline()
   }
 
   ws.onmessage = (event) => {
@@ -104,6 +117,7 @@ function connect() {
   ws.onclose = () => {
     isOpen = false
     ws = null
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null }
     if (!reconnectTimer) {
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null

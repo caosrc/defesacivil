@@ -638,34 +638,31 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
 
   const estaDesobreaviso = (sobreavisoSemanal[hoje] ?? []).includes(agente)
 
-  // ── Cálculo separado dos dois buckets ─────────────────────────
+  // ── Cálculo separado dos buckets ──────────────────────────────
   // Bucket 1 — Sobreaviso: base (14h × turnos) + acionamentos em dias úteis
-  // Bucket 2 — Domingos/Feriados: acionamentos em domingos/feriados
+  // Bucket 2 — Fins de semana e feriados: sábados + domingos + feriados
 
-  const { horasSobreaviso, horasSabado, horasDomFer, descontosFolga, descontosAuto } = useMemo(() => {
-    // Só conta horas dos turnos JÁ passados (data < hoje)
+  const { horasSobreaviso, horasFimSemana, descontosFolga, descontosAuto } = useMemo(() => {
     const numTurnosPassados = semanasDoAgente.filter(d => d < hoje).length
     const base = numTurnosPassados * HORAS_POR_DIA_SOBREAVISO
 
-    let extSb = 0   // extras em dias úteis de sobreaviso
-    let extSab = 0
-    let extDF = 0   // extras em domingos/feriados durante sobreaviso
+    let extSb = 0   // extras em dias úteis
+    let extFS = 0   // extras em fins de semana e feriados (sáb + dom + fer)
 
     for (const [data, h] of Object.entries(horasAgente)) {
       const isFerOuDom = ehFeriadoOuDomingo(data, feriadosCustom)
       const isSabado = ehSabadoComum(data, feriadosCustom)
       const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
-      if (isFerOuDom) extDF += h * mult
-      else if (isSabado) extSab += h * mult
+      if (isFerOuDom || isSabado) extFS += h * mult
       else extSb += h * mult
     }
 
     const descontos = Object.values(descontosAgente).reduce((acc, h) => acc + h, 0)
     const descontosAuto = folgasConsumidas.length * horasPorFolga(agente)
-    return { horasSobreaviso: base + extSb, horasSabado: extSab, horasDomFer: extDF, descontosFolga: descontos, descontosAuto }
+    return { horasSobreaviso: base + extSb, horasFimSemana: extFS, descontosFolga: descontos, descontosAuto }
   }, [semanasDoAgente, horasAgente, descontosAgente, folgasConsumidas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, hoje])
 
-  const totalBruto = horasSobreaviso + horasSabado + horasDomFer
+  const totalBruto = horasSobreaviso + horasFimSemana
   const totalGeral = totalBruto - descontosFolga - descontosAuto
 
   // Horas de acionamento em dias úteis de uma semana específica
@@ -822,63 +819,34 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
         )}
       </div>}
 
-      <div className="bh-bloco bh-bloco-sabado">
-        <div className="bh-bloco-header">
-          <span className="bh-bloco-icone">🗓️</span>
-          <span className="bh-bloco-titulo">Banco de Horas — Sábados</span>
-          <span className="bh-bloco-total">{fmtH(horasSabado)}h</span>
-        </div>
-
-        {horasSabado === 0 ? (
-          <p className="bh-card-vazio">Nenhuma hora em sábado registrada.</p>
-        ) : (
-          <div className="bh-domfer-lista">
-            {Object.entries(horasAgente)
-              .filter(([data]) => ehSabadoComum(data, feriadosCustom) && (horasAgente[data] ?? 0) > 0)
-              .sort(([a], [b]) => b.localeCompare(a))
-              .map(([data, hInput]) => {
-                const [y, m, d] = data.split('-').map(Number)
-                const hCalc = hInput * multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
-                return (
-                  <div key={data} className="bh-domfer-row">
-                    <span className="bh-domfer-dia">Sáb</span>
-                    <span className="bh-domfer-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}/{y}</span>
-                    <span className="bh-domfer-input">{fmtH(hInput)}h</span>
-                    <span className="bh-domfer-mult">×{(1 + percSabado / 100).toFixed(1)}</span>
-                    <span className="bh-domfer-calc">= {fmtH(hCalc)}h</span>
-                  </div>
-                )
-              })}
-          </div>
-        )}
-      </div>
-
       <div className="bh-bloco bh-bloco-domfer">
         <div className="bh-bloco-header">
           <span className="bh-bloco-icone">☀️</span>
-          <span className="bh-bloco-titulo">Banco de Horas — Domingos e Feriados</span>
-          <span className="bh-bloco-total">{fmtH(horasDomFer)}h</span>
+          <span className="bh-bloco-titulo">Fins de Semana e Feriados</span>
+          <span className="bh-bloco-total">{fmtH(horasFimSemana)}h</span>
         </div>
 
-        {horasDomFer === 0 ? (
-          <p className="bh-card-vazio">Nenhuma hora em domingo/feriado registrada.</p>
+        {horasFimSemana === 0 ? (
+          <p className="bh-card-vazio">Nenhuma hora em fim de semana/feriado registrada.</p>
         ) : (
           <div className="bh-domfer-lista">
             {Object.entries(horasAgente)
-              .filter(([data]) => ehFeriadoOuDomingo(data, feriadosCustom) && (horasAgente[data] ?? 0) > 0)
+              .filter(([data]) => (ehFeriadoOuDomingo(data, feriadosCustom) || ehSabadoComum(data, feriadosCustom)) && (horasAgente[data] ?? 0) > 0)
               .sort(([a], [b]) => b.localeCompare(a))
               .map(([data, hInput]) => {
                 const [y, m, d] = data.split('-').map(Number)
+                const isSabado = ehSabadoComum(data, feriadosCustom)
                 const dow = new Date(y, m - 1, d).getDay()
-                const nomeDia = DIAS_SEMANA_NOMES[dow]
+                const nomeDia = isSabado ? 'Sáb' : DIAS_SEMANA_NOMES[dow]
                 const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
+                const percUsado = isSabado ? percSabado : percDomingoFeriado
                 const hCalc = hInput * mult
                 return (
                   <div key={data} className="bh-domfer-row">
                     <span className="bh-domfer-dia">{nomeDia}</span>
                     <span className="bh-domfer-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}/{y}</span>
                     <span className="bh-domfer-input">{fmtH(hInput)}h</span>
-                    <span className="bh-domfer-mult">×{(1 + percDomingoFeriado / 100).toFixed(1)}</span>
+                    <span className="bh-domfer-mult">×{(1 + percUsado / 100).toFixed(1)}</span>
                     <span className="bh-domfer-calc">= {fmtH(hCalc)}h</span>
                   </div>
                 )
