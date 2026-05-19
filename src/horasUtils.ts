@@ -25,15 +25,12 @@ function ehFimDeSemanaOuFeriado(chave: string, feriadosCustom: string[] = []): b
 }
 
 function minutesSobravisoNoDia(
-  chave: string,
+  _chave: string,
   deMin: number,
   ateMin: number,
-  feriadosCustom: string[] = [],
+  _feriadosCustom: string[] = [],
 ): number {
   if (ateMin <= deMin) return 0
-  if (ehFimDeSemanaOuFeriado(chave, feriadosCustom)) {
-    return ateMin - deMin
-  }
   const overlap = (a: number, b: number, c: number, d: number) =>
     Math.max(0, Math.min(b, d) - Math.max(a, c))
   let sb = 0

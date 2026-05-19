@@ -447,7 +447,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
                 </div>
               )
             })()}
-            <div className="geo-dica">💡 Horas fora do horário comercial (Seg–Sex 07h–17h) ou em finais de semana e feriados entram no banco de horas</div>
+            <div className="geo-dica">💡 Horas entre 17h e 7h entram no banco de horas. Das 7h às 17h não contam.</div>
           </div>
 
           {/* 6 - Fotos */}
