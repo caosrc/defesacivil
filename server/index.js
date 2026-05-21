@@ -889,9 +889,10 @@ app.delete('/api/ocorrencias/:id', async (req, res) => {
 // ── Escala ──────────────────────────────────────────────────────────────────
 app.get('/api/escala', async (_req, res) => {
   try {
-    const result = await query('SELECT data FROM escala_estado WHERE id = 1')
+    const result = await query('SELECT data, updated_at FROM escala_estado WHERE id = 1')
     if (!result.rows[0]) return res.json(null)
-    res.json(result.rows[0].data)
+    // Inclui updated_at junto com os dados para que o cliente possa comparar timestamps
+    res.json({ ...result.rows[0].data, updated_at: result.rows[0].updated_at })
   } catch (err) {
     console.error('GET /api/escala error:', err)
     res.status(500).json({ error: err.message })

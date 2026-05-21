@@ -2377,7 +2377,7 @@ export default function EscalaAgentes() {
     salvarDados(novos)
   }
 
-  function atualizarAjusteBanco(agente: string, ajuste: number) {
+  async function atualizarAjusteBanco(agente: string, ajuste: number) {
     const novosAjustes = { ...(dados.ajustesBanco ?? {}) }
     if (ajuste === 0) {
       delete novosAjustes[agente]
@@ -2386,7 +2386,10 @@ export default function EscalaAgentes() {
     }
     const novos = { ...dados, ajustesBanco: novosAjustes }
     setDados(novos)
-    salvarDados(novos)
+    const resultado = await salvarDadosAsync(novos)
+    if (!resultado.ok) {
+      alert(`⚠️ Ajuste salvo localmente, mas falhou ao enviar ao servidor: ${resultado.mensagem ?? 'erro desconhecido'}. Tente novamente.`)
+    }
   }
 
   async function salvarHoraExtraSimples(data: string, horas: number): Promise<{ ok: boolean; mensagem?: string }> {

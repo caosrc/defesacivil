@@ -30,6 +30,35 @@ function removerChecklistLocal(id: number) {
   localStorage.setItem(CHECKLIST_LOCAL_KEY, JSON.stringify(pendentes))
 }
 
+async function sincronizarChecklistsPendentes(): Promise<number> {
+  const todos = carregarChecklistsLocais()
+  const pendentes = todos.filter(c => (c as unknown as Record<string, unknown>)._local === true)
+  if (!pendentes.length) return 0
+  let sincronizados = 0
+  for (const item of pendentes) {
+    const { id, created_at, _local, ...payload } = item as unknown as Record<string, unknown>
+    void _local; void created_at
+    try {
+      if (supabaseDisponivel) {
+        const { error } = await supabase.from('checklists_viatura').insert(payload)
+        if (error) continue
+      } else {
+        const res = await fetch('/api/checklists', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) continue
+      }
+      removerChecklistLocal(id as number)
+      sincronizados++
+    } catch {
+      // sem conexão ainda, tenta no próximo evento online
+    }
+  }
+  return sincronizados
+}
+
 type Opc3 = 'bom' | 'medio' | 'ruim' | ''
 type OpcSN = 'sim' | 'nao' | 'na' | ''
 type NivelCombustivel = '' | 'E' | '1/4' | '1/2' | '3/4' | 'F'
@@ -412,6 +441,18 @@ export default function ChecklistViatura() {
   useEffect(() => {
     const off = wsOn('checklist_atualizado', () => { carregar() })
     return off
+  }, [])
+
+  // Sincroniza checklists salvos offline quando a conexão voltar
+  useEffect(() => {
+    async function aoVoltar() {
+      const n = await sincronizarChecklistsPendentes()
+      if (n > 0) carregar()
+    }
+    // Tenta sincronizar na montagem (caso já esteja online e tenha pendentes)
+    aoVoltar()
+    window.addEventListener('online', aoVoltar)
+    return () => window.removeEventListener('online', aoVoltar)
   }, [])
 
   useEffect(() => {
