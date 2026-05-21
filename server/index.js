@@ -997,9 +997,32 @@ app.post('/api/relatorio-vistoria', async (req, res) => {
 })
 
 // ── Checklists Viatura ───────────────────────────────────────────────────────
+app.get('/api/checklists/meses', async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT DISTINCT SUBSTRING(data_checklist, 1, 7) AS mes
+       FROM checklists_viatura
+       WHERE data_checklist IS NOT NULL AND LENGTH(data_checklist) >= 7
+       ORDER BY mes DESC`
+    )
+    res.json(result.rows.map(r => r.mes).filter(Boolean))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.get('/api/checklists', async (req, res) => {
   try {
-    const result = await query('SELECT * FROM checklists_viatura ORDER BY created_at DESC')
+    const { mes } = req.query
+    let result
+    if (mes) {
+      result = await query(
+        `SELECT * FROM checklists_viatura WHERE data_checklist LIKE $1 ORDER BY created_at DESC`,
+        [`${mes}%`]
+      )
+    } else {
+      result = await query('SELECT * FROM checklists_viatura ORDER BY created_at DESC')
+    }
     res.json(result.rows)
   } catch (err) {
     res.status(500).json({ error: err.message })

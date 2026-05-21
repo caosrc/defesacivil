@@ -354,13 +354,27 @@ function dataCurta(iso: string) {
   return y && m && d ? `${d}/${m}/${y}` : '—'
 }
 
+const MESES_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+
+function mesLabel(yyyymm: string) {
+  const [y, m] = yyyymm.split('-')
+  return `${MESES_PT[Number(m) - 1]} ${y}`
+}
+
 export default function ChecklistViatura() {
   const [modo, setModo] = useState<Modo>('lista')
   const [checklists, setChecklists] = useState<ChecklistData[]>([])
   const [carregando, setCarregando] = useState(true)
   const [selecionado, setSelecionado] = useState<ChecklistData | null>(null)
 
+  const [mesesArquivo, setMesesArquivo] = useState<string[]>([])
+  const [mesSelecionado, setMesSelecionado] = useState<string | null>(null)
+  const [checklistsArquivo, setChecklistsArquivo] = useState<ChecklistData[]>([])
+  const [carregandoArquivo, setCarregandoArquivo] = useState(false)
+
   const hoje = dataLocalInput()
+  const mesAtual = hoje.substring(0, 7)
   const [data, setData] = useState(hoje)
   const [km, setKm] = useState('')
   const [placa, setPlaca] = useState('QXW1E43')
@@ -435,11 +449,61 @@ export default function ChecklistViatura() {
     setCarregando(false)
   }
 
-  useEffect(() => { carregar() }, [])
+  async function carregarMeses() {
+    if (supabaseDisponivel) {
+      try {
+        const { data } = await supabase
+          .from('checklists_viatura')
+          .select('data_checklist')
+          .order('data_checklist', { ascending: false })
+        if (data) {
+          const todos = [...new Set(
+            (data as { data_checklist: string }[])
+              .map(r => (r.data_checklist || '').substring(0, 7))
+              .filter(m => m && m.length === 7)
+          )].sort().reverse()
+          setMesesArquivo(todos.filter(m => m < mesAtual))
+        }
+      } catch { /* silencioso */ }
+      return
+    }
+    try {
+      const res = await fetch('/api/checklists/meses')
+      if (!res.ok) return
+      const data: string[] = await res.json()
+      setMesesArquivo(data.filter(m => m < mesAtual))
+    } catch { /* silencioso */ }
+  }
+
+  async function carregarArquivo(mes: string) {
+    setCarregandoArquivo(true)
+    setMesSelecionado(mes)
+    if (supabaseDisponivel) {
+      try {
+        const { data } = await supabase
+          .from('checklists_viatura')
+          .select('*')
+          .like('data_checklist', `${mes}%`)
+          .order('created_at', { ascending: false })
+        setChecklistsArquivo((Array.isArray(data) ? data : []) as ChecklistData[])
+      } catch { setChecklistsArquivo([]) }
+      setCarregandoArquivo(false)
+      return
+    }
+    try {
+      const res = await fetch(`/api/checklists?mes=${mes}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setChecklistsArquivo((Array.isArray(data) ? data : []) as ChecklistData[])
+    } catch { setChecklistsArquivo([]) }
+    setCarregandoArquivo(false)
+  }
+
+  useEffect(() => { carregar(); carregarMeses() }, [])
 
   // Atualiza em tempo real quando outro agente salva ou apaga um checklist
   useEffect(() => {
-    const off = wsOn('checklist_atualizado', () => { carregar() })
+    const off = wsOn('checklist_atualizado', () => { carregar(); carregarMeses() })
     return off
   }, [])
 
@@ -1139,16 +1203,80 @@ export default function ChecklistViatura() {
     )
   }
 
+  function renderCardChecklist(c: ChecklistData) {
+    const isLocal = (c as unknown as Record<string, unknown>)._local === true
+    return (
+      <button key={c.id} className={`oc-card ${isLocal ? 'oc-card-offline' : ''}`} onClick={() => { setSelecionado(c); setModo('detalhe') }}>
+        <div className="oc-card-esq"><span className="oc-emoji">🚗</span></div>
+        <div className="oc-card-corpo">
+          <div className="oc-card-top">
+            <span className="oc-natureza">{formatarData(c.data_checklist)}</span>
+            {isLocal && <span className="oc-offline-tag" title="Salvo localmente — não sincronizado com servidor">📵</span>}
+            <span className="oc-seta">›</span>
+          </div>
+          <div className="oc-card-meta">
+            {c.motorista && <span>👤 {c.motorista}</span>}
+            {c.placa && <span>🚘 {c.placa}</span>}
+            {c.km && <span>🔢 {c.km} km</span>}
+            <span>
+              {[c.foto_frontal, c.foto_traseira, c.foto_direita, c.foto_esquerda].filter(Boolean).length}/4 fotos
+            </span>
+          </div>
+        </div>
+      </button>
+    )
+  }
+
+  const checklistsMesAtual = checklists.filter(c =>
+    (c.data_checklist || '').startsWith(mesAtual)
+  )
+
+  if (mesSelecionado !== null) {
+    return (
+      <div className="conteudo-viatura">
+        <div className="cl-lista-header">
+          <div>
+            <h2 className="cl-titulo">📁 {mesLabel(mesSelecionado)}</h2>
+            <div className="cl-subtitulo">Arquivo de checklists</div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {checklistsArquivo.length > 0 && (
+              <button className="btn-excel-global" onClick={() => exportarChecklistExcel(checklistsArquivo)}>
+                📊 Excel
+              </button>
+            )}
+            <button className="btn-voltar-arquivo" onClick={() => { setMesSelecionado(null); setChecklistsArquivo([]) }}>
+              ← Voltar
+            </button>
+          </div>
+        </div>
+
+        {carregandoArquivo ? (
+          <div className="carregando">⏳ Carregando...</div>
+        ) : checklistsArquivo.length === 0 ? (
+          <div className="lista-vazia">
+            <div style={{ fontSize: '2.5rem' }}>📂</div>
+            <div>Nenhum checklist em {mesLabel(mesSelecionado)}.</div>
+          </div>
+        ) : (
+          <div className="lista">
+            {checklistsArquivo.map(c => renderCardChecklist(c))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="conteudo-viatura">
       <div className="cl-lista-header">
         <div>
           <h2 className="cl-titulo">Checklists da Viatura</h2>
-          <div className="cl-subtitulo">Histórico de checklists realizados</div>
+          <div className="cl-subtitulo">{mesLabel(mesAtual)}</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {checklists.length > 0 && (
-            <button className="btn-excel-global" onClick={() => exportarChecklistExcel(checklists)}>
+          {checklistsMesAtual.length > 0 && (
+            <button className="btn-excel-global" onClick={() => exportarChecklistExcel(checklistsMesAtual)}>
               📊 Excel
             </button>
           )}
@@ -1160,37 +1288,33 @@ export default function ChecklistViatura() {
 
       {carregando ? (
         <div className="carregando">⏳ Carregando checklists...</div>
-      ) : checklists.length === 0 ? (
+      ) : checklistsMesAtual.length === 0 ? (
         <div className="lista-vazia">
           <div style={{ fontSize: '3rem' }}>🚗</div>
-          <div>Nenhum checklist registrado.</div>
+          <div>Nenhum checklist em {mesLabel(mesAtual)}.</div>
           <button className="btn-nova-vazia" onClick={() => { resetForm(); setModo('form') }}>+ Novo Checklist</button>
         </div>
       ) : (
         <div className="lista">
-          {checklists.map((c) => {
-            const isLocal = (c as unknown as Record<string, unknown>)._local === true
-            return (
-              <button key={c.id} className={`oc-card ${isLocal ? 'oc-card-offline' : ''}`} onClick={() => { setSelecionado(c); setModo('detalhe') }}>
-                <div className="oc-card-esq"><span className="oc-emoji">🚗</span></div>
-                <div className="oc-card-corpo">
-                  <div className="oc-card-top">
-                    <span className="oc-natureza">{formatarData(c.data_checklist)}</span>
-                    {isLocal && <span className="oc-offline-tag" title="Salvo localmente — não sincronizado com servidor">📵</span>}
-                    <span className="oc-seta">›</span>
-                  </div>
-                  <div className="oc-card-meta">
-                    {c.motorista && <span>👤 {c.motorista}</span>}
-                    {c.placa && <span>🚘 {c.placa}</span>}
-                    {c.km && <span>🔢 {c.km} km</span>}
-                    <span>
-                      {[c.foto_frontal, c.foto_traseira, c.foto_direita, c.foto_esquerda].filter(Boolean).length}/4 fotos
-                    </span>
-                  </div>
-                </div>
+          {checklistsMesAtual.map(c => renderCardChecklist(c))}
+        </div>
+      )}
+
+      {mesesArquivo.length > 0 && (
+        <div className="ck-arquivo">
+          <div className="ck-arquivo-titulo">📁 Meses anteriores</div>
+          <div className="ck-arquivo-lista">
+            {mesesArquivo.map(mes => (
+              <button
+                key={mes}
+                className="ck-arquivo-mes"
+                onClick={() => carregarArquivo(mes)}
+              >
+                <span className="ck-arquivo-mes-nome">{mesLabel(mes)}</span>
+                <span className="ck-arquivo-seta">›</span>
               </button>
-            )
-          })}
+            ))}
+          </div>
         </div>
       )}
     </div>

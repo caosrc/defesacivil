@@ -2809,6 +2809,35 @@ input, select, textarea { font-family: inherit; }
   padding: 0.45rem 1rem; border-radius: 8px;
   font-size: 0.88rem; font-weight: 700; cursor: pointer;
 }
+.btn-voltar-arquivo {
+  background: #e5e7eb; color: #374151; border: none;
+  padding: 0.45rem 1rem; border-radius: 8px;
+  font-size: 0.88rem; font-weight: 700; cursor: pointer;
+}
+.btn-voltar-arquivo:hover { background: #d1d5db; }
+.ck-arquivo {
+  margin-top: 0.75rem; border: 1.5px solid #dbeafe; border-radius: 12px;
+  background: #f0f7ff; overflow: hidden;
+}
+.ck-arquivo-titulo {
+  font-size: 0.82rem; font-weight: 700; color: #1a4b8c;
+  padding: 0.6rem 0.9rem 0.4rem; letter-spacing: 0.03em;
+  border-bottom: 1px solid #dbeafe;
+}
+.ck-arquivo-lista {
+  display: flex; flex-direction: column;
+}
+.ck-arquivo-mes {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; text-align: left; padding: 0.7rem 0.9rem;
+  background: transparent; border: none; border-bottom: 1px solid #dbeafe;
+  cursor: pointer; font-size: 0.93rem; color: #1e3a5f;
+  transition: background 0.12s;
+}
+.ck-arquivo-mes:last-child { border-bottom: none; }
+.ck-arquivo-mes:hover { background: #dbeafe; }
+.ck-arquivo-mes-nome { font-weight: 600; }
+.ck-arquivo-seta { color: #93c5fd; font-size: 1.1rem; font-weight: 700; }
 .cl-row-2 {
   display: flex; gap: 0.75rem;
 }
