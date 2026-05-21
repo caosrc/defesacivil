@@ -2341,3 +2341,98 @@
   flex-shrink: 0;
 }
 .bh-extra-edit-btn:hover { opacity: 1; background: #f3f4f6; }
+
+/* ── Simulador de dias (Moisés / edição) ────────────────────── */
+.escala-simulador-dias {
+  background: #f0f9ff;
+  border: 1.5px solid #bae6fd;
+  border-radius: 12px;
+  padding: 0.6rem 0.8rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.escala-simulador-titulo {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #0369a1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.escala-simulador-controles {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.escala-simulador-btn {
+  background: #0ea5e9;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  user-select: none;
+}
+.escala-simulador-btn:active { transform: scale(0.94); }
+.escala-simulador-btn:hover { background: #0284c7; }
+
+.escala-simulador-btn-reset {
+  background: #6b7280;
+  font-size: 1rem;
+  padding: 0.25rem 0.55rem;
+}
+.escala-simulador-btn-reset:hover { background: #374151; }
+
+.escala-simulador-data {
+  flex: 1;
+  min-width: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.escala-simulador-hoje-label {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #0f766e;
+  background: #d1fae5;
+  border-radius: 8px;
+  padding: 0.2rem 0.7rem;
+}
+
+.escala-simulador-offset {
+  font-size: 0.85rem;
+  font-weight: 800;
+  border-radius: 6px;
+  padding: 0.15rem 0.5rem;
+}
+.escala-simulador-offset.passado {
+  background: #fef3c7;
+  color: #92400e;
+}
+.escala-simulador-offset.futuro {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.escala-simulador-data-valor {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.escala-simulador-aviso {
+  font-size: 0.75rem;
+  color: #b45309;
+  background: #fef9c3;
+  border-radius: 6px;
+  padding: 0.2rem 0.6rem;
+  font-weight: 600;
+}

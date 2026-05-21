@@ -328,6 +328,12 @@ function hojeStr(): string {
   return chaveData(d.getFullYear(), d.getMonth(), d.getDate())
 }
 
+function hojeComOffset(offset: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + offset)
+  return chaveData(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
 // Data mínima permitida para lançamento de horas (hoje - 7 dias)
 function prazoLancamentoMin(): string {
   const d = new Date()
@@ -1144,10 +1150,11 @@ interface BancoHorasMoisesProps {
   ajustesBanco: Record<string, number>
   onAjusteChange: (agente: string, ajuste: number) => void
   podeEditar: boolean
+  hoje?: string
 }
 
-function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, onAjusteChange, podeEditar }: BancoHorasMoisesProps) {
-  const hoje = hojeStr()
+function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, onAjusteChange, podeEditar, hoje: hojeprop }: BancoHorasMoisesProps) {
+  const hoje = hojeprop ?? hojeStr()
   const [editando, setEditando] = useState<string | null>(null)
   const [valorTemp, setValorTemp] = useState<string>('')
 
@@ -2192,8 +2199,10 @@ export default function EscalaAgentes() {
   // Modal por agente (clique na legenda) — substitui o clique-na-data
   const [agenteAberto, setAgenteAberto] = useState<string | null>(null)
   const valteirZeradoRef = useRef(false)
+  // Simulador de dias: offset em relação ao dia atual (só visível para Moisés em modo edição)
+  const [offsetDias, setOffsetDias] = useState(0)
 
-  const hoje = hojeStr()
+  const hoje = hojeComOffset(offsetDias)
   const agenteLogado = getAgenteLogado()
   const isMoises = agenteLogado === 'Moisés'
   const isSobreaviso = AGENTES_SOBREAVISO.some(a => a.nome === agenteLogado)
@@ -2483,8 +2492,55 @@ export default function EscalaAgentes() {
       )}
 
       {editando && isMoises && (
-        <div className="escala-edit-aviso">
-          👆 Toque no <strong>nome do agente na legenda abaixo</strong> para escolher os dias dele de sobreaviso (gera {HORAS_POR_DIA_SOBREAVISO}h/dia) e de folga (desconta 8h padrão · 4h Talita/Cristiane · 6h Sócrates ao passar do dia).
+        <div className="escala-simulador-dias">
+          <div className="escala-simulador-titulo">📅 Simular data</div>
+          <div className="escala-simulador-controles">
+            <button
+              className="escala-simulador-btn"
+              onClick={() => setOffsetDias(o => o - 7)}
+              title="Recuar 7 dias"
+            >−7d</button>
+            <button
+              className="escala-simulador-btn"
+              onClick={() => setOffsetDias(o => o - 1)}
+              title="Recuar 1 dia"
+            >−1d</button>
+            <div className="escala-simulador-data">
+              {offsetDias === 0
+                ? <span className="escala-simulador-hoje-label">Hoje</span>
+                : (
+                  <>
+                    <span className={`escala-simulador-offset ${offsetDias > 0 ? 'futuro' : 'passado'}`}>
+                      {offsetDias > 0 ? `+${offsetDias}d` : `${offsetDias}d`}
+                    </span>
+                    <span className="escala-simulador-data-valor">{hoje.split('-').reverse().join('/')}</span>
+                  </>
+                )
+              }
+            </div>
+            <button
+              className="escala-simulador-btn"
+              onClick={() => setOffsetDias(o => o + 1)}
+              title="Avançar 1 dia"
+            >+1d</button>
+            <button
+              className="escala-simulador-btn"
+              onClick={() => setOffsetDias(o => o + 7)}
+              title="Avançar 7 dias"
+            >+7d</button>
+            {offsetDias !== 0 && (
+              <button
+                className="escala-simulador-btn escala-simulador-btn-reset"
+                onClick={() => setOffsetDias(0)}
+                title="Voltar para hoje"
+              >↺</button>
+            )}
+          </div>
+          {offsetDias !== 0 && (
+            <div className="escala-simulador-aviso">
+              ⚠️ Simulação ativa — os saldos do banco de horas refletem a data simulada.
+            </div>
+          )}
         </div>
       )}
 
@@ -2571,6 +2627,7 @@ export default function EscalaAgentes() {
           ajustesBanco={dados.ajustesBanco ?? {}}
           onAjusteChange={atualizarAjusteBanco}
           podeEditar={editando}
+          hoje={hoje}
         />
       )}
 
