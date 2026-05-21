@@ -145,11 +145,12 @@ export type DisparoEmCurso = {
   abortar: () => void
 }
 
-// ─── NOVO FLUXO ───────────────────────────────────────────────────────────────
+// ─── FLUXO DO SOS ─────────────────────────────────────────────────────────────
 // 1. Abre microfone IMEDIATAMENTE e mostra contagem regressiva de 10 s.
 // 2. Em paralelo, obtém GPS e bateria enquanto o agente grava.
-// 3. Após 10 s, envia o SOS com áudio + GPS juntos — outros agentes já
-//    recebem o alerta completo na primeira vez.
+// 3. Aguarda os 10 s completos de gravação.
+// 4. SÓ ENTÃO dispara o SOS com áudio + GPS — assim os outros agentes
+//    recebem o alerta completo de uma vez só.
 // ─────────────────────────────────────────────────────────────────────────────
 export function dispararSos(
   agente: string,
@@ -184,33 +185,30 @@ export function dispararSos(
       }, 1000)
 
       // 2. Obtém GPS e bateria EM PARALELO enquanto o agente fala
-      const [gps, bateria] = await Promise.all([lerGps(), lerBateria()])
+      const [gps, bateria, audioGravado] = await Promise.all([
+        lerGps(),
+        lerBateria(),
+        gravacao.audioPromise,
+      ])
+      clearInterval(tick)
 
-      if (abortado) { clearInterval(tick); gravacao.abortar(); resolverEnviado(null); return null }
+      if (abortado) { resolverEnviado(null); return null }
 
-      // 3. Envia o alerta IMEDIATAMENTE após obter GPS/bateria (sem esperar o áudio)
-      //    → outros agentes recebem o alerta em poucos segundos
-      const alertaInicial: SosAlerta = {
+      audio = audioGravado
+
+      // 3. Envia o SOS completo (com áudio + GPS) após os 10 s de gravação
+      const alerta: SosAlerta = {
         id, agente,
         lat: gps?.lat ?? null,
         lng: gps?.lng ?? null,
         bateria,
-        audio: null,
+        audio,
         timestamp,
       }
-      enviarSosTodosOsCanais({ tipo: 'sos', ...alertaInicial })
-      resolverEnviado(alertaInicial)
+      enviarSosTodosOsCanais({ tipo: 'sos', ...alerta })
+      resolverEnviado(alerta)
 
-      // 4. Aguarda o áudio terminar (timer de 10 s interno ao MediaRecorder)
-      audio = await gravacao.audioPromise
-      clearInterval(tick)
-
-      // 5. Envia o áudio como atualização separada
-      if (!abortado && audio) {
-        enviarSosTodosOsCanais({ tipo: 'sos-audio', id, audio })
-      }
-
-      return { ...alertaInicial, audio }
+      return alerta
 
     } else {
       // Sem microfone: notifica e envia somente com GPS
