@@ -2436,3 +2436,61 @@
   padding: 0.2rem 0.6rem;
   font-weight: 600;
 }
+
+/* ── Afastamentos ────────────────────────────────────────────── */
+.escala-modal-agente.em-afastamento {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: #fef3c7 !important;
+  border-color: #d97706 !important;
+}
+
+.escala-modal-afastamento-tag {
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  margin-left: auto;
+}
+
+.escala-afastamento-painel {
+  border-color: #fbbf24 !important;
+  background: #fffbeb !important;
+}
+
+.escala-afastamento-painel .escala-ferias-titulo {
+  color: #92400e;
+}
+
+.escala-afastamento-add {
+  background: #d97706 !important;
+  color: #fff !important;
+}
+.escala-afastamento-add:hover {
+  background: #b45309 !important;
+}
+
+.escala-afastamento-motivo {
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border-radius: 5px;
+  padding: 0.1rem 0.4rem;
+}
+
+.escala-legenda-afastamento-bloco {
+  border-color: #fbbf24 !important;
+  background: #fffbeb !important;
+}
+
+.escala-legenda-afastamento-bloco .escala-legenda-ferias-titulo {
+  color: #92400e;
+}
+
+.escala-legenda-afastamento-periodo {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+}
