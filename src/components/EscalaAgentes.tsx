@@ -2491,6 +2491,18 @@ export default function EscalaAgentes() {
         />
       )}
 
+      {/* Calendário único: Sobreaviso + Folga (visualização — edição é feita pela legenda) */}
+      <CalendarioUnificado
+        ano={ano} mes={mes}
+        sobreavisoDiario={dados.sobreaviso}
+        folgas={dados.folgas}
+        ferias={dados.ferias}
+        hoje={hoje}
+        editando={false}
+        feriadosCustom={dados.feriadosCustom}
+        onDiaClick={onDiaClick}
+      />
+
       {editando && isMoises && (
         <div className="escala-simulador-dias">
           <div className="escala-simulador-titulo">📅 Simular data</div>
@@ -2543,18 +2555,6 @@ export default function EscalaAgentes() {
           )}
         </div>
       )}
-
-      {/* Calendário único: Sobreaviso + Folga (visualização — edição é feita pela legenda) */}
-      <CalendarioUnificado
-        ano={ano} mes={mes}
-        sobreavisoDiario={dados.sobreaviso}
-        folgas={dados.folgas}
-        ferias={dados.ferias}
-        hoje={hoje}
-        editando={false}
-        feriadosCustom={dados.feriadosCustom}
-        onDiaClick={onDiaClick}
-      />
 
       <Legenda
         ferias={dados.ferias}
