@@ -2867,50 +2867,77 @@ export default function Planejamento() {
 
   useEffect(() => { salvarPlanos(planos) }, [planos])
 
+  async function carregarDoServidor() {
+    // Supabase (Netlify + Replit com VITE_USE_SUPABASE=true)
+    if (supabaseDisponivel) {
+      try {
+        const { data, error } = await supabase
+          .from('planejamentos').select('*')
+          .order('criado_em', { ascending: false }).limit(500)
+        if (!error && data) {
+          const remote = data.map(row => sbParaPlano(row as Record<string, unknown>))
+          setPlanos(prev => {
+            const map = new Map(prev.map(p => [p.id, p]))
+            remote.forEach(r => { map.set(r.id, r) })
+            return Array.from(map.values()).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
+          })
+          return
+        }
+      } catch { /* tenta fallback */ }
+    }
+    // Fallback Express (Replit sem Supabase)
+    try {
+      const res = await fetch('/api/planejamentos')
+      if (res.ok) {
+        const ct = res.headers.get('content-type') || ''
+        if (!ct.includes('text/html')) {
+          const rows: Record<string, unknown>[] = await res.json()
+          if (Array.isArray(rows) && rows.length > 0) {
+            const remote = rows.map(row => sbParaPlano(row))
+            setPlanos(prev => {
+              const map = new Map(prev.map(p => [p.id, p]))
+              remote.forEach(r => { map.set(r.id, r) })
+              return Array.from(map.values()).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
+            })
+          }
+        }
+      }
+    } catch { /* silencioso */ }
+  }
+
   // Carrega planos do servidor ao montar e mescla com localStorage
-  useEffect(() => {
-    fetch('/api/planejamentos')
-      .then(r => r.ok ? r.json() : [])
-      .then((rows: Record<string, unknown>[]) => {
-        if (!Array.isArray(rows) || rows.length === 0) return
-        const remote = rows.map(row => sbParaPlano(row))
-        setPlanos(prev => {
-          const map = new Map(prev.map(p => [p.id, p]))
-          remote.forEach(r => { map.set(r.id, r) })
-          return Array.from(map.values()).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
-        })
-      })
-      .catch(() => {})
-  }, [])
+  useEffect(() => { carregarDoServidor() }, [])
 
   // Atualiza em tempo real quando outro agente salva/deleta planejamento
   useEffect(() => {
-    return wsOn('planejamentos_atualizados', () => {
-      fetch('/api/planejamentos')
-        .then(r => r.ok ? r.json() : [])
-        .then((rows: Record<string, unknown>[]) => {
-          if (!Array.isArray(rows)) return
-          const remote = rows.map(row => sbParaPlano(row))
-          setPlanos(remote.sort((a, b) => b.criadoEm.localeCompare(a.criadoEm)))
-        })
-        .catch(() => {})
-    })
+    return wsOn('planejamentos_atualizados', () => { carregarDoServidor() })
   }, [])
 
-  async function sincAPI(plano: Plano) {
+  async function sincServidor(plano: Plano) {
+    const payload = planoParaSB(plano)
+    // Supabase (Netlify + Replit com VITE_USE_SUPABASE=true)
+    if (supabaseDisponivel) {
+      try { await supabase.from('planejamentos').upsert(payload) } catch { /* silencioso */ }
+      return
+    }
+    // Fallback Express (Replit sem Supabase)
     try {
       await fetch('/api/planejamentos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(planoParaSB(plano)),
+        body: JSON.stringify(payload),
       })
     } catch { /* silencioso */ }
   }
 
-  async function deletarAPI(id: string) {
-    try {
-      await fetch(`/api/planejamentos/${id}`, { method: 'DELETE' })
-    } catch { /* silencioso */ }
+  async function deletarServidor(id: string) {
+    // Supabase (Netlify + Replit com VITE_USE_SUPABASE=true)
+    if (supabaseDisponivel) {
+      try { await supabase.from('planejamentos').delete().eq('id', id) } catch { /* silencioso */ }
+      return
+    }
+    // Fallback Express (Replit sem Supabase)
+    try { await fetch(`/api/planejamentos/${id}`, { method: 'DELETE' }) } catch { /* silencioso */ }
   }
 
   const salvarPlano = useCallback((plano: Plano) => {
@@ -2925,19 +2952,19 @@ export default function Planejamento() {
     })
     setCriando(false)
     setAberto(plano)
-    sincAPI(plano)
+    sincServidor(plano)
   }, [])
 
   const atualizarPlano = useCallback((plano: Plano) => {
     setPlanos(prev => prev.map(p => p.id === plano.id ? plano : p))
     setAberto(plano)
-    sincAPI(plano)
+    sincServidor(plano)
   }, [])
 
   const deletarPlano = useCallback((id: string) => {
     setPlanos(prev => prev.filter(p => p.id !== id))
     setAberto(null)
-    deletarAPI(id)
+    deletarServidor(id)
   }, [])
 
   const totalPorTipo = (t: TipoPlano) => planos.filter(p => p.tipo === t).length
