@@ -6,7 +6,7 @@ import { getAgenteLogado } from './Login'
 import { AGENTES } from '../types'
 import { wsOn, wsSend } from '../wsClient'
 import { ativarGps, desativarGps, subscribeGps, getEstadoGps, getDispositivoIdGlobal, getNomeAgenteGlobal } from '../gpsService'
-import { supabase } from '../supabaseClient'
+import { supabase, supabaseDisponivel } from '../supabaseClient'
 
 const ORGAOS_EMPENHO: { categoria: string; emoji: string; orgaos: { emoji: string; nome: string }[] }[] = [
   { categoria: 'Segurança Pública', emoji: '🚔', orgaos: [
@@ -2868,6 +2868,7 @@ export default function Planejamento() {
   useEffect(() => { salvarPlanos(planos) }, [planos])
 
   useEffect(() => {
+    if (!supabaseDisponivel) return
     supabase.from('planejamentos').select('*').order('criado_em', { ascending: false }).limit(500)
       .then(({ data, error }) => {
         if (error || !data) return
@@ -2882,10 +2883,12 @@ export default function Planejamento() {
   }, [])
 
   async function sincSB(plano: Plano) {
+    if (!supabaseDisponivel) return
     try { await supabase.from('planejamentos').upsert(planoParaSB(plano)) } catch { /* silencioso */ }
   }
 
   async function deletarSB(id: string) {
+    if (!supabaseDisponivel) return
     try { await supabase.from('planejamentos').delete().eq('id', id) } catch { /* silencioso */ }
   }
 
