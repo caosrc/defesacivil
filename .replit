@@ -52,6 +52,5 @@ VITE_VAPID_PUBLIC_KEY = "BC-o84wW-H0Bc5t4TW2kZj55uX3_acYaVmRikAvRxTJDqPVwzGVKMIl
 VAPID_PUBLIC_KEY = "BC-o84wW-H0Bc5t4TW2kZj55uX3_acYaVmRikAvRxTJDqPVwzGVKMIl07V6KIxITJigVEJvcBC7uw4VJ9P8f54I"
 VAPID_SUBJECT = "mailto:defesacivilob@gmail.com"
 NODE_ENV = "production"
-VITE_USE_SUPABASE = "true"
 PORT = "5000"
-VITE_SUPABASE_URL = "https://sjdpsplbcrlkekdfnnlj.supabase.co"
+VITE_USE_SUPABASE = "false"

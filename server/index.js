@@ -36,14 +36,7 @@ const httpServer = createServer(app)
 
 app.use(compression())
 app.use(cors({
-  origin: [
-    'https://dc-26.netlify.app',
-    /\.netlify\.app$/,
-    /\.replit\.dev$/,
-    /\.replit\.app$/,
-    'http://localhost:5000',
-    'http://localhost:3001',
-  ],
+  origin: true,
   credentials: true,
 }))
 app.use(express.json({ limit: '100mb' }))
