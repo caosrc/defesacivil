@@ -317,7 +317,7 @@ function parseEscalaRow(p: Partial<EscalaData> & Record<string, unknown>): Escal
 }
 
 async function carregarDadosRemoto(): Promise<{ dados: EscalaData; updatedAt: string } | null> {
-  // Supabase primeiro — fonte de verdade compartilhada entre Netlify e Replit
+  // Supabase — só quando explicitamente habilitado (ex: Netlify)
   if (supabaseDisponivel) {
     try {
       const { data } = await supabase
@@ -325,15 +325,17 @@ async function carregarDadosRemoto(): Promise<{ dados: EscalaData; updatedAt: st
         .select('data, updated_at')
         .eq('id', 1)
         .single()
-      if (!data?.data) return null
-      return {
-        dados: parseEscalaRow(data.data as Partial<EscalaData> & Record<string, unknown>),
-        updatedAt: (data.updated_at as string) ?? '',
+      if (data?.data) {
+        return {
+          dados: parseEscalaRow(data.data as Partial<EscalaData> & Record<string, unknown>),
+          updatedAt: (data.updated_at as string) ?? '',
+        }
       }
+      // Supabase sem dados — cai para Express
     } catch { /* cai para Express */ }
   }
 
-  // Fallback: Express API (Replit sem Supabase)
+  // Express API (Replit PostgreSQL)
   try {
     const res = await fetch('/api/escala')
     if (!respostaExpressValida(res)) return null
