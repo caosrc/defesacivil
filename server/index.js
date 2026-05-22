@@ -754,6 +754,33 @@ async function initDb() {
 
   await query(`ALTER TABLE emprestimos ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'emprestimo'`)
 
+  await query(`
+    CREATE TABLE IF NOT EXISTS planejamentos (
+      id TEXT PRIMARY KEY,
+      tipo TEXT,
+      nome TEXT,
+      descricao TEXT,
+      local TEXT,
+      data_inicio TEXT,
+      data_fim TEXT,
+      horario TEXT,
+      horario_fim TEXT,
+      publico_estimado TEXT,
+      status TEXT DEFAULT 'planejamento',
+      equipe JSONB DEFAULT '[]',
+      agentes_defesa_civil JSONB DEFAULT '[]',
+      materiais JSONB DEFAULT '[]',
+      itens_mapa JSONB DEFAULT '[]',
+      pontos_extras JSONB DEFAULT '[]',
+      lat DOUBLE PRECISION,
+      lng DOUBLE PRECISION,
+      observacoes TEXT,
+      risco TEXT,
+      criado_por TEXT,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+
   console.log('[DB] Tabelas verificadas/criadas com sucesso')
 
   // Carrega SOS ainda válidos do banco ao iniciar
@@ -873,6 +900,47 @@ app.delete('/api/ocorrencias/:id', async (req, res) => {
   try {
     await query('DELETE FROM ocorrencias WHERE id = $1', [req.params.id])
     broadcastOcorrenciasAtualizadas()
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── Planejamentos ────────────────────────────────────────────────────────────
+app.get('/api/planejamentos', async (_req, res) => {
+  try {
+    const result = await query('SELECT * FROM planejamentos ORDER BY criado_em DESC')
+    res.json(result.rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/planejamentos', async (req, res) => {
+  try {
+    const p = req.body
+    await query(
+      `INSERT INTO planejamentos (id, tipo, nome, descricao, local, data_inicio, data_fim, horario, horario_fim, publico_estimado, status, equipe, agentes_defesa_civil, materiais, itens_mapa, pontos_extras, lat, lng, observacoes, risco, criado_por, criado_em)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+       ON CONFLICT (id) DO UPDATE SET tipo=$2, nome=$3, descricao=$4, local=$5, data_inicio=$6, data_fim=$7, horario=$8, horario_fim=$9, publico_estimado=$10, status=$11, equipe=$12, agentes_defesa_civil=$13, materiais=$14, itens_mapa=$15, pontos_extras=$16, lat=$17, lng=$18, observacoes=$19, risco=$20, criado_por=$21`,
+      [p.id, p.tipo, p.nome, p.descricao, p.local, p.data_inicio, p.data_fim, p.horario, p.horario_fim,
+       p.publico_estimado, p.status,
+       JSON.stringify(p.equipe || []), JSON.stringify(p.agentes_defesa_civil || []),
+       JSON.stringify(p.materiais || []), JSON.stringify(p.itens_mapa || []),
+       JSON.stringify(p.pontos_extras || []),
+       p.lat, p.lng, p.observacoes, p.risco, p.criado_por, p.criado_em || new Date().toISOString()]
+    )
+    broadcastParaTodos({ tipo: 'planejamentos_atualizados' })
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.delete('/api/planejamentos/:id', async (req, res) => {
+  try {
+    await query('DELETE FROM planejamentos WHERE id = $1', [req.params.id])
+    broadcastParaTodos({ tipo: 'planejamentos_atualizados' })
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
