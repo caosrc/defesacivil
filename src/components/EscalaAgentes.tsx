@@ -632,13 +632,14 @@ interface BancoHorasAgenteProps {
   onUpdateHoras: (data: string, horas: number) => void
   onUpdateJustificativa: (data: string, justificativa: string) => void
   hideSobreaviso?: boolean
+  ajusteBanco?: number
 }
 
 function fmtH(h: number): string {
   return h % 1 === 0 ? String(h) : h.toFixed(1)
 }
 
-function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, onUpdateHoras, onUpdateJustificativa, hideSobreaviso = false }: BancoHorasAgenteProps) {
+function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, onUpdateHoras, onUpdateJustificativa, hideSobreaviso = false, ajusteBanco = 0 }: BancoHorasAgenteProps) {
   const info = AGENTE_MAP[agente]
   const hoje = hojeStr()
   const horasAgente = horasTrabalhadasSobreaviso[agente] ?? {}
@@ -688,7 +689,7 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
   }, [semanasDoAgente, horasAgente, descontosAgente, folgasConsumidas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, hoje])
 
   const totalBruto = horasSobreaviso + horasFimSemana
-  const totalGeral = totalBruto - descontosFolga - descontosAuto
+  const totalGeral = totalBruto - descontosFolga - descontosAuto + ajusteBanco
 
   // Horas de acionamento em dias úteis de uma semana específica
   function horasExtrasDaSemana(seg: string): number {
@@ -907,6 +908,18 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
                   <span className="bh-domfer-calc">- {fmtH(horas)}h</span>
                 </div>
               ))}
+          </div>
+        </div>
+      )}
+
+      {ajusteBanco !== 0 && (
+        <div className="bh-bloco bh-bloco-ajuste">
+          <div className="bh-bloco-header">
+            <span className="bh-bloco-icone">⚖️</span>
+            <span className="bh-bloco-titulo">Ajuste pelo coordenador</span>
+            <span className="bh-bloco-total" style={{ color: ajusteBanco >= 0 ? '#16a34a' : '#dc2626' }}>
+              {ajusteBanco >= 0 ? '+' : ''}{fmtH(ajusteBanco)}h
+            </span>
           </div>
         </div>
       )}
@@ -2723,6 +2736,7 @@ export default function EscalaAgentes() {
           feriadosCustom={dados.feriadosCustom}
           onUpdateHoras={atualizarHorasTrabalhadasSobreaviso}
           onUpdateJustificativa={atualizarJustificativaSobreaviso}
+          ajusteBanco={dados.ajustesBanco?.[agenteLogado] ?? 0}
         />
       )}
 
@@ -2742,6 +2756,7 @@ export default function EscalaAgentes() {
           onUpdateHoras={atualizarHorasTrabalhadasSobreaviso}
           onUpdateJustificativa={atualizarJustificativaSobreaviso}
           hideSobreaviso={true}
+          ajusteBanco={dados.ajustesBanco?.[agenteLogado] ?? 0}
         />
       )}
 
