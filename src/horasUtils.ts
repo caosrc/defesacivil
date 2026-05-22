@@ -88,6 +88,27 @@ export function formatarHoras(horas: number): string {
   return `${h}h${String(m).padStart(2, '0')}min`
 }
 
+// Busca os dados atuais do servidor sem sobrescrever — para fazer merge seguro
+async function buscarDadosServidorAtual(): Promise<Record<string, unknown>> {
+  try {
+    if (supabaseDisponivel) {
+      const { data } = await supabase
+        .from('escala_estado')
+        .select('data')
+        .eq('id', 1)
+        .single()
+      if (data?.data && typeof data.data === 'object') return data.data as Record<string, unknown>
+    } else {
+      const res = await fetch('/api/escala')
+      if (res.ok) {
+        const json = await res.json()
+        if (json && typeof json === 'object') return json as Record<string, unknown>
+      }
+    }
+  } catch { /* ignora — usa localStorage como base */ }
+  return {}
+}
+
 export async function sincronizarHorasEscala(params: {
   agentes: string[]
   dataStr: string
@@ -100,17 +121,26 @@ export async function sincronizarHorasEscala(params: {
 }): Promise<void> {
   const { agentes, dataStr, horasSobreaviso, ocId, natureza, oldAgentes, oldDataStr, oldHorasSobreaviso } = params
 
-  let dados: Record<string, unknown>
+  // Busca dados do servidor primeiro para não sobrescrever o calendário com localStorage vazio
+  const dadosServidor = await buscarDadosServidorAtual()
+
+  // Lê localStorage local
+  let dadosLocal: Record<string, unknown>
   try {
     const raw = localStorage.getItem('escala-data-v3')
-    dados = raw ? JSON.parse(raw) : {}
-  } catch { dados = {} }
+    dadosLocal = raw ? JSON.parse(raw) : {}
+  } catch { dadosLocal = {} }
 
-  if (!dados.horasTrabalhadasSobreaviso) dados.horasTrabalhadasSobreaviso = {}
-  if (!dados.justificativasSobreaviso) dados.justificativasSobreaviso = {}
+  // Merge: servidor tem precedência para todos os campos EXCETO horas (que vêm do local)
+  // Isso preserva o calendário completo mesmo em dispositivos sem escala no localStorage
+  const dados: Record<string, unknown> = { ...dadosServidor }
 
-  const hts = dados.horasTrabalhadasSobreaviso as Record<string, Record<string, number>>
-  const js = dados.justificativasSobreaviso as Record<string, Record<string, string>>
+  // Para as horas, usa o local como base (mais atualizado neste dispositivo)
+  const htsBase = (dadosLocal.horasTrabalhadasSobreaviso ?? dadosServidor.horasTrabalhadasSobreaviso ?? {}) as Record<string, Record<string, number>>
+  const jsBase = (dadosLocal.justificativasSobreaviso ?? dadosServidor.justificativasSobreaviso ?? {}) as Record<string, Record<string, string>>
+
+  const hts: Record<string, Record<string, number>> = { ...htsBase }
+  const js: Record<string, Record<string, string>> = { ...jsBase }
 
   // Remove horas antigas se for edição — subtrai da data acumulada
   if (oldHorasSobreaviso && oldHorasSobreaviso > 0 && oldAgentes && oldDataStr) {
@@ -123,8 +153,7 @@ export async function sincronizarHorasEscala(params: {
     }
   }
 
-  // Adiciona novas horas (somente se > 0) — usa dataStr como chave para que
-  // multiplicadores de sábado/domingo funcionem corretamente na exibição para TODOS os agentes
+  // Adiciona novas horas (somente se > 0)
   if (horasSobreaviso > 0 && dataStr) {
     const justificativa = `Oc.#${ocId}: ${natureza}`
     for (const agente of agentes) {
@@ -139,6 +168,7 @@ export async function sincronizarHorasEscala(params: {
   dados.horasTrabalhadasSobreaviso = hts
   dados.justificativasSobreaviso = js
 
+  // Atualiza localStorage com dados mesclados
   localStorage.setItem('escala-data-v3', JSON.stringify(dados))
 
   try {
