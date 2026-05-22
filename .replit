@@ -6,6 +6,7 @@ integrations = ["javascript_database:1.0.0", "replitmail:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
+packages = ["netlify-cli"]
 
 [workflows]
 runButton = "Project"
