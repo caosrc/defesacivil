@@ -214,6 +214,31 @@ function teveEdicaoLocalRecente(janelaMs = 60_000) {
   return _ultimaEdicaoLocalTs > 0 && (Date.now() - _ultimaEdicaoLocalTs) < janelaMs
 }
 
+// Verifica se os dados têm conteúdo real de calendário (sobreaviso, folgas ou adm)
+// Evita sobrescrever dados locais ricos com snapshot remoto vazio/parcial.
+function dadosTemConteudo(d: EscalaData): boolean {
+  const temSobreaviso = Object.keys(d.sobreaviso ?? {}).length > 0
+  const temSobreavisoSemanal = Object.keys(d.sobreavisoSemanal ?? {}).length > 0
+  const temFolgas = Object.keys(d.folgas ?? {}).length > 0
+  const temAdm = Object.keys(d.adm ?? {}).length > 0
+  const temFerias = (d.ferias ?? []).length > 0
+  const temAfastamentos = (d.afastamentos ?? []).length > 0
+  const temHorasTrabalhadas = Object.keys(d.horasTrabalhadasSobreaviso ?? {}).some(
+    k => Object.keys((d.horasTrabalhadasSobreaviso ?? {})[k] ?? {}).length > 0
+  )
+  return temSobreaviso || temSobreavisoSemanal || temFolgas || temAdm || temFerias || temAfastamentos || temHorasTrabalhadas
+}
+
+// Verifica se os dados locais têm conteúdo real
+function localTemConteudo(): boolean {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return false
+    const p = JSON.parse(raw)
+    return dadosTemConteudo(p as EscalaData)
+  } catch { return false }
+}
+
 function respostaExpressValida(res: Response): boolean {
   if (!res.ok) return false
   const ct = res.headers.get('content-type') || ''
@@ -2388,7 +2413,8 @@ export default function EscalaAgentes() {
     }
   }, [])
 
-  // Sincroniza com API remota ao montar: só sobrescreve local se remoto for mais recente.
+  // Sincroniza com API remota ao montar: só sobrescreve local se remoto for mais recente
+  // e se o remoto tiver conteúdo real (evita apagar calendário com snapshot vazio).
   useEffect(() => {
     let cancelado = false
     carregarDadosRemoto().then(remoto => {
@@ -2398,6 +2424,8 @@ export default function EscalaAgentes() {
       // Proteção 2: local mais recente que o remoto (edição offline anterior)
       const localTs = localStorage.getItem(LOCAL_TS_KEY)
       if (localTs && remoto.updatedAt && remoto.updatedAt <= localTs) return
+      // Proteção 3: não sobrescrever dados locais com conteúdo real por dados remotos vazios
+      if (localTemConteudo() && !dadosTemConteudo(remoto.dados)) return
       setDados(remoto.dados)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(remoto.dados))
       if (remoto.updatedAt) localStorage.setItem(LOCAL_TS_KEY, remoto.updatedAt)
@@ -2413,6 +2441,8 @@ export default function EscalaAgentes() {
         if (teveEdicaoLocalRecente()) return
         const localTs = localStorage.getItem(LOCAL_TS_KEY)
         if (localTs && remoto.updatedAt && remoto.updatedAt <= localTs) return
+        // Proteção: não sobrescrever dados locais com conteúdo real por dados remotos vazios
+        if (localTemConteudo() && !dadosTemConteudo(remoto.dados)) return
         setDados(remoto.dados)
         localStorage.setItem(STORAGE_KEY, JSON.stringify(remoto.dados))
         if (remoto.updatedAt) localStorage.setItem(LOCAL_TS_KEY, remoto.updatedAt)
