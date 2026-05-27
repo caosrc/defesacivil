@@ -384,13 +384,15 @@ export default function App() {
     await atualizarPendingCount()
     if (ok > 0) {
       await carregar()
-      // Sempre mostra sucesso (mesmo silencioso, pois o agente precisa saber que sincronizou)
-      showToast(falhas > 0
-        ? `✅ ${ok} sincronizada(s). ⚠️ ${falhas} pendente(s) — ${ultimoErro || 'verifique a conexão'}.`
-        : `✅ ${ok} ocorrência(s) sincronizadas!`
-      )
+      // Sucesso só aparece quando o agente clicou manualmente — na auto-sync fica silencioso
+      if (!silencioso) {
+        showToast(falhas > 0
+          ? `✅ ${ok} sincronizada(s). ⚠️ ${falhas} pendente(s) — ${ultimoErro || 'verifique a conexão'}.`
+          : `✅ ${ok} ocorrência(s) sincronizadas com sucesso!`
+        )
+      }
     } else if (falhas > 0) {
-      // Sempre mostra falha para o agente poder tomar ação
+      // Falha sempre aparece para o agente poder tomar ação, mesmo na auto-sync
       showToast(`⚠️ Falha ao sincronizar: ${ultimoErro || 'verifique a conexão e tente novamente'}.`, 8000)
     }
   }, [sincronizando, carregar, atualizarPendingCount])
