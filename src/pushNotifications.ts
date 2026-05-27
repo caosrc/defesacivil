@@ -235,20 +235,34 @@ export async function dispararPushSos(payload: {
   lng?: number | null
   bateria?: number | null
 }): Promise<void> {
+  const body = {
+    id: payload.id,
+    agente: payload.agente,
+    lat: payload.lat ?? null,
+    lng: payload.lng ?? null,
+    bateria: payload.bateria ?? null,
+    excludeId: getMeuId(),
+  }
+
+  // No Netlify/Supabase, chama a Edge Function diretamente
+  if (supabaseDisponivel) {
+    try {
+      const { error } = await supabase.functions.invoke('send-sos-push', { body })
+      if (error) console.warn('[Push] Edge Function send-sos-push erro:', error)
+    } catch (e) {
+      console.warn('[Push] erro ao chamar Edge Function send-sos-push:', e)
+    }
+    return
+  }
+
+  // Fallback: Express API (Replit)
   try {
     await fetch('/api/send-sos-push', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: payload.id,
-        agente: payload.agente,
-        lat: payload.lat ?? null,
-        lng: payload.lng ?? null,
-        bateria: payload.bateria ?? null,
-        excludeId: getMeuId(),
-      }),
+      body: JSON.stringify(body),
     })
   } catch (e) {
-    console.warn('[Push] erro ao chamar send-sos-push:', e)
+    console.warn('[Push] erro ao chamar /api/send-sos-push:', e)
   }
 }

@@ -192,35 +192,48 @@ export async function enviarOcorrenciaServidor(
   // Supabase direto quando disponível (Netlify) — não tenta Express para evitar
   // que o redirect catch-all do Netlify sirva HTML antes de chegarmos aqui.
   if (supabaseDisponivel) {
-    // Comprime fotos antes de enviar para manter o payload abaixo do limite de
-    // 10 MB do PostgREST. Uma foto de celular (4000x3000 px) ocupa ~4-7 MB em
-    // base64; com 3+ fotos o INSERT falha com timeout. Comprimimos para ≤1280 px
-    // de largura e qualidade 0.72 (~150-300 KB/foto), mantendo boa qualidade visual.
-    const fotosComprimidas = await comprimirFotos(Array.isArray(dados.fotos) ? dados.fotos : [])
-    const dadosComprimidos = { ...dados, fotos: fotosComprimidas }
-    const payload = buildPayload(dadosComprimidos)
+    try {
+      // Comprime fotos antes de enviar para manter o payload abaixo do limite de
+      // 10 MB do PostgREST. Uma foto de celular (4000x3000 px) ocupa ~4-7 MB em
+      // base64; com 3+ fotos o INSERT falha com timeout. Comprimimos para ≤1280 px
+      // de largura e qualidade 0.72 (~150-300 KB/foto), mantendo boa qualidade visual.
+      const fotosComprimidas = await comprimirFotos(Array.isArray(dados.fotos) ? dados.fotos : [])
+      const dadosComprimidos = { ...dados, fotos: fotosComprimidas }
+      const payload = buildPayload(dadosComprimidos)
 
-    let { data, error } = await supabase
-      .from('ocorrencias')
-      .insert(payload)
-      .select()
-      .single()
-    if (error && isColumnMissingError(error)) {
-      // Colunas hora_* não existem no Supabase — tenta sem elas
-      console.warn('[api] Supabase insert: colunas hora_* ausentes, tentando sem elas. Execute o SQL de migração.')
-      const { hora_inicio: _hi, hora_fim: _hf, horas_total: _ht, horas_sobreaviso: _hs, ...payloadBase } = payload as Record<string, unknown>
-      void _hi; void _hf; void _ht; void _hs
-      const r2 = await supabase.from('ocorrencias').insert(payloadBase).select().single()
-      data = r2.data
-      error = r2.error
+      let { data, error } = await supabase
+        .from('ocorrencias')
+        .insert(payload)
+        .select()
+        .single()
+
+      // Se falhar por coluna inexistente, remove colunas novas e tenta com schema base
+      if (error && isColumnMissingError(error)) {
+        console.warn('[api] Supabase insert: coluna ausente, tentando schema base.', error.message)
+        const {
+          hora_inicio: _hi, hora_fim: _hf, horas_total: _ht, horas_sobreaviso: _hs,
+          focos_incendio: _fi,
+          ...payloadBase
+        } = payload as Record<string, unknown>
+        void _hi; void _hf; void _ht; void _hs; void _fi
+        const r2 = await supabase.from('ocorrencias').insert(payloadBase).select().single()
+        data = r2.data
+        error = r2.error
+      }
+
+      if (error) {
+        console.error('[api] Supabase insert error:', error)
+        const detalhe = error.code ? `[${error.code}] ${error.message}` : error.message
+        throw new ApiError(500, detalhe)
+      }
+      if (!data) throw new ApiError(500, 'Supabase retornou resposta inválida')
+      return data as Ocorrencia
+    } catch (e) {
+      if (e instanceof ApiError) throw e
+      // Erro de rede ou inesperado — propaga com mensagem clara
+      const msg = e instanceof Error ? e.message : String(e)
+      throw new ApiError(503, `Erro ao salvar no Supabase: ${msg}`)
     }
-    if (error) {
-      console.error('[api] Supabase insert error:', error)
-      const detalhe = error.code ? `[${error.code}] ${error.message}` : error.message
-      throw new ApiError(500, detalhe)
-    }
-    if (!data) throw new ApiError(500, 'Supabase retornou resposta inválida')
-    return data as Ocorrencia
   }
 
   const payload = buildPayload(dados)
