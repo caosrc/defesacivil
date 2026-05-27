@@ -241,6 +241,13 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       const resultado = await criarOcorrencia(payload as any)
       setSalvando(false)
       const foiOffline = !!(resultado as any)._offline
+      const saveError = (resultado as any)._saveError as string | undefined
+
+      // Se estava online mas falhou no servidor, mostra o erro real para diagnóstico
+      if (foiOffline && saveError && navigator.onLine) {
+        setErro(`Erro ao salvar online: ${saveError}`)
+        return
+      }
 
       // Atualiza banco de horas dos agentes se houver horas de sobreaviso
       if (!foiOffline && horasSobreaviso && horasSobreaviso > 0 && agentes.length > 0 && dataOcorrencia) {

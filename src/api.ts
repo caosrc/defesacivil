@@ -267,9 +267,15 @@ export async function criarOcorrencia(
   try {
     return await enviarOcorrenciaServidor(dados)
   } catch (e) {
-    console.warn('[api] criarOcorrencia falhou — salvando offline:', e)
+    const erroMsg = e instanceof Error ? e.message : String(e)
+    console.warn('[api] criarOcorrencia falhou — salvando offline:', erroMsg)
     const localId = await savePending(dados)
-    return localOffline(dados, Number(localId))
+    const resultado = localOffline(dados, Number(localId))
+    // Anexa o erro para que a UI mostre a causa quando o dispositivo está online
+    if (navigator.onLine) {
+      (resultado as any)._saveError = erroMsg
+    }
+    return resultado
   }
 }
 
