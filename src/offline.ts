@@ -90,6 +90,18 @@ export function updatePending(localId: number, data: object): Promise<void> {
   )
 }
 
+export function clearAllPending(): Promise<void> {
+  return getDB().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(PENDING_STORE, 'readwrite')
+        tx.objectStore(PENDING_STORE).clear()
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+      })
+  )
+}
+
 export function countPending(): Promise<number> {
   return getDB().then(
     (db) =>

@@ -12,7 +12,7 @@ import { registrarPushSeNecessario, pedirPermissaoEInscrever, getStatusNotificac
 import AgentesOnline from './components/AgentesOnline'
 import BotaoSos from './components/BotaoSos'
 import BannerNotifSos from './components/BannerNotifSos'
-import { cacheOcorrencias, getCachedOcorrencias, getPending, removePending, countPending } from './offline'
+import { cacheOcorrencias, getCachedOcorrencias, getPending, removePending, countPending, clearAllPending } from './offline'
 
 interface EquipamentoCampoMapa {
   id: number
@@ -319,8 +319,8 @@ export default function App() {
       serverData = await getCachedOcorrencias()
     }
     const pending = await getPending()
-    const offlineItems: Ocorrencia[] = pending.map((p, i) => ({
-      id: -(i + 1),
+    const offlineItems: Ocorrencia[] = pending.map((p) => ({
+      id: -Number(p.localId),
       tipo: p.tipo ?? '',
       natureza: p.natureza ?? '',
       subnatureza: p.subnatureza ?? null,
@@ -616,10 +616,30 @@ export default function App() {
       )}
 
       {isOnline && pendingCount > 0 && (
-        <div className="sync-banner" onClick={() => sincronizar()}>
-          {sincronizando
-            ? '⏳ Sincronizando...'
-            : `🔄 ${pendingCount} ocorrência(s) pendente(s) — toque para sincronizar`}
+        <div className="sync-banner">
+          <span
+            style={{ flex: 1, cursor: 'pointer' }}
+            onClick={() => sincronizar()}
+          >
+            {sincronizando
+              ? '⏳ Sincronizando...'
+              : `🔄 ${pendingCount} ocorrência(s) pendente(s) — toque para sincronizar`}
+          </span>
+          {!sincronizando && (
+            <button
+              className="sync-banner-descartar"
+              title="Descartar todas as pendências locais"
+              onClick={async () => {
+                if (!confirm(`Descartar ${pendingCount} ocorrência(s) salva(s) localmente? Elas NÃO serão enviadas ao servidor.`)) return
+                await clearAllPending()
+                await atualizarPendingCount()
+                await carregar()
+                showToast('🗑️ Pendências locais descartadas.')
+              }}
+            >
+              🗑️
+            </button>
+          )}
         </div>
       )}
 

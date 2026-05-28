@@ -93,6 +93,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
   const [eFotos, setEFotos] = useState<string[]>(Array.isArray(o.fotos) ? o.fotos : [])
   const [eFotoAmpliada, setEFotoAmpliada] = useState<number | null>(null)
+  const [fotosCarregando, setFotosCarregando] = useState(0)
   const camEditRef = useRef<HTMLInputElement>(null)
   const galEditRef = useRef<HTMLInputElement>(null)
 
@@ -183,6 +184,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setEAgentes(Array.isArray(o.agentes) ? o.agentes : [])
     setEFotos(Array.isArray(o.fotos) ? [...o.fotos] : [])
     setEFotoAmpliada(null)
+    setFotosCarregando(0)
     setGeoMsg('')
     setErroEdit('')
     setEditando(true)
@@ -191,14 +193,20 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   function adicionarFotosEdicao(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files) return
+    setFotosCarregando((n) => n + files.length)
     Array.from(files).forEach((file) => {
       const reader = new FileReader()
       reader.onload = async (ev) => {
-        if (ev.target?.result) {
-          const comMarca = await adicionarMarcaDagua(ev.target.result as string, o.lat ?? null, o.lng ?? null)
-          setEFotos((prev) => [...prev, comMarca])
+        try {
+          if (ev.target?.result) {
+            const comMarca = await adicionarMarcaDagua(ev.target.result as string, o.lat ?? null, o.lng ?? null)
+            setEFotos((prev) => [...prev, comMarca])
+          }
+        } finally {
+          setFotosCarregando((n) => Math.max(0, n - 1))
         }
       }
+      reader.onerror = () => setFotosCarregando((n) => Math.max(0, n - 1))
       reader.readAsDataURL(file)
     })
     e.target.value = ''
@@ -1050,8 +1058,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
             ) : (
               <>
                 <button className="btn-cancelar-edit" onClick={cancelarEdicao}>Cancelar</button>
-                <button className="btn-salvar-edit" onClick={salvarEdicao} disabled={salvando}>
-                  {salvando ? '⏳ Salvando...' : '💾 Salvar alterações'}
+                <button className="btn-salvar-edit" onClick={salvarEdicao} disabled={salvando || fotosCarregando > 0}>
+                  {fotosCarregando > 0 ? `⏳ Carregando ${fotosCarregando} foto(s)...` : salvando ? '⏳ Salvando...' : '💾 Salvar alterações'}
                 </button>
               </>
             )}
