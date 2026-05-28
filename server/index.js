@@ -148,6 +148,69 @@ async function enviarPushSosServidor(msg) {
   }
 }
 
+// ── Envio de push para agentes específicos (escala, confirmação, evento) ─────
+async function enviarPushParaAgentes(agentesAlvo, payloadJson, excluirAgente = null) {
+  if (!vapidConfigured || !agentesAlvo || agentesAlvo.length === 0) return 0
+  try {
+    const result = await query('SELECT id, endpoint, p256dh, auth, agente FROM push_subscriptions')
+    const subs = result.rows.filter(s => {
+      if (!s.agente) return false
+      if (excluirAgente && s.agente === excluirAgente) return false
+      return agentesAlvo.includes(s.agente)
+    })
+    const removidos = []
+    let enviados = 0
+    await Promise.all(subs.map(async (s) => {
+      try {
+        await webpush.sendNotification(
+          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+          typeof payloadJson === 'string' ? payloadJson : JSON.stringify(payloadJson),
+          { TTL: 60 * 60 * 24, urgency: 'normal' }
+        )
+        enviados++
+      } catch (err) {
+        const status = err && err.statusCode
+        if (status === 404 || status === 410) removidos.push(s.id)
+        else console.warn('[push-agentes] erro:', s.id, status)
+      }
+    }))
+    if (removidos.length > 0) {
+      await query('DELETE FROM push_subscriptions WHERE id = ANY($1)', [removidos])
+    }
+    return enviados
+  } catch (e) {
+    console.warn('[push-agentes] falha geral:', e?.message || e)
+    return 0
+  }
+}
+
+// ── Notifica agentes escalados no dia do evento ────────────────────────────
+async function notificarEventosDoDia() {
+  if (!vapidConfigured) return
+  try {
+    const hoje = new Date().toISOString().split('T')[0]
+    const result = await query(
+      "SELECT id, nome, agentes_defesa_civil FROM planejamentos WHERE data_inicio = $1 AND tipo = 'evento' AND status NOT IN ('cancelado', 'concluido')",
+      [hoje]
+    )
+    for (const p of result.rows) {
+      const agentes = Array.isArray(p.agentes_defesa_civil) ? p.agentes_defesa_civil : []
+      if (!agentes.length) continue
+      const payload = JSON.stringify({
+        title: `📸 Evento hoje: ${p.nome}`,
+        body: 'Registre fotos do evento no aplicativo da Defesa Civil!',
+        tag: `evento-dia-${p.id}-${hoje}`,
+        tipo: 'evento_dia',
+        url: '/',
+      })
+      const n = await enviarPushParaAgentes(agentes, payload)
+      console.log(`[scheduler] evento-dia "${p.nome}": ${n} notificação(ões) enviada(s)`)
+    }
+  } catch (e) {
+    console.warn('[scheduler] notificarEventosDoDia:', e?.message)
+  }
+}
+
 function processarSos(msg, wsRemetente = null) {
   if (!msg || !msg.id) return
   const existente = sosAtivos.get(msg.id)
@@ -781,7 +844,14 @@ async function initDb() {
     )
   `)
 
+  await query(`ALTER TABLE planejamentos ADD COLUMN IF NOT EXISTS confirmacoes_agentes JSONB DEFAULT '[]'`)
+  await query(`ALTER TABLE planejamentos ADD COLUMN IF NOT EXISTS fotos_evento JSONB DEFAULT '[]'`)
+
   console.log('[DB] Tabelas verificadas/criadas com sucesso')
+
+  // Notifica agentes sobre eventos do dia (ao iniciar e a cada 6h)
+  setTimeout(() => notificarEventosDoDia().catch(() => {}), 8000)
+  setInterval(() => notificarEventosDoDia().catch(() => {}), 6 * 60 * 60 * 1000)
 
   // Carrega SOS ainda válidos do banco ao iniciar
   try {
@@ -942,6 +1012,89 @@ app.delete('/api/planejamentos/:id', async (req, res) => {
     await query('DELETE FROM planejamentos WHERE id = $1', [req.params.id])
     broadcastParaTodos({ tipo: 'planejamentos_atualizados' })
     res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── Confirmação de presença no planejamento ───────────────────────────────
+app.post('/api/planejamentos/:id/confirmar', async (req, res) => {
+  try {
+    const { agente, confirmado, criador } = req.body
+    const { id } = req.params
+    const result = await query('SELECT confirmacoes_agentes, nome FROM planejamentos WHERE id = $1', [id])
+    if (!result.rows[0]) return res.status(404).json({ error: 'Planejamento não encontrado' })
+    let confirmacoes = Array.isArray(result.rows[0].confirmacoes_agentes) ? result.rows[0].confirmacoes_agentes : []
+    const idx = confirmacoes.findIndex(c => c.agente === agente)
+    const entrada = { agente, confirmado, confirmedAt: new Date().toISOString() }
+    if (idx >= 0) confirmacoes[idx] = entrada
+    else confirmacoes.push(entrada)
+    await query('UPDATE planejamentos SET confirmacoes_agentes = $1 WHERE id = $2', [JSON.stringify(confirmacoes), id])
+    broadcastParaTodos({ tipo: 'planejamentos_atualizados' })
+    if (confirmado && criador) {
+      const planoNome = result.rows[0].nome || 'Planejamento'
+      const payload = JSON.stringify({
+        title: '✅ Presença confirmada',
+        body: `${agente} confirmou presença em: ${planoNome}`,
+        tag: `confirmacao-${id}-${agente.replace(/\s+/g, '-')}`,
+        tipo: 'confirmacao',
+        url: '/',
+      })
+      enviarPushParaAgentes([criador], payload, agente).catch(() => {})
+    }
+    res.json({ success: true, confirmacoes })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── Fotos do evento ───────────────────────────────────────────────────────
+app.post('/api/planejamentos/:id/fotos', async (req, res) => {
+  try {
+    const { fotos } = req.body
+    const { id } = req.params
+    const result = await query('SELECT fotos_evento FROM planejamentos WHERE id = $1', [id])
+    if (!result.rows[0]) return res.status(404).json({ error: 'Planejamento não encontrado' })
+    const existentes = Array.isArray(result.rows[0].fotos_evento) ? result.rows[0].fotos_evento : []
+    const todas = [...existentes, ...(Array.isArray(fotos) ? fotos : [])]
+    await query('UPDATE planejamentos SET fotos_evento = $1 WHERE id = $2', [JSON.stringify(todas), id])
+    broadcastParaTodos({ tipo: 'planejamentos_atualizados' })
+    res.json({ success: true, fotos: todas })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── Remover foto individual do evento ────────────────────────────────────
+app.delete('/api/planejamentos/:id/fotos/:idx', async (req, res) => {
+  try {
+    const { id, idx } = req.params
+    const result = await query('SELECT fotos_evento FROM planejamentos WHERE id = $1', [id])
+    if (!result.rows[0]) return res.status(404).json({ error: 'Planejamento não encontrado' })
+    const fotos = Array.isArray(result.rows[0].fotos_evento) ? result.rows[0].fotos_evento : []
+    fotos.splice(Number(idx), 1)
+    await query('UPDATE planejamentos SET fotos_evento = $1 WHERE id = $2', [JSON.stringify(fotos), id])
+    broadcastParaTodos({ tipo: 'planejamentos_atualizados' })
+    res.json({ success: true, fotos })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── Push: notificar agentes escalados ────────────────────────────────────
+app.post('/api/push/escala', async (req, res) => {
+  try {
+    const { agentes, planoNome, planoId, remetente } = req.body
+    if (!Array.isArray(agentes) || agentes.length === 0) return res.json({ enviados: 0 })
+    const payload = JSON.stringify({
+      title: '🗓️ Você foi escalado!',
+      body: `Você foi escalado para: ${planoNome}. Confirme sua presença no app.`,
+      tag: `escala-${planoId}`,
+      tipo: 'escala',
+      url: '/',
+    })
+    const enviados = await enviarPushParaAgentes(agentes, payload, remetente || null)
+    res.json({ enviados })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

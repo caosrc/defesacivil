@@ -153,6 +153,12 @@ interface PontoExtra {
   label: string
 }
 
+interface ConfirmacaoAgente {
+  agente: string
+  confirmado: boolean
+  confirmedAt?: string
+}
+
 interface Plano {
   id: string
   tipo: TipoPlano
@@ -176,6 +182,8 @@ interface Plano {
   risco: 'baixo' | 'medio' | 'alto'
   criadoPor: string
   criadoEm: string
+  confirmacoes?: ConfirmacaoAgente[]
+  fotosEvento?: string[]
 }
 
 // ── Conversão GMS (Graus, Minutos, Segundos) ─────────────────────────────
@@ -232,6 +240,8 @@ function sbParaPlano(row: Record<string, unknown>): Plano {
     risco: (row.risco as 'baixo' | 'medio' | 'alto') ?? 'baixo',
     criadoPor: (row.criado_por as string) ?? '',
     criadoEm: (row.criado_em as string) ?? new Date().toISOString(),
+    confirmacoes: (row.confirmacoes_agentes as ConfirmacaoAgente[]) ?? [],
+    fotosEvento: (row.fotos_evento as string[]) ?? [],
   }
 }
 
@@ -2184,6 +2194,109 @@ function PrevisaoTempoCompleta({ lat, lng, data, horario }: { lat: number; lng: 
   )
 }
 
+// ── Excel export de evento com fotos ────────────────────────────────────
+async function exportarEventoExcel(plano: Plano) {
+  const ExcelJS = (await import('exceljs')).default
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Defesa Civil Ouro Branco'
+  const ws = wb.addWorksheet('Evento', { pageSetup: { paperSize: 9, orientation: 'portrait' } })
+
+  ws.columns = [
+    { key: 'a', width: 26 },
+    { key: 'b', width: 50 },
+  ]
+
+  const estiloTitulo = { font: { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF1A4B8C' } }, alignment: { horizontal: 'center' as const } }
+  const estiloSecao = { font: { bold: true, size: 10, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FF059669' } } }
+  const estiloLabel = { font: { bold: true, size: 9, color: { argb: 'FF374151' } }, fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFF1F5F9' } } }
+
+  const r1 = ws.addRow(['Defesa Civil Ouro Branco — ' + plano.nome, ''])
+  ws.mergeCells(`A${r1.number}:B${r1.number}`)
+  Object.assign(r1.getCell(1), estiloTitulo)
+  r1.height = 22
+
+  ws.addRow([''])
+
+  const rSec1 = ws.addRow(['📋 INFORMAÇÕES DO EVENTO', ''])
+  ws.mergeCells(`A${rSec1.number}:B${rSec1.number}`)
+  Object.assign(rSec1.getCell(1), estiloSecao)
+
+  const info: [string, string][] = [
+    ['Nome', plano.nome],
+    ['Tipo', plano.tipo],
+    ['Data Início', plano.dataInicio ? formatarData(plano.dataInicio) : '—'],
+    ['Data Fim', plano.dataFim ? formatarData(plano.dataFim) : '—'],
+    ['Horário', plano.horario ? `${plano.horario}${plano.horarioFim ? ' – ' + plano.horarioFim : ''}` : '—'],
+    ['Local', plano.local || '—'],
+    ['Descrição', plano.descricao || '—'],
+    ['Público Estimado', plano.publicoEstimado ? plano.publicoEstimado + ' pessoas' : '—'],
+    ['Status', plano.status],
+    ['Risco', plano.risco],
+    ['Observações', plano.observacoes || '—'],
+    ['Criado por', plano.criadoPor],
+    ['Criado em', new Date(plano.criadoEm).toLocaleDateString('pt-BR')],
+  ]
+  info.forEach(([label, val]) => {
+    const r = ws.addRow([label, val])
+    Object.assign(r.getCell(1), estiloLabel)
+    r.getCell(2).font = { size: 9 }
+    r.height = 16
+  })
+
+  ws.addRow([''])
+  const rSec2 = ws.addRow(['🧑‍🚒 AGENTES ESCALADOS', ''])
+  ws.mergeCells(`A${rSec2.number}:B${rSec2.number}`)
+  Object.assign(rSec2.getCell(1), estiloSecao)
+
+  const rHdr = ws.addRow(['Agente', 'Confirmação'])
+  Object.assign(rHdr.getCell(1), estiloLabel)
+  Object.assign(rHdr.getCell(2), estiloLabel)
+
+  const agentes = plano.agentesDefesaCivil ?? []
+  if (agentes.length === 0) {
+    ws.addRow(['Nenhum agente escalado', ''])
+  } else {
+    agentes.forEach(ag => {
+      const conf = (plano.confirmacoes ?? []).find(c => c.agente === ag)
+      const status = conf?.confirmado ? `✅ Confirmado em ${conf.confirmedAt ? new Date(conf.confirmedAt).toLocaleString('pt-BR') : ''}` : '⏳ Aguardando'
+      const r = ws.addRow([ag, status])
+      r.getCell(2).font = { color: { argb: conf?.confirmado ? 'FF059669' : 'FFB45309' } }
+    })
+  }
+
+  const fotos = plano.fotosEvento ?? []
+  if (fotos.length > 0) {
+    ws.addRow([''])
+    const rSec3 = ws.addRow([`📸 FOTOS DO EVENTO (${fotos.length})`, ''])
+    ws.mergeCells(`A${rSec3.number}:B${rSec3.number}`)
+    Object.assign(rSec3.getCell(1), estiloSecao)
+    ws.addRow([''])
+
+    for (const foto of fotos) {
+      const base64Data = foto.split(',')[1] ?? foto
+      const ext = foto.startsWith('data:image/png') ? 'png' : 'jpeg'
+      try {
+        const imgId = wb.addImage({ base64: base64Data, extension: ext as 'jpeg' | 'png' })
+        const startRow = ws.lastRow!.number
+        ws.addRows(Array.from({ length: 20 }, () => ['', '']))
+        ws.addImage(imgId, { tl: { col: 0, row: startRow }, ext: { width: 420, height: 280 } })
+        ws.getRow(startRow + 1).height = 200
+      } catch { /* ignora foto inválida */ }
+    }
+  }
+
+  const buf = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `evento_${plano.nome.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 // ── Tela de detalhe do planejamento ────────────────────────────────────
 function DetalheP({
   plano,
@@ -2199,6 +2312,72 @@ function DetalheP({
   const cfg = TIPOS_CONFIG[plano.tipo]
   const [editando, setEditando] = useState(false)
   const [planoLocal, setPlanoLocal] = useState(plano)
+  const [salvandoConf, setSalvandoConf] = useState(false)
+  const [carregandoFotos, setCarregandoFotos] = useState(false)
+  const [exportandoExcel, setExportandoExcel] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const meuNomeAgente = getNomeAgenteGlobal()
+
+  async function confirmarPresenca(novoStatus: boolean) {
+    if (!meuNomeAgente) return
+    setSalvandoConf(true)
+    try {
+      const res = await fetch(`/api/planejamentos/${planoLocal.id}/confirmar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agente: meuNomeAgente, confirmado: novoStatus, criador: planoLocal.criadoPor }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const atualizado = { ...planoLocal, confirmacoes: data.confirmacoes }
+        setPlanoLocal(atualizado)
+        onAtualizar(atualizado)
+      }
+    } finally {
+      setSalvandoConf(false)
+    }
+  }
+
+  async function adicionarFotosEvento(files: FileList | null) {
+    if (!files || files.length === 0) return
+    setCarregandoFotos(true)
+    try {
+      const novas: string[] = []
+      for (const file of Array.from(files)) {
+        const b64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = (e) => resolve(e.target?.result as string)
+          reader.readAsDataURL(file)
+        })
+        novas.push(b64)
+      }
+      const res = await fetch(`/api/planejamentos/${planoLocal.id}/fotos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fotos: novas }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const atualizado = { ...planoLocal, fotosEvento: data.fotos }
+        setPlanoLocal(atualizado)
+        onAtualizar(atualizado)
+      }
+    } finally {
+      setCarregandoFotos(false)
+    }
+  }
+
+  async function removerFotoEvento(idx: number) {
+    try {
+      const res = await fetch(`/api/planejamentos/${planoLocal.id}/fotos/${idx}`, { method: 'DELETE' })
+      if (res.ok) {
+        const data = await res.json()
+        const atualizado = { ...planoLocal, fotosEvento: data.fotos }
+        setPlanoLocal(atualizado)
+        onAtualizar(atualizado)
+      }
+    } catch { /* silencioso */ }
+  }
 
   // ── Prontidão ───────────────────────────────────────────────────────────
   const chaveLocal = `dc-prontidao-${plano.id}`
@@ -2334,6 +2513,16 @@ function DetalheP({
             title="Exportar PDF"
             style={{ fontSize: '1rem' }}
           >📄</button>
+          <button
+            className="plan-detalhe-btn-acao"
+            title="Exportar Excel com fotos"
+            style={{ fontSize: '1rem', opacity: exportandoExcel ? 0.6 : 1 }}
+            onClick={async () => {
+              if (exportandoExcel) return
+              setExportandoExcel(true)
+              try { await exportarEventoExcel(planoLocal) } finally { setExportandoExcel(false) }
+            }}
+          >{exportandoExcel ? '⏳' : '📊'}</button>
           <button className="plan-detalhe-btn-acao" onClick={() => setEditando(true)} title="Editar">✏️</button>
         </div>
       </div>
@@ -2461,6 +2650,119 @@ function DetalheP({
           >
             {emProntidao ? '🔴 Sair' : '📡 Entrar'}
           </button>
+        </div>
+
+        {/* ── Confirmações de presença ── */}
+        {(planoLocal.agentesDefesaCivil ?? []).length > 0 && (
+          <div className="plan-detalhe-card">
+            <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#065f46,#059669)', color: 'white', border: 'none' }}>
+              🧑‍🚒 Confirmações de Presença
+              <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+                {(planoLocal.confirmacoes ?? []).filter(c => c.confirmado).length}/{(planoLocal.agentesDefesaCivil ?? []).length} confirmado(s)
+              </span>
+            </div>
+            <div style={{ padding: '0.5rem 0.75rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+              {(planoLocal.agentesDefesaCivil ?? []).map(ag => {
+                const conf = (planoLocal.confirmacoes ?? []).find(c => c.agente === ag)
+                const eEu = meuNomeAgente && (ag === meuNomeAgente || ag.split(' ')[0] === meuNomeAgente.split(' ')[0])
+                return (
+                  <div key={ag} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.3rem 0', borderBottom: '1px solid #f0fdf4' }}>
+                    <span style={{ fontSize: '0.88rem' }}>🧑‍🚒</span>
+                    <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: eEu ? 700 : 400, color: '#1f2937' }}>{ag}{eEu ? ' (você)' : ''}</span>
+                    {conf?.confirmado
+                      ? <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, background: '#d1fae5', borderRadius: 10, padding: '0.1rem 0.5rem' }}>✅ Confirmado</span>
+                      : <span style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600, background: '#fef9c3', borderRadius: 10, padding: '0.1rem 0.5rem' }}>⏳ Aguardando</span>
+                    }
+                  </div>
+                )
+              })}
+
+              {/* Botão de ação do agente logado */}
+              {meuNomeAgente && (planoLocal.agentesDefesaCivil ?? []).some(ag => ag === meuNomeAgente || ag.split(' ')[0] === meuNomeAgente.split(' ')[0]) && (() => {
+                const minhaConf = (planoLocal.confirmacoes ?? []).find(c => c.agente === meuNomeAgente || c.agente.split(' ')[0] === meuNomeAgente.split(' ')[0])
+                return (
+                  <button
+                    onClick={() => confirmarPresenca(!(minhaConf?.confirmado))}
+                    disabled={salvandoConf}
+                    style={{
+                      marginTop: '0.4rem',
+                      background: minhaConf?.confirmado ? '#fee2e2' : 'linear-gradient(90deg,#065f46,#059669)',
+                      color: minhaConf?.confirmado ? '#dc2626' : 'white',
+                      border: 'none', borderRadius: 20,
+                      padding: '0.35rem 1.1rem', fontSize: '0.8rem', fontWeight: 700,
+                      cursor: salvandoConf ? 'wait' : 'pointer',
+                      opacity: salvandoConf ? 0.7 : 1,
+                      alignSelf: 'flex-start',
+                    }}
+                  >
+                    {salvandoConf ? '⏳ Salvando...' : minhaConf?.confirmado ? '❌ Cancelar presença' : '✅ Confirmar minha presença'}
+                  </button>
+                )
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* ── Fotos do evento ── */}
+        <div className="plan-detalhe-card">
+          <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#78350f,#b45309)', color: 'white', border: 'none' }}>
+            📸 Fotos do Evento
+            <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+              {(planoLocal.fotosEvento ?? []).length} foto(s)
+            </span>
+          </div>
+          <div style={{ padding: '0.5rem 0.75rem' }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: 'none' }}
+              onChange={e => adicionarFotosEvento(e.target.files)}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={carregandoFotos}
+              style={{
+                background: carregandoFotos ? '#e5e7eb' : '#1a4b8c', color: 'white',
+                border: 'none', borderRadius: 20, padding: '0.35rem 1rem',
+                fontSize: '0.8rem', fontWeight: 700, cursor: carregandoFotos ? 'wait' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem',
+              }}
+            >
+              {carregandoFotos ? '⏳ Enviando...' : '📷 Adicionar fotos'}
+            </button>
+
+            {(planoLocal.fotosEvento ?? []).length === 0
+              ? <div style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', padding: '0.5rem 0' }}>Nenhuma foto registrada ainda</div>
+              : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '0.4rem' }}>
+                  {(planoLocal.fotosEvento ?? []).map((foto, idx) => (
+                    <div key={idx} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '1', background: '#f1f5f9' }}>
+                      <img
+                        src={foto}
+                        alt={`Foto ${idx + 1}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        loading="lazy"
+                      />
+                      <button
+                        onClick={() => removerFotoEvento(idx)}
+                        style={{
+                          position: 'absolute', top: 2, right: 2,
+                          background: 'rgba(220,38,38,0.85)', color: 'white',
+                          border: 'none', borderRadius: '50%', width: 22, height: 22,
+                          fontSize: '0.65rem', fontWeight: 900, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          lineHeight: 1,
+                        }}
+                        title="Remover foto"
+                      >✕</button>
+                    </div>
+                  ))}
+                </div>
+              )
+            }
+          </div>
         </div>
 
         {/* ── Órgãos + Agentes + Materiais + Mapa (integrado) ── */}
@@ -2864,8 +3166,9 @@ export default function Planejamento() {
   const [planos, setPlanos] = useState<Plano[]>(() => carregarPlanos())
   const [criando, setCriando] = useState(false)
   const [aberto, setAberto] = useState<Plano | null>(null)
+  const planosRef = useRef<Plano[]>([])
 
-  useEffect(() => { salvarPlanos(planos) }, [planos])
+  useEffect(() => { salvarPlanos(planos); planosRef.current = planos }, [planos])
 
   async function carregarDoServidor() {
     // Supabase (Netlify + Replit com VITE_USE_SUPABASE=true)
@@ -2940,7 +3243,26 @@ export default function Planejamento() {
     try { await fetch(`/api/planejamentos/${id}`, { method: 'DELETE' }) } catch { /* silencioso */ }
   }
 
+  function notificarAgentesNovos(plano: Plano) {
+    const existingPlano = planosRef.current.find(p => p.id === plano.id)
+    const agentesAntigos = existingPlano?.agentesDefesaCivil ?? []
+    const agentesNovos = (plano.agentesDefesaCivil ?? []).filter(a => !agentesAntigos.includes(a))
+    if (agentesNovos.length > 0) {
+      fetch('/api/push/escala', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentes: agentesNovos,
+          planoNome: plano.nome,
+          planoId: plano.id,
+          remetente: getNomeAgenteGlobal(),
+        }),
+      }).catch(() => {})
+    }
+  }
+
   const salvarPlano = useCallback((plano: Plano) => {
+    notificarAgentesNovos(plano)
     setPlanos(prev => {
       const existe = prev.findIndex(p => p.id === plano.id)
       if (existe >= 0) {
@@ -2956,6 +3278,7 @@ export default function Planejamento() {
   }, [])
 
   const atualizarPlano = useCallback((plano: Plano) => {
+    notificarAgentesNovos(plano)
     setPlanos(prev => prev.map(p => p.id === plano.id ? plano : p))
     setAberto(plano)
     sincServidor(plano)

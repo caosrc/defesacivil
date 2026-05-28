@@ -216,31 +216,38 @@ self.addEventListener('push', (event) => {
   const tag = data.tag || 'sos'
   const url = data.url || '/'
   const sosId = data.sosId || null
+  const tipo = data.tipo || null  // 'sos' | 'escala' | 'confirmacao' | 'evento_dia' | null
+
+  const ehSos = !tipo || tipo === 'sos'
 
   event.waitUntil(
     (async () => {
-      // Avisa clientes com a janela visível para atualizar o overlay sem delay
-      try {
-        const clientes = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-        for (const c of clientes) {
-          c.postMessage({ tipo: 'SOS_PUSH_RECEIVED', sosId, titulo, corpo })
-        }
-      } catch { /* ignore */ }
+      if (ehSos) {
+        // SOS: avisa janelas abertas para exibir overlay imediatamente
+        try {
+          const clientes = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+          for (const c of clientes) {
+            c.postMessage({ tipo: 'SOS_PUSH_RECEIVED', sosId, titulo, corpo })
+          }
+        } catch { /* ignore */ }
+      }
 
-      // Mostra notificação nativa — aparece mesmo com tela bloqueada
       await self.registration.showNotification(titulo, {
         body: corpo,
         icon: '/icon-192.png',
         badge: '/icon-192.png',
         tag,
         renotify: true,
-        requireInteraction: true,
-        silent: false,
-        vibrate: [500, 200, 500, 200, 1000, 200, 500, 200, 500],
-        actions: [
-          { action: 'abrir', title: '🆘 Ver SOS' },
-          { action: 'dispensar', title: 'Dispensar' },
-        ],
+        requireInteraction: ehSos || tipo === 'escala',
+        silent: !ehSos && tipo !== 'escala',
+        vibrate: ehSos
+          ? [500, 200, 500, 200, 1000, 200, 500, 200, 500]
+          : tipo === 'escala' ? [200, 100, 200] : [100],
+        actions: ehSos
+          ? [{ action: 'abrir', title: '🆘 Ver SOS' }, { action: 'dispensar', title: 'Dispensar' }]
+          : tipo === 'escala'
+          ? [{ action: 'abrir', title: '✅ Confirmar presença' }, { action: 'dispensar', title: 'Depois' }]
+          : [{ action: 'abrir', title: '📱 Abrir app' }],
         data: { url, sosId },
       })
     })()

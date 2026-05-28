@@ -1,0 +1,2 @@
+- [Planejamento features](planejamento-features.md) — push ao escalar agentes, confirmação de presença, fotos do evento, Excel com fotos implementados em Mai 2026.
+- [Stack e arquitetura](stack.md) — React 19 + Vite frontend, Express 5 + pg backend na porta 5000, PostgreSQL Replit, VITE_USE_SUPABASE=false.
