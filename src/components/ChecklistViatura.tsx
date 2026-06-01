@@ -478,15 +478,36 @@ export default function ChecklistViatura() {
   async function carregarArquivo(mes: string) {
     setCarregandoArquivo(true)
     setMesSelecionado(mes)
+
+    // Fallback imediato: filtra dos checklists já carregados em memória
+    const doEstado = checklists.filter(c => (c.data_checklist || '').startsWith(mes))
+    if (doEstado.length > 0) setChecklistsArquivo(doEstado)
+
     if (supabaseDisponivel) {
       try {
-        const { data } = await supabase
+        // Usa gte/lt para correspondência de intervalo de datas mais robusta
+        const anoNum = Number(mes.slice(0, 4))
+        const mesNum = Number(mes.slice(5, 7))
+        const mesNextNum = mesNum === 12 ? 1 : mesNum + 1
+        const anoNext = mesNum === 12 ? anoNum + 1 : anoNum
+        const mesNext = `${anoNext}-${String(mesNextNum).padStart(2, '0')}`
+
+        const { data, error } = await supabase
           .from('checklists_viatura')
           .select('*')
-          .like('data_checklist', `${mes}%`)
+          .gte('data_checklist', `${mes}-01`)
+          .lt('data_checklist', `${mesNext}-01`)
           .order('created_at', { ascending: false })
-        setChecklistsArquivo((Array.isArray(data) ? data : []) as ChecklistData[])
-      } catch { setChecklistsArquivo([]) }
+
+        if (error) {
+          console.error('[Checklist] carregarArquivo Supabase error:', error.message)
+          // mantém o fallback do estado se já havia dados
+        } else {
+          setChecklistsArquivo((Array.isArray(data) ? data : doEstado) as ChecklistData[])
+        }
+      } catch (e) {
+        console.error('[Checklist] carregarArquivo exceção:', e)
+      }
       setCarregandoArquivo(false)
       return
     }
@@ -495,7 +516,7 @@ export default function ChecklistViatura() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setChecklistsArquivo((Array.isArray(data) ? data : []) as ChecklistData[])
-    } catch { setChecklistsArquivo([]) }
+    } catch { if (doEstado.length === 0) setChecklistsArquivo([]) }
     setCarregandoArquivo(false)
   }
 

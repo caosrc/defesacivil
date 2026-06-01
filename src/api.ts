@@ -33,9 +33,11 @@ async function comprimirFoto(dataUrl: string, maxW = 1280, qualidade = 0.72): Pr
 
 async function comprimirFotos(fotos: unknown[]): Promise<string[]> {
   if (!Array.isArray(fotos) || fotos.length === 0) return []
-  return Promise.all(
-    fotos.map(f => (typeof f === 'string' ? comprimirFoto(f) : Promise.resolve('')))
-  )
+  const result: string[] = []
+  for (const f of fotos) {
+    result.push(typeof f === 'string' ? await comprimirFoto(f) : '')
+  }
+  return result
 }
 
 function localOffline(dados: Omit<Ocorrencia, 'id' | 'created_at'>, localId: number): Ocorrencia {

@@ -69,7 +69,9 @@ const MESES_ABR = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set'
 export async function adicionarMarcaDagua(
   dataUrl: string,
   lat?: number | null,
-  lng?: number | null
+  lng?: number | null,
+  maxWidth = 1920,
+  qualidade = 0.82,
 ): Promise<string> {
   let useLat = lat ?? null
   let useLng = lng ?? null
@@ -82,12 +84,18 @@ export async function adicionarMarcaDagua(
   return new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
+      let drawW = img.width
+      let drawH = img.height
+      if (drawW > maxWidth) {
+        drawH = Math.round(drawH * maxWidth / drawW)
+        drawW = maxWidth
+      }
       const canvas = document.createElement('canvas')
-      canvas.width = img.width
-      canvas.height = img.height
+      canvas.width = drawW
+      canvas.height = drawH
       const ctx = canvas.getContext('2d')!
 
-      ctx.drawImage(img, 0, 0)
+      ctx.drawImage(img, 0, 0, drawW, drawH)
 
       const agora = new Date()
       const dia = agora.getDate().toString().padStart(2, '0')
@@ -102,9 +110,9 @@ export async function adicionarMarcaDagua(
       }
       linhas.push('DEFESA CIVIL - OURO BRANCO')
 
-      const fontSize = Math.max(14, Math.round(img.width * 0.022))
+      const fontSize = Math.max(14, Math.round(drawW * 0.022))
       const lineHeight = fontSize * 1.45
-      const margem = Math.round(img.width * 0.022)
+      const margem = Math.round(drawW * 0.022)
 
       ctx.font = `bold ${fontSize}px Arial, sans-serif`
       ctx.textAlign = 'right'
@@ -114,15 +122,16 @@ export async function adicionarMarcaDagua(
       ctx.shadowOffsetY = 1
       ctx.fillStyle = '#ffffff'
 
-      const baseY = img.height - margem - (linhas.length - 1) * lineHeight
-      const baseX = img.width - margem
+      const baseY = drawH - margem - (linhas.length - 1) * lineHeight
+      const baseX = drawW - margem
 
       linhas.forEach((linha, i) => {
         ctx.fillText(linha, baseX, baseY + i * lineHeight)
       })
 
-      resolve(canvas.toDataURL('image/jpeg', 0.92))
+      resolve(canvas.toDataURL('image/jpeg', qualidade))
     }
+    img.onerror = () => resolve(dataUrl)
     img.src = dataUrl
   })
 }

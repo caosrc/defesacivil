@@ -241,20 +241,27 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     }
   }
 
-  function adicionarFotos(e: React.ChangeEvent<HTMLInputElement>) {
+  async function adicionarFotos(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
-    if (!files) return
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader()
-      reader.onload = async (ev) => {
-        if (ev.target?.result) {
-          const comMarca = await adicionarMarcaDagua(ev.target.result as string, lat, lng)
-          setFotos((prev) => [...prev, comMarca])
-        }
-      }
-      reader.readAsDataURL(file)
-    })
+    if (!files || files.length === 0) return
     e.target.value = ''
+    for (const file of Array.from(files)) {
+      await new Promise<void>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = async (ev) => {
+          try {
+            if (ev.target?.result) {
+              const comMarca = await adicionarMarcaDagua(ev.target.result as string, lat, lng)
+              setFotos((prev) => [...prev, comMarca])
+            }
+          } finally {
+            resolve()
+          }
+        }
+        reader.onerror = () => resolve()
+        reader.readAsDataURL(file)
+      })
+    }
   }
 
   async function salvar() {
