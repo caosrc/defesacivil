@@ -171,17 +171,52 @@ export async function sincronizarHorasEscala(params: {
   // Atualiza localStorage com dados mesclados
   localStorage.setItem('escala-data-v3', JSON.stringify(dados))
 
+  // Poda dados antigos (> 13 meses) antes de salvar para evitar timeout no Supabase
+  const limiteDate = new Date()
+  limiteDate.setMonth(limiteDate.getMonth() - 13)
+  const limiteStr = limiteDate.toISOString().slice(0, 10)
+
+  function podarAninhado(dict: Record<string, Record<string, unknown>>): Record<string, Record<string, unknown>> {
+    const out: Record<string, Record<string, unknown>> = {}
+    for (const ag of Object.keys(dict)) {
+      const entradas: Record<string, unknown> = {}
+      for (const k of Object.keys(dict[ag])) { if (k >= limiteStr) entradas[k] = dict[ag][k] }
+      if (Object.keys(entradas).length > 0) out[ag] = entradas
+    }
+    return out
+  }
+
+  function podarPlano(dict: Record<string, unknown[]>): Record<string, unknown[]> {
+    const out: Record<string, unknown[]> = {}
+    for (const k of Object.keys(dict)) { if (k >= limiteStr) out[k] = dict[k] }
+    return out
+  }
+
+  const dadosPodados: Record<string, unknown> = {
+    ...dados,
+    adm:                        podarPlano((dados.adm as Record<string, unknown[]>) ?? {}),
+    sobreaviso:                 podarPlano((dados.sobreaviso as Record<string, unknown[]>) ?? {}),
+    sobreavisoSemanal:          podarPlano((dados.sobreavisoSemanal as Record<string, unknown[]>) ?? {}),
+    folgas:                     podarPlano((dados.folgas as Record<string, unknown[]>) ?? {}),
+    horasSobreaviso:            podarAninhado((dados.horasSobreaviso as Record<string, Record<string, unknown>>) ?? {}),
+    horasTrabalhadasSobreaviso: podarAninhado((dados.horasTrabalhadasSobreaviso as Record<string, Record<string, unknown>>) ?? {}),
+    justificativasSobreaviso:   podarAninhado((dados.justificativasSobreaviso as Record<string, Record<string, unknown>>) ?? {}),
+    descontosFolgaBanco:        podarAninhado((dados.descontosFolgaBanco as Record<string, Record<string, unknown>>) ?? {}),
+    horasExtrasSimples:         podarAninhado((dados.horasExtrasSimples as Record<string, Record<string, unknown>>) ?? {}),
+    justificativasExtrasSimples:podarAninhado((dados.justificativasExtrasSimples as Record<string, Record<string, unknown>>) ?? {}),
+  }
+
   try {
     const now = new Date().toISOString()
     if (supabaseDisponivel) {
       await supabase
         .from('escala_estado')
-        .upsert({ id: 1, data: dados, updated_at: now }, { onConflict: 'id' })
+        .upsert({ id: 1, data: dadosPodados, updated_at: now }, { onConflict: 'id' })
     } else {
       await fetch('/api/escala', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dados),
+        body: JSON.stringify(dadosPodados),
       })
     }
   } catch (e) {

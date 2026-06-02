@@ -245,21 +245,64 @@ function respostaExpressValida(res: Response): boolean {
   return !ct.includes('text/html')
 }
 
+/**
+ * Remove entradas com chave de data (YYYY-MM-DD) mais antigas que `mesesRetencao` meses.
+ * Mantém todos os campos sem data (percents, ajustes, ferias, feriadosCustom, etc.).
+ */
+function podarDadosAntigos(data: EscalaData, mesesRetencao = 13): EscalaData {
+  const limite = new Date()
+  limite.setMonth(limite.getMonth() - mesesRetencao)
+  const limiteStr = limite.toISOString().slice(0, 10)
+
+  function podarPlano(dict: Record<string, string[]>): Record<string, string[]> {
+    const out: Record<string, string[]> = {}
+    for (const k of Object.keys(dict)) { if (k >= limiteStr) out[k] = dict[k] }
+    return out
+  }
+
+  function podarAninhado<T>(dict: Record<string, Record<string, T>>): Record<string, Record<string, T>> {
+    const out: Record<string, Record<string, T>> = {}
+    for (const agente of Object.keys(dict)) {
+      const entradas: Record<string, T> = {}
+      for (const dataKey of Object.keys(dict[agente])) {
+        if (dataKey >= limiteStr) entradas[dataKey] = dict[agente][dataKey]
+      }
+      if (Object.keys(entradas).length > 0) out[agente] = entradas
+    }
+    return out
+  }
+
+  return {
+    ...data,
+    adm:                        podarPlano(data.adm),
+    sobreaviso:                 podarPlano(data.sobreaviso),
+    sobreavisoSemanal:          podarPlano(data.sobreavisoSemanal),
+    folgas:                     podarPlano(data.folgas),
+    horasSobreaviso:            podarAninhado(data.horasSobreaviso),
+    horasTrabalhadasSobreaviso: podarAninhado(data.horasTrabalhadasSobreaviso),
+    justificativasSobreaviso:   podarAninhado(data.justificativasSobreaviso),
+    descontosFolgaBanco:        podarAninhado(data.descontosFolgaBanco),
+    horasExtrasSimples:         podarAninhado(data.horasExtrasSimples),
+    justificativasExtrasSimples:podarAninhado(data.justificativasExtrasSimples),
+  }
+}
+
 function salvarDados(data: EscalaData) {
   marcarEdicaoLocal()
   const now = new Date().toISOString()
+  const dataPodada = podarDadosAntigos(data)
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   localStorage.setItem(LOCAL_TS_KEY, now)
 
   if (supabaseDisponivel) {
     supabase.from('escala_estado')
-      .upsert({ id: 1, data, updated_at: now }, { onConflict: 'id' })
+      .upsert({ id: 1, data: dataPodada, updated_at: now }, { onConflict: 'id' })
       .then(() => { wsSend({ tipo: 'escala_atualizada' }) })
       .catch((e: unknown) => console.warn('Falha ao salvar escala no Supabase:', e))
     return
   }
 
-  fetch('/api/escala', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  fetch('/api/escala', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dataPodada) })
     .then(() => { wsSend({ tipo: 'escala_atualizada' }) })
     .catch((e: unknown) => console.warn('Falha ao salvar escala:', e))
 }
@@ -268,13 +311,14 @@ function salvarDados(data: EscalaData) {
 async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensagem?: string }> {
   marcarEdicaoLocal()
   const now = new Date().toISOString()
+  const dataPodada = podarDadosAntigos(data)
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   localStorage.setItem(LOCAL_TS_KEY, now)
 
   if (supabaseDisponivel) {
     const { error } = await supabase
       .from('escala_estado')
-      .upsert({ id: 1, data, updated_at: now }, { onConflict: 'id' })
+      .upsert({ id: 1, data: dataPodada, updated_at: now }, { onConflict: 'id' })
     if (error) return { ok: false, mensagem: error.message }
     wsSend({ tipo: 'escala_atualizada' })
     return { ok: true }
@@ -284,7 +328,7 @@ async function salvarDadosAsync(data: EscalaData): Promise<{ ok: boolean; mensag
     const res = await fetch('/api/escala', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify(dataPodada),
     })
     if (!res.ok) { const e = await res.json().catch(() => ({})); return { ok: false, mensagem: e.error || 'Falha ao salvar' } }
     wsSend({ tipo: 'escala_atualizada' })
