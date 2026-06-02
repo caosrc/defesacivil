@@ -285,8 +285,8 @@ export async function atualizarOcorrencia(
   id: number,
   dados: Partial<Ocorrencia>
 ): Promise<Ocorrencia> {
-  const { id: _i, created_at: _c, _offline: _o, _localId: _l, ...payloadRaw } = dados as Record<string, unknown>
-  void _i; void _c; void _o; void _l
+  const { id: _i, _offline: _o, _localId: _l, ...payloadRaw } = dados as Record<string, unknown>
+  void _i; void _o; void _l
 
   // payload começa como payloadRaw; pode ser substituído com fotos comprimidas no bloco Supabase
   let payload: Record<string, unknown> = payloadRaw
