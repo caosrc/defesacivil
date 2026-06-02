@@ -938,15 +938,17 @@ app.get('/api/ocorrencias/:id', async (req, res) => {
 app.put('/api/ocorrencias/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10)
   if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' })
-  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes, vistorias, focos_incendio, poligono_area_queimada, created_at } = req.body
+  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, hora_inicio, hora_fim, horas_total, horas_sobreaviso, agentes, vistorias, focos_incendio, poligono_area_queimada, created_at } = req.body
   console.log(`PUT /api/ocorrencias/${id} — tipo=${tipo} natureza=${natureza}`)
   try {
     const result = await query(
       `UPDATE ocorrencias SET tipo=$1, natureza=$2, subnatureza=$3, nivel_risco=$4, status_oc=$5,
        fotos=$6, lat=$7, lng=$8, endereco=$9, proprietario=$10, situacao=$11, recomendacao=$12,
-       conclusao=$13, data_ocorrencia=$14, agentes=$15, vistorias=$16, focos_incendio=$17,
-       poligono_area_queimada=$18, created_at=COALESCE($19, created_at)
-       WHERE id=$20 RETURNING *`,
+       conclusao=$13, data_ocorrencia=$14, hora_inicio=$15, hora_fim=$16,
+       horas_total=$17, horas_sobreaviso=$18,
+       agentes=$19, vistorias=$20, focos_incendio=$21,
+       poligono_area_queimada=$22, created_at=COALESCE($23, created_at)
+       WHERE id=$24 RETURNING *`,
       [tipo, natureza, subnatureza || null, nivel_risco, status_oc,
        JSON.stringify(Array.isArray(fotos) ? fotos : []),
        lat != null && lat !== '' ? lat : null,
@@ -954,6 +956,9 @@ app.put('/api/ocorrencias/:id', async (req, res) => {
        endereco || null, proprietario || null,
        situacao || null, recomendacao || null, conclusao || null,
        data_ocorrencia || null,
+       hora_inicio || null, hora_fim || null,
+       horas_total != null ? horas_total : null,
+       horas_sobreaviso != null ? horas_sobreaviso : null,
        JSON.stringify(Array.isArray(agentes) ? agentes : []),
        JSON.stringify(Array.isArray(vistorias) ? vistorias : []),
        Array.isArray(focos_incendio) && focos_incendio.length ? JSON.stringify(focos_incendio) : null,

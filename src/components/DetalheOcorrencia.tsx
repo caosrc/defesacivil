@@ -301,6 +301,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         conclusao: eConclusao || null,
         agentes: eAgentes,
         created_at: registradoEmIso,
+        focos_incendio: Array.isArray(o.focos_incendio) && o.focos_incendio.length > 0 ? o.focos_incendio : null,
+        vistorias: Array.isArray(o.vistorias) ? o.vistorias : [],
         poligono_area_queimada: ehIncendioOc && ePoligonoArea.length >= 3 ? ePoligonoArea : null,
       }
       let atualizado: Ocorrencia
@@ -332,8 +334,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
       onAtualizado(atualizado)
       setEditando(false)
     } catch (err) {
-      console.error(err)
-      setErroEdit('Erro ao salvar. Tente novamente.')
+      console.error('salvarEdicao error:', err)
+      setErroEdit(err instanceof Error ? `Erro: ${err.message}` : 'Erro ao salvar. Tente novamente.')
     }
     setSalvando(false)
   }
