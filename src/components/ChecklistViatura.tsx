@@ -246,7 +246,7 @@ function redimensionarImagem(dataUrl: string, maxW: number, maxH: number): Promi
       const canvas = document.createElement('canvas')
       canvas.width = w; canvas.height = h
       canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
-      resolve(canvas.toDataURL('image/jpeg', 0.88))
+      resolve(canvas.toDataURL('image/jpeg', 0.65))
     }
     img.src = dataUrl
   })

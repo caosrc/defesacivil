@@ -4,7 +4,7 @@ import { supabase, supabaseDisponivel } from './supabaseClient'
 
 // Redimensiona e recomprime um base64 para no máximo maxW pixels de largura
 // e qualidade JPEG reduzida. Isso mantém o payload do Supabase abaixo de 10 MB.
-async function comprimirFoto(dataUrl: string, maxW = 1280, qualidade = 0.72): Promise<string> {
+async function comprimirFoto(dataUrl: string, maxW = 1024, qualidade = 0.65): Promise<string> {
   if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl
   return new Promise((resolve) => {
     const img = new Image()
@@ -238,7 +238,10 @@ export async function enviarOcorrenciaServidor(
     }
   }
 
-  const payload = buildPayload(dados)
+  // Comprime fotos antes de enviar pelo Express (mesmo tratamento do caminho Supabase)
+  const fotosExpressComprimidas = await comprimirFotos(Array.isArray(dados.fotos) ? dados.fotos : [])
+  const dadosComprimidos = { ...dados, fotos: fotosExpressComprimidas }
+  const payload = buildPayload(dadosComprimidos)
 
   // Express (Replit)
   try {
@@ -316,7 +319,10 @@ export async function atualizarOcorrencia(
     return data as Ocorrencia
   }
 
-  // Express (Replit)
+  // Express (Replit) — comprime fotos antes de enviar
+  const fotosExpressAtualizadas = await comprimirFotos(Array.isArray(payloadRaw.fotos) ? payloadRaw.fotos as unknown[] : [])
+  payload = { ...payloadRaw, fotos: fotosExpressAtualizadas }
+
   try {
     const res = await fetch(`/api/ocorrencias/${id}`, {
       method: 'PUT',

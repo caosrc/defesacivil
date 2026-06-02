@@ -70,8 +70,8 @@ export async function adicionarMarcaDagua(
   dataUrl: string,
   lat?: number | null,
   lng?: number | null,
-  maxWidth = 1920,
-  qualidade = 0.82,
+  maxWidth = 1280,
+  qualidade = 0.70,
 ): Promise<string> {
   let useLat = lat ?? null
   let useLng = lng ?? null

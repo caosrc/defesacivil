@@ -120,7 +120,7 @@ function statusEmprestimo(e: Emprestimo): 'devolvido' | 'atrasado' | 'proximo' |
   return 'no_prazo'
 }
 
-function redimensionarImagem(dataUrl: string, maxW: number, maxH: number, qualidade = 0.85): Promise<string> {
+function redimensionarImagem(dataUrl: string, maxW: number, maxH: number, qualidade = 0.65): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
