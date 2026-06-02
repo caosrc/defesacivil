@@ -703,6 +703,7 @@ interface BancoHorasAgenteProps {
   onUpdateHoras: (data: string, horas: number) => void
   onUpdateJustificativa: (data: string, justificativa: string) => void
   hideSobreaviso?: boolean
+  hideTotalRow?: boolean
   ajusteBanco?: number
 }
 
@@ -710,7 +711,7 @@ function fmtH(h: number): string {
   return h % 1 === 0 ? String(h) : h.toFixed(1)
 }
 
-function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, onUpdateHoras, onUpdateJustificativa, hideSobreaviso = false, ajusteBanco = 0 }: BancoHorasAgenteProps) {
+function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, onUpdateHoras, onUpdateJustificativa, hideSobreaviso = false, hideTotalRow = false, ajusteBanco = 0 }: BancoHorasAgenteProps) {
   const info = AGENTE_MAP[agente]
   const hoje = hojeStr()
   const horasAgente = horasTrabalhadasSobreaviso[agente] ?? {}
@@ -995,10 +996,12 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
         </div>
       )}
 
-      <div className="bh-total-geral">
-        <span className="bh-total-label">Total de Horas</span>
-        <span className="bh-total-valor" style={totalGeral < 0 ? { color: '#dc2626' } : {}}>{fmtH(totalGeral)}<span className="bh-total-h">h</span></span>
-      </div>
+      {!hideTotalRow && (
+        <div className="bh-total-geral">
+          <span className="bh-total-label">Total de Horas</span>
+          <span className="bh-total-valor" style={totalGeral < 0 ? { color: '#dc2626' } : {}}>{fmtH(totalGeral)}<span className="bh-total-h">h</span></span>
+        </div>
+      )}
     </div>
   )
 }
@@ -1010,9 +1013,11 @@ interface BancoHorasExtraSimplesProps {
   justificativasExtrasSimples: Record<string, Record<string, string>>
   onSalvarHora: (data: string, horas: number, justificativa?: string) => Promise<{ ok: boolean; mensagem?: string }>
   onSalvarJustificativa: (data: string, justificativa: string) => void
+  horasOcorrencias?: number
+  ajusteBanco?: number
 }
 
-function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtrasSimples, onSalvarHora, onSalvarJustificativa }: BancoHorasExtraSimplesProps) {
+function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtrasSimples, onSalvarHora, onSalvarJustificativa, horasOcorrencias = 0, ajusteBanco = 0 }: BancoHorasExtraSimplesProps) {
   const info = AGENTE_MAP[agente]
   const horasAgente = horasExtrasSimples[agente] ?? {}
   const justifAgente = justificativasExtrasSimples[agente] ?? {}
@@ -1028,7 +1033,9 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
   const minData = prazoLancamentoMin()
   const maxData = hojeStr()
 
-  const total = Object.values(horasAgente).reduce((acc, h) => acc + h, 0)
+  const totalManual = Object.values(horasAgente).reduce((acc, h) => acc + h, 0)
+  const total = totalManual
+  const totalCombinado = horasOcorrencias + totalManual + ajusteBanco
   const entradas = Object.entries(horasAgente).sort(([a], [b]) => b.localeCompare(a))
 
   function mostrarFeedback(tipo: 'ok' | 'erro', texto: string) {
@@ -1234,9 +1241,31 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
         )}
       </div>
 
+      {horasOcorrencias > 0 && (
+        <div className="bh-bloco" style={{ marginTop: 8 }}>
+          <div className="bh-bloco-header">
+            <span className="bh-bloco-icone">🚨</span>
+            <span className="bh-bloco-titulo">Horas de ocorrências (após 17h / fins de semana)</span>
+            <span className="bh-bloco-total">{fmtH(horasOcorrencias)}h</span>
+          </div>
+        </div>
+      )}
+
+      {ajusteBanco !== 0 && (
+        <div className="bh-bloco bh-bloco-ajuste">
+          <div className="bh-bloco-header">
+            <span className="bh-bloco-icone">⚖️</span>
+            <span className="bh-bloco-titulo">Ajuste pelo coordenador</span>
+            <span className="bh-bloco-total" style={{ color: ajusteBanco >= 0 ? '#16a34a' : '#dc2626' }}>
+              {ajusteBanco >= 0 ? '+' : ''}{fmtH(ajusteBanco)}h
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="bh-total-geral">
         <span className="bh-total-label">Total de Horas</span>
-        <span className="bh-total-valor" style={total < 0 ? { color: '#dc2626' } : {}}>{fmtH(total)}<span className="bh-total-h">h</span></span>
+        <span className="bh-total-valor" style={totalCombinado < 0 ? { color: '#dc2626' } : {}}>{fmtH(totalCombinado)}<span className="bh-total-h">h</span></span>
       </div>
     </div>
   )
@@ -2843,20 +2872,30 @@ export default function EscalaAgentes() {
           onUpdateHoras={atualizarHorasTrabalhadasSobreaviso}
           onUpdateJustificativa={atualizarJustificativaSobreaviso}
           hideSobreaviso={true}
-          ajusteBanco={dados.ajustesBanco?.[agenteLogado] ?? 0}
+          hideTotalRow={true}
+          ajusteBanco={0}
         />
       )}
 
       {/* Banco de Horas Extras Manuais — Talita / Cristiane / Sócrates */}
-      {!isMoises && isHorasExtras && (
-        <BancoHorasExtraSimples
-          agente={agenteLogado}
-          horasExtrasSimples={dados.horasExtrasSimples}
-          justificativasExtrasSimples={dados.justificativasExtrasSimples ?? {}}
-          onSalvarHora={salvarHoraExtraSimples}
-          onSalvarJustificativa={salvarJustificativaExtraSimples}
-        />
-      )}
+      {!isMoises && isHorasExtras && (() => {
+        const horasOc = calcularBancoHoras(
+          agenteLogado, dados.sobreaviso, dados.horasTrabalhadasSobreaviso,
+          dados.percDomingoFeriado, 0, dados.percSabado,
+          dados.feriadosCustom, dados.descontosFolgaBanco, dados.folgas, hoje,
+        )
+        return (
+          <BancoHorasExtraSimples
+            agente={agenteLogado}
+            horasExtrasSimples={dados.horasExtrasSimples}
+            justificativasExtrasSimples={dados.justificativasExtrasSimples ?? {}}
+            onSalvarHora={salvarHoraExtraSimples}
+            onSalvarJustificativa={salvarJustificativaExtraSimples}
+            horasOcorrencias={horasOc}
+            ajusteBanco={dados.ajustesBanco?.[agenteLogado] ?? 0}
+          />
+        )
+      })()}
 
       {/* Banco de Horas — Moisés vê todos */}
       {isMoises && (
