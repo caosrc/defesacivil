@@ -78,9 +78,8 @@ function buildPayload(dados: Omit<Ocorrencia, 'id' | 'created_at'>) {
   }
 }
 
-// Detecta se a resposta do Express é válida (não é a página HTML do Netlify/redirect)
+// Detecta se a resposta é do Express/API (JSON) e não uma página HTML de redirect
 function respostaExpressValida(res: Response): boolean {
-  if (!res.ok) return false
   const ct = res.headers.get('content-type') || ''
   return !ct.includes('text/html')
 }
