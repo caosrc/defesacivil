@@ -37,6 +37,32 @@ function statusLabel(s: string) {
   return s === 'ativo' ? 'Ativo' : 'Resolvido'
 }
 
+function calcularAreaM2(pontos: { lat: number; lng: number }[]): number {
+  if (pontos.length < 3) return 0
+  const toRad = (d: number) => d * Math.PI / 180
+  const R = 6371000
+  const lat0 = pontos[0].lat
+  const lng0 = pontos[0].lng
+  const pts = pontos.map(p => ({
+    x: (p.lng - lng0) * Math.cos(toRad(lat0)) * R * toRad(1),
+    y: (p.lat - lat0) * R * toRad(1),
+  }))
+  let area = 0
+  const n = pts.length
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n
+    area += pts[i].x * pts[j].y - pts[j].x * pts[i].y
+  }
+  return Math.abs(area) / 2
+}
+
+function formatarAreaExcel(m2: number): string {
+  if (m2 < 1) return '< 1 m²'
+  if (m2 < 10000) return `${Math.round(m2).toLocaleString('pt-BR')} m²`
+  const ha = m2 / 10000
+  return `${ha.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ha`
+}
+
 // ── Export single occurrence with photos ──────────────────────────────────────
 export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
   const { default: ExcelJS } = await import('exceljs')
@@ -462,8 +488,8 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
   const ws = wb.addWorksheet('Ocorrências')
 
   const maxFotos = ocorrencias.reduce((max, o) => Math.max(max, o.fotos?.length ?? 0), 0)
-  // Colunas extras p/ vistorias adicionais (Interdição de Imóvel)
-  const COLS_BASE = 15 + 3 // 15 anteriores + 3 colunas de vistorias adicionais
+  // Colunas extras: 15 base + 3 vistorias + 1 área queimada
+  const COLS_BASE = 15 + 3 + 1
   const totalCols = COLS_BASE + maxFotos
 
   // ── Linha 1: título ───────────────────────────────────────────────────────
@@ -481,11 +507,12 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
     'Nível de Risco', 'Status', 'Endereço', 'Latitude', 'Longitude',
     'Proprietário', 'Situação', 'Recomendação', 'Conclusão',
     'Vistorias Adicionais (qtd)', 'Última Vistoria', 'Observações das Vistorias',
+    'Área Queimada',
     ...Array.from({ length: maxFotos }, (_, i) => `Foto ${i + 1}`),
   ]
 
   const larguras = [6, 16, 20, 14, 26, 20, 14, 12, 32, 12, 12, 26, 40, 40, 40,
-    14, 18, 50,
+    14, 18, 50, 20,
     ...Array(maxFotos).fill(FOTO_COL_W)]
 
   ws.columns = larguras.map((w) => ({ width: w }))
@@ -495,10 +522,11 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
     const cell = headerRow.getCell(i + 1)
     cell.value = h
     cell.font = { bold: true, size: 10, color: { argb: BRANCO } }
-    // Colunas 16, 17, 18 = Vistorias (vermelho); >= 19 = Fotos (laranja); demais = azul
+    // Cols 16-18 = Vistorias (vermelho); 19 = Área Queimada (âmbar); >= 20 = Fotos (laranja)
     let bg = AZUL
     if (i >= 15 && i < 18) bg = 'B91C1C'
-    else if (i >= 18) bg = LARANJA
+    else if (i === 18) bg = 'D97706'
+    else if (i >= 19) bg = LARANJA
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }
     cell.alignment = { horizontal: 'center', vertical: 'middle' }
     cell.border = { bottom: { style: 'thin', color: { argb: BRANCO } } }
@@ -532,6 +560,11 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
         }).join('\n')
       : '—'
 
+    const polPontos = Array.isArray((o as any).poligono_area_queimada) && (o as any).poligono_area_queimada.length >= 3
+      ? (o as any).poligono_area_queimada as { lat: number; lng: number }[]
+      : null
+    const areaQueimadaTxt = polPontos ? formatarAreaExcel(calcularAreaM2(polPontos)) : '—'
+
     const valores = [
       o.id,
       parseDateLocal(o.data_ocorrencia)?.toLocaleDateString('pt-BR') ?? '—',
@@ -551,6 +584,7 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
       vAdic.length,
       ultimaVistoriaTxt,
       obsVistoriasTxt,
+      areaQueimadaTxt,
     ]
 
     valores.forEach((v, i) => { r.getCell(i + 1).value = v as ExcelCellValue })
@@ -584,7 +618,7 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
       o.fotos!.forEach((fotoBase64, fotoIdx) => {
         const base64Data = fotoBase64.includes(',') ? fotoBase64.split(',')[1] : fotoBase64
         const ext = fotoBase64.startsWith('data:image/png') ? 'png' : 'jpeg'
-        const colIdx = 18 + fotoIdx  // 0-indexed: coluna 19 em diante (após Vistorias)
+        const colIdx = 19 + fotoIdx  // 0-indexed: coluna 20 em diante (após Área Queimada)
 
         try {
           const imageId = wb.addImage({ base64: base64Data, extension: ext })

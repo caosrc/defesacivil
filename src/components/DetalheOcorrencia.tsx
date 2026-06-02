@@ -343,13 +343,12 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   }
 
   async function exportarKMZ() {
-    const kml = `<?xml version="1.0" encoding="UTF-8"?>
-<kml xmlns="http://www.opengis.net/kml/2.2">
-  <Document>
-    <name>Defesa Civil Ouro Branco — Ocorrência #${o.id}</name>
-    <Placemark>
-      <name>${o.natureza}</name>
-      <description><![CDATA[
+    const pol = Array.isArray((o as any).poligono_area_queimada)
+      ? (o as any).poligono_area_queimada as { lat: number; lng: number }[]
+      : []
+    const temPoligono = pol.length >= 3
+
+    const descricao = `<![CDATA[
         <b>Tipo:</b> ${o.tipo}<br/>
         <b>Natureza:</b> ${o.natureza}${o.subnatureza ? ` (${o.subnatureza})` : ''}<br/>
         <b>Nível de Risco:</b> ${o.nivel_risco}<br/>
@@ -358,9 +357,41 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         ${o.proprietario ? `<b>Proprietário:</b> ${o.proprietario}<br/>` : ''}
         ${o.situacao ? `<b>Situação:</b> ${o.situacao}<br/>` : ''}
         <b>Data:</b> ${dataFormatada}
-      ]]></description>
+      ]]>`
+
+    const poligonoPlacemark = temPoligono ? `
+    <Placemark>
+      <name>🔥 Área Queimada — ${o.natureza}${o.endereco ? ' · ' + o.endereco : ''}</name>
+      <description>${descricao}</description>
+      <styleUrl>#areaQueimada</styleUrl>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>${[...pol, pol[0]].map(p => `${p.lng},${p.lat},0`).join(' ')}</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>` : ''
+
+    const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>Defesa Civil Ouro Branco — Ocorrência #${o.id}</name>
+    <Style id="areaQueimada">
+      <LineStyle>
+        <color>ff0000ff</color>
+        <width>2.5</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>660000ff</color>
+      </PolyStyle>
+    </Style>
+    <Placemark>
+      <name>${o.natureza}</name>
+      <description>${descricao}</description>
       ${o.lat && o.lng ? `<Point><coordinates>${o.lng},${o.lat},0</coordinates></Point>` : ''}
     </Placemark>
+    ${poligonoPlacemark}
   </Document>
 </kml>`
     const zip = new JSZip()

@@ -491,11 +491,11 @@ export default function App() {
 
   async function exportarTudoKMZ() {
     const comGeo = ocorrencias.filter((o) => o.lat && o.lng)
-    if (!comGeo.length) { alert('Nenhuma ocorrência com GPS para exportar.'); return }
-    const placemarks = comGeo.map((o) => `
-    <Placemark>
-      <name>${o.natureza}</name>
-      <description><![CDATA[
+    const comPoligono = ocorrencias.filter((o) => Array.isArray((o as any).poligono_area_queimada) && (o as any).poligono_area_queimada.length >= 3)
+    if (!comGeo.length && !comPoligono.length) { alert('Nenhuma ocorrência com GPS para exportar.'); return }
+
+    function kmlDescricao(o: typeof ocorrencias[0]) {
+      return `<![CDATA[
         <b>Tipo:</b> ${o.tipo}<br/>
         <b>Natureza:</b> ${o.natureza}${o.subnatureza ? ` (${o.subnatureza})` : ''}<br/>
         <b>Nível:</b> ${o.nivel_risco}<br/>
@@ -503,14 +503,72 @@ export default function App() {
         ${o.endereco ? `<b>Endereço:</b> ${o.endereco}<br/>` : ''}
         ${o.proprietario ? `<b>Proprietário:</b> ${o.proprietario}<br/>` : ''}
         <b>Data:</b> ${new Date(o.created_at).toLocaleString('pt-BR')}
-      ]]></description>
+      ]]>`
+    }
+
+    const placemarks = comGeo.map((o) => {
+      const pol = Array.isArray((o as any).poligono_area_queimada) ? (o as any).poligono_area_queimada as { lat: number; lng: number }[] : []
+      const temPoligono = pol.length >= 3
+      return `
+    <Placemark>
+      <name>${o.natureza}</name>
+      <description>${kmlDescricao(o)}</description>
+      <styleUrl>#ocorrencia</styleUrl>
       <Point><coordinates>${o.lng},${o.lat},0</coordinates></Point>
-    </Placemark>`).join('\n')
+    </Placemark>${temPoligono ? `
+    <Placemark>
+      <name>🔥 Área Queimada — ${o.natureza}${o.endereco ? ' · ' + o.endereco : ''}</name>
+      <description>${kmlDescricao(o)}</description>
+      <styleUrl>#areaQueimada</styleUrl>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>${[...pol, pol[0]].map(p => `${p.lng},${p.lat},0`).join(' ')}</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>` : ''}`
+    }).join('\n')
+
+    const poligonosSemPonto = comPoligono
+      .filter((o) => !o.lat || !o.lng)
+      .map((o) => {
+        const pol = (o as any).poligono_area_queimada as { lat: number; lng: number }[]
+        return `
+    <Placemark>
+      <name>🔥 Área Queimada — ${o.natureza}${o.endereco ? ' · ' + o.endereco : ''}</name>
+      <description>${kmlDescricao(o)}</description>
+      <styleUrl>#areaQueimada</styleUrl>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>${[...pol, pol[0]].map(p => `${p.lng},${p.lat},0`).join(' ')}</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>`
+      }).join('\n')
+
     const kml = `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
   <Document>
     <name>Defesa Civil Ouro Branco — Todas as Ocorrências</name>
+    <Style id="areaQueimada">
+      <LineStyle>
+        <color>ff0000ff</color>
+        <width>2.5</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>660000ff</color>
+      </PolyStyle>
+    </Style>
+    <Style id="ocorrencia">
+      <IconStyle>
+        <scale>1.0</scale>
+      </IconStyle>
+    </Style>
     ${placemarks}
+    ${poligonosSemPonto}
   </Document>
 </kml>`
     const { default: JSZip } = await import('jszip')
