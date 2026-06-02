@@ -1,7 +1,2 @@
-# ── API → Backend Replit (não precisa publicar no Replit) ──────────────────────
-# O Replit fica rodando em dev e o Netlify faz proxy das chamadas de API para ele.
-# Se a URL do Replit mudar, atualize aqui e refaça o deploy do Netlify.
-/api/*  https://87a7d4ce-738a-4aa3-ac74-9e5507611668-00-1qfaq1dnzb4z7.picard.replit.dev/api/:splat  200
-
 # ── SPA — toda rota desconhecida cai no index.html para o React Router cuidar ──
 /*  /index.html  200
