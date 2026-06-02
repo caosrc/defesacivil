@@ -241,12 +241,35 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     }
   }
 
-  async function adicionarFotos(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files
-    if (!files || files.length === 0) return
-    const fileArray = Array.from(files)
-    e.target.value = ''
-    for (const file of fileArray) {
+  function nomeArquivoFoto(): string {
+    const agora = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const ts = `${agora.getFullYear()}${pad(agora.getMonth() + 1)}${pad(agora.getDate())}-${pad(agora.getHours())}${pad(agora.getMinutes())}${pad(agora.getSeconds())}`
+    return `DefesaCivil-OB-${ts}.jpg`
+  }
+
+  async function salvarFotoNoDispositivo(dataUrl: string): Promise<void> {
+    try {
+      const res = await fetch(dataUrl)
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = nomeArquivoFoto()
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 2000)
+    } catch {
+      // não bloquear o fluxo se o save falhar
+    }
+  }
+
+  async function processarFotos(
+    files: File[],
+    salvarNoCelular: boolean,
+  ): Promise<void> {
+    for (const file of files) {
       await new Promise<void>((resolve) => {
         const reader = new FileReader()
         reader.onload = async (ev) => {
@@ -254,6 +277,9 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
             if (ev.target?.result) {
               const comMarca = await adicionarMarcaDagua(ev.target.result as string, lat, lng)
               setFotos((prev) => [...prev, comMarca])
+              if (salvarNoCelular) {
+                salvarFotoNoDispositivo(comMarca)
+              }
             }
           } finally {
             resolve()
@@ -263,6 +289,22 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
         reader.readAsDataURL(file)
       })
     }
+  }
+
+  async function adicionarFotosCamera(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    const fileArray = Array.from(files)
+    e.target.value = ''
+    await processarFotos(fileArray, true)
+  }
+
+  async function adicionarFotos(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    const fileArray = Array.from(files)
+    e.target.value = ''
+    await processarFotos(fileArray, false)
   }
 
   async function salvar() {
@@ -603,7 +645,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
                 <span>Carregar Foto</span>
               </button>
             </div>
-            <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={adicionarFotos} />
+            <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={adicionarFotosCamera} />
             <input ref={galeriaRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={adicionarFotos} />
           </div>
 
