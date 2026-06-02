@@ -34,6 +34,7 @@ export interface Ocorrencia {
   responsavel_registro: string | null
   vistorias: VistoriaAdicional[] | null
   focos_incendio?: { lat: number; lng: number }[] | null
+  poligono_area_queimada?: { lat: number; lng: number }[] | null
   _offline?: boolean
   _localId?: number
 }

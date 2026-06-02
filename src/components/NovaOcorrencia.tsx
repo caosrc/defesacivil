@@ -8,6 +8,7 @@ import { criarOcorrencia } from '../api'
 import { geocodificarEndereco } from '../offline'
 import { formatarCoordenadas, adicionarMarcaDagua, mensagemErroGps } from '../utils'
 import { calcularHorasTotal, calcularHorasSobreaviso, formatarHoras, sincronizarHorasEscala } from '../horasUtils'
+import PoligonoAreaQueimada, { type PontoPoligono } from './PoligonoAreaQueimada'
 
 // Fix Leaflet default icon
 ;(function fixLeafletIcon() {
@@ -81,6 +82,8 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
 
   // ── Focos de incêndio (apenas para Incêndio em Área Urbana/Rural) ──────────
   const [focosIncendio, setFocosIncendio] = useState<FocoIncendio[]>([{ lat: null, lng: null, buscando: false }])
+  // ── Polígono da área queimada ────────────────────────────────────────────────
+  const [poligonoArea, setPoligonoArea] = useState<PontoPoligono[]>([])
 
   // ── Restaurar rascunho ao abrir o formulário ────────────────────────────────
   useEffect(() => {
@@ -109,6 +112,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       if (Array.isArray(d.agentes) && d.agentes.length > 0) setAgentes(d.agentes)
       if (Array.isArray(d.fotos) && d.fotos.length > 0) setFotos(d.fotos)
       if (Array.isArray(d.focosIncendio) && d.focosIncendio.length > 0) setFocosIncendio(d.focosIncendio)
+      if (Array.isArray(d.poligonoArea) && d.poligonoArea.length > 0) setPoligonoArea(d.poligonoArea)
       setRascunhoRestaurado(true)
     } catch {
       // rascunho corrompido — ignora
@@ -124,7 +128,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
         dataOcorrencia, horaInicio, horaFim,
         rua, numero, bairro, lat, lng,
         proprietario, situacao, recomendacao, conclusao,
-        agentes, focosIncendio, fotos,
+        agentes, focosIncendio, fotos, poligonoArea,
       }
       try {
         localStorage.setItem(RASCUNHO_KEY, JSON.stringify(draft))
@@ -140,7 +144,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       dataOcorrencia, horaInicio, horaFim,
       rua, numero, bairro, lat, lng,
       proprietario, situacao, recomendacao, conclusao,
-      agentes, focosIncendio, fotos])
+      agentes, focosIncendio, fotos, poligonoArea])
 
   const descartarRascunho = useCallback(() => {
     localStorage.removeItem(RASCUNHO_KEY)
@@ -154,6 +158,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     setAgentes(agenteLogado ? [agenteLogado] : [])
     setFotos([])
     setFocosIncendio([{ lat: null, lng: null, buscando: false }])
+    setPoligonoArea([])
     setRascunhoRestaurado(false)
     setErro('')
   }, [hoje])
@@ -363,6 +368,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       agentes,
       responsavel_registro: sessionStorage.getItem('defesacivil-agente-sessao') || null,
       focos_incendio: focosValidos && focosValidos.length > 0 ? focosValidos : null,
+      poligono_area_queimada: poligonoArea.length >= 3 ? poligonoArea : null,
     }
 
     try {
@@ -692,6 +698,16 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
                   + Foco
                 </button>
               </div>
+            )}
+
+            {/* Polígono da Área Queimada */}
+            {ehIncendio && (
+              <PoligonoAreaQueimada
+                pontos={poligonoArea}
+                onChange={setPoligonoArea}
+                focoLat={focosIncendio[0]?.lat}
+                focoLng={focosIncendio[0]?.lng}
+              />
             )}
 
             {/* GPS principal (exibido apenas quando não é incêndio, ou como fallback) */}

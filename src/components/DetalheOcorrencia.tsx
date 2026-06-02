@@ -7,6 +7,7 @@ import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
 import { formatarCoordenadas, parseDateLocal, mensagemErroGps, adicionarMarcaDagua } from '../utils'
 import ModalSenha from './ModalSenha'
+import PoligonoAreaQueimada, { calcularAreaM2, formatarArea, type PontoPoligono } from './PoligonoAreaQueimada'
 import { calcularHorasTotal, calcularHorasSobreaviso, formatarHoras, sincronizarHorasEscala } from '../horasUtils'
 
 interface Props {
@@ -145,6 +146,10 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const _createdTime = o.created_at ? new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false }) : ''
   const [eRegistradoData, setERegistradoData] = useState(_createdDate)
   const [eRegistradoHora, setERegistradoHora] = useState(_createdTime)
+  const ehIncendioOc = o.natureza === 'Incêndio em Área Urbana' || o.natureza === 'Incêndio em Área Rural'
+  const [ePoligonoArea, setEPoligonoArea] = useState<PontoPoligono[]>(
+    Array.isArray(o.poligono_area_queimada) ? o.poligono_area_queimada : []
+  )
   const _endParts = (o.endereco ?? '').split(', ')
   const [eRua, setERua] = useState(_endParts[0] ?? '')
   const [eNumero, setENumero] = useState(_endParts[1] ?? '')
@@ -177,6 +182,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setEHoraFim(o.hora_fim ?? '')
     setERegistradoData(o.created_at ? o.created_at.slice(0, 10) : '')
     setERegistradoHora(o.created_at ? new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '')
+    setEPoligonoArea(Array.isArray(o.poligono_area_queimada) ? o.poligono_area_queimada : [])
     const partes = (o.endereco ?? '').split(', ')
     setERua(partes[0] ?? '')
     setENumero(partes[1] ?? '')
@@ -295,6 +301,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         conclusao: eConclusao || null,
         agentes: eAgentes,
         created_at: registradoEmIso,
+        poligono_area_queimada: ehIncendioOc && ePoligonoArea.length >= 3 ? ePoligonoArea : null,
       }
       let atualizado: Ocorrencia
       if (o._offline && o._localId != null) {
@@ -565,6 +572,21 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                   </div>
                 )}
 
+                {/* ── Área Queimada ── */}
+                {Array.isArray(o.poligono_area_queimada) && o.poligono_area_queimada.length >= 3 && (() => {
+                  const area = calcularAreaM2(o.poligono_area_queimada!)
+                  return (
+                    <div className="area-queimada-detalhe">
+                      <div className="detalhe-label-row">🔶 Área Queimada</div>
+                      <div className="area-queimada-resultado">
+                        <span className="area-queimada-icone">📐</span>
+                        <span className="area-queimada-valor">{formatarArea(area)}</span>
+                        <span className="area-queimada-vertices">({o.poligono_area_queimada!.length} vértices)</span>
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 {o.proprietario && <InfoRow icone="👤" label="Proprietário / Morador" valor={o.proprietario} />}
                 {o.situacao && <InfoRow icone="📝" label="Situação" valor={o.situacao} />}
                 {o.recomendacao && <InfoRow icone="💡" label="Recomendação" valor={o.recomendacao} />}
@@ -830,6 +852,16 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                     )
                   })()}
                 </div>
+
+                {/* Polígono da Área Queimada (apenas para incêndios) */}
+                {ehIncendioOc && (
+                  <PoligonoAreaQueimada
+                    pontos={ePoligonoArea}
+                    onChange={setEPoligonoArea}
+                    focoLat={Array.isArray(o.focos_incendio) && o.focos_incendio.length > 0 ? o.focos_incendio[0].lat : o.lat}
+                    focoLng={Array.isArray(o.focos_incendio) && o.focos_incendio.length > 0 ? o.focos_incendio[0].lng : o.lng}
+                  />
+                )}
 
                 {/* Registrado em */}
                 <div className="campo campo-edit">

@@ -4458,3 +4458,164 @@ input, select, textarea { font-family: inherit; }
     min-width: 0;
   }
 }
+
+/* ── Polígono Área Queimada ── */
+.poligono-area-section {
+  border: 1.5px solid #f97316;
+  border-radius: 10px;
+  background: #fff7ed;
+  padding: 0.75rem 0.85rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.poligono-area-titulo {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #c2410c;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.poligono-btns {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.btn-poligono-gps {
+  flex: 1;
+  min-width: 130px;
+  background: #1a4b8c;
+  color: white;
+  border: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: 7px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-poligono-gps:hover:not(:disabled) { background: #1a6bbf; }
+.btn-poligono-gps:disabled { opacity: 0.6; cursor: default; }
+.btn-poligono-mapa {
+  flex: 1;
+  min-width: 130px;
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: 7px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-poligono-mapa:hover { background: #b91c1c; }
+.poligono-erro {
+  font-size: 0.78rem;
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+}
+.poligono-dica {
+  font-size: 0.76rem;
+  color: #9a3412;
+  line-height: 1.4;
+}
+.poligono-vertices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.poligono-vertice-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: white;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  padding: 0.28rem 0.5rem;
+}
+.poligono-vertice-num {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #c2410c;
+  min-width: 24px;
+}
+.poligono-vertice-coords {
+  flex: 1;
+  font-size: 0.72rem;
+  color: #374151;
+  font-family: monospace;
+}
+.btn-remover-vertice {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  line-height: 1;
+}
+.btn-remover-vertice:hover { color: #ef4444; }
+.btn-limpar-poligono {
+  align-self: flex-start;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #b91c1c;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.28rem 0.65rem;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 0.1rem;
+}
+.btn-limpar-poligono:hover { background: #fee2e2; }
+.poligono-area-resultado {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #fff7ed;
+  border: 1.5px solid #fdba74;
+  border-radius: 8px;
+  padding: 0.45rem 0.75rem;
+}
+.poligono-area-icone { font-size: 1rem; }
+.poligono-area-texto {
+  font-size: 0.83rem;
+  color: #c2410c;
+}
+.poligono-area-texto strong {
+  font-size: 0.95rem;
+  color: #9a3412;
+}
+
+/* ── Área Queimada — detalhe ── */
+.area-queimada-detalhe {
+  background: #fff7ed;
+  border: 1.5px solid #fdba74;
+  border-radius: 9px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.4rem;
+}
+.area-queimada-detalhe .detalhe-label-row {
+  color: #c2410c;
+  margin-bottom: 0.35rem;
+}
+.area-queimada-resultado {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.area-queimada-icone { font-size: 1.1rem; }
+.area-queimada-valor {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #9a3412;
+}
+.area-queimada-vertices {
+  font-size: 0.73rem;
+  color: #92400e;
+}
