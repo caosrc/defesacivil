@@ -48,6 +48,12 @@ function PoligonoMapClick({ onAdd }: { onAdd: (lat: number, lng: number) => void
   return null
 }
 
+interface EditandoVertice {
+  idx: number
+  lat: string
+  lng: string
+}
+
 interface Props {
   pontos: PontoPoligono[]
   onChange: (pontos: PontoPoligono[]) => void
@@ -59,6 +65,8 @@ export default function PoligonoAreaQueimada({ pontos, onChange, focoLat, focoLn
   const [mostrarMapa, setMostrarMapa] = useState(false)
   const [buscandoGps, setBuscandoGps] = useState(false)
   const [erroGps, setErroGps] = useState('')
+  const [editando, setEditando] = useState<EditandoVertice | null>(null)
+  const [satelite, setSatelite] = useState(false)
 
   const areaM2 = calcularAreaM2(pontos)
 
@@ -79,7 +87,23 @@ export default function PoligonoAreaQueimada({ pontos, onChange, focoLat, focoLn
   }
 
   function removerVertice(idx: number) {
+    if (editando?.idx === idx) setEditando(null)
     onChange(pontos.filter((_, i) => i !== idx))
+  }
+
+  function iniciarEdicao(idx: number) {
+    const p = pontos[idx]
+    setEditando({ idx, lat: p.lat.toFixed(6), lng: p.lng.toFixed(6) })
+  }
+
+  function confirmarEdicao() {
+    if (!editando) return
+    const lat = parseFloat(editando.lat.replace(',', '.'))
+    const lng = parseFloat(editando.lng.replace(',', '.'))
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return
+    const novos = pontos.map((p, i) => i === editando.idx ? { lat, lng } : p)
+    onChange(novos)
+    setEditando(null)
   }
 
   const centerLat = focoLat ?? pontos[0]?.lat ?? OURO_BRANCO_CENTER[0]
@@ -114,18 +138,88 @@ export default function PoligonoAreaQueimada({ pontos, onChange, focoLat, focoLn
       {pontos.length > 0 && (
         <div className="poligono-vertices">
           {pontos.map((p, idx) => (
-            <div key={idx} className="poligono-vertice-item">
-              <span className="poligono-vertice-num">V{idx + 1}</span>
-              <span className="poligono-vertice-coords">
-                {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
-              </span>
-              <button type="button" className="btn-remover-vertice" onClick={() => removerVertice(idx)} title="Remover vértice">
-                ✕
-              </button>
+            <div key={idx}>
+              <div className="poligono-vertice-item">
+                <span className="poligono-vertice-num">V{idx + 1}</span>
+                <span className="poligono-vertice-coords">
+                  {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
+                </span>
+                <button
+                  type="button"
+                  className="btn-editar-vertice"
+                  onClick={() => editando?.idx === idx ? setEditando(null) : iniciarEdicao(idx)}
+                  title="Editar coordenadas"
+                  style={{
+                    background: editando?.idx === idx ? '#2563eb' : '#f59e0b',
+                    color: 'white', border: 'none', borderRadius: 6,
+                    padding: '0.18rem 0.45rem', fontSize: '0.78rem', cursor: 'pointer',
+                    fontWeight: 700, lineHeight: 1.4,
+                  }}
+                >
+                  ✏️
+                </button>
+                <button type="button" className="btn-remover-vertice" onClick={() => removerVertice(idx)} title="Remover vértice">
+                  ✕
+                </button>
+              </div>
+
+              {editando?.idx === idx && (
+                <div style={{
+                  background: '#1e3a5f', borderRadius: 8, padding: '0.6rem 0.75rem',
+                  margin: '0.2rem 0 0.35rem 0', display: 'flex', flexDirection: 'column', gap: '0.4rem',
+                }}>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <label style={{ color: '#93c5fd', fontSize: '0.75rem', fontWeight: 700, width: 28 }}>Lat</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={editando.lat}
+                      onChange={e => setEditando({ ...editando, lat: e.target.value })}
+                      style={{
+                        flex: 1, background: '#0f172a', color: 'white', border: '1.5px solid #3b82f6',
+                        borderRadius: 6, padding: '0.3rem 0.5rem', fontSize: '0.82rem',
+                      }}
+                      placeholder="-20.526400"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <label style={{ color: '#93c5fd', fontSize: '0.75rem', fontWeight: 700, width: 28 }}>Lng</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={editando.lng}
+                      onChange={e => setEditando({ ...editando, lng: e.target.value })}
+                      style={{
+                        flex: 1, background: '#0f172a', color: 'white', border: '1.5px solid #3b82f6',
+                        borderRadius: 6, padding: '0.3rem 0.5rem', fontSize: '0.82rem',
+                      }}
+                      placeholder="-43.694700"
+                    />
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                    <button
+                      type="button"
+                      onClick={() => setEditando(null)}
+                      style={{
+                        background: '#374151', color: 'white', border: 'none', borderRadius: 6,
+                        padding: '0.28rem 0.7rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
+                      }}
+                    >Cancelar</button>
+                    <button
+                      type="button"
+                      onClick={confirmarEdicao}
+                      style={{
+                        background: '#16a34a', color: 'white', border: 'none', borderRadius: 6,
+                        padding: '0.28rem 0.7rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
+                      }}
+                    >✅ Salvar</button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
           {pontos.length > 0 && (
-            <button type="button" className="btn-limpar-poligono" onClick={() => onChange([])}>
+            <button type="button" className="btn-limpar-poligono" onClick={() => { onChange([]); setEditando(null) }}>
               🗑️ Limpar tudo
             </button>
           )}
@@ -149,6 +243,23 @@ export default function PoligonoAreaQueimada({ pontos, onChange, focoLat, focoLn
               <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>Desenhar Área Queimada</div>
               <div style={{ fontSize: '0.74rem', opacity: 0.88 }}>Toque no mapa para adicionar cada vértice do polígono</div>
             </div>
+
+            {/* Botão satélite / rua */}
+            <button
+              type="button"
+              onClick={() => setSatelite(s => !s)}
+              style={{
+                background: satelite ? '#1d4ed8' : 'rgba(255,255,255,0.2)',
+                border: '1.5px solid rgba(255,255,255,0.45)',
+                color: 'white', borderRadius: 8, padding: '0.3rem 0.75rem',
+                fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.3rem',
+              }}
+              title={satelite ? 'Trocar para Mapa de Rua' : 'Trocar para Vista de Satélite'}
+            >
+              {satelite ? '🗺️ Rua' : '🛰️ Satélite'}
+            </button>
+
             <button
               onClick={() => setMostrarMapa(false)}
               style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: 8, padding: '0.3rem 0.75rem', fontWeight: 800, fontSize: '1rem', cursor: 'pointer' }}
@@ -176,15 +287,24 @@ export default function PoligonoAreaQueimada({ pontos, onChange, focoLat, focoLn
 
           <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
             <MapContainer
+              key={satelite ? 'sat' : 'rua'}
               center={[centerLat, centerLng]}
               zoom={focoLat ? 16 : 14}
               style={{ height: '100%', width: '100%' }}
               zoomControl={true}
             >
-              <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution='&copy; OpenStreetMap'
-              />
+              {satelite ? (
+                <TileLayer
+                  url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+                  attribution='Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics'
+                  maxZoom={19}
+                />
+              ) : (
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution='&copy; OpenStreetMap'
+                />
+              )}
               <PoligonoMapClick onAdd={(lat, lng) => onChange([...pontos, { lat, lng }])} />
 
               {focoLat != null && focoLng != null && (
