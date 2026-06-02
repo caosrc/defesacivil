@@ -46,32 +46,49 @@ function jsonOrNull(v) {
 }
 
 async function migrarOcorrencias() {
-  const rows = await fetchSupabase('ocorrencias', '&order=id.asc')
-  console.log(`  📋 ocorrencias: ${rows.length} registros`)
-  if (!rows.length) return 0
+  const PAGE = 10
+  let offset = 0
+  let total = 0
+  // Busca sem fotos/vistorias (base64 pesado causa timeout no Supabase)
+  const CAMPOS = 'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,agentes,responsavel_registro,focos_incendio,poligono_area_queimada,hora_inicio,hora_fim,horas_total,horas_sobreaviso,created_at'
 
-  for (const r of rows) {
-    await query(
-      `INSERT INTO ocorrencias
-        (tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco,
-         proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes,
-         responsavel_registro, vistorias, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
-       ON CONFLICT DO NOTHING`,
-      [
-        r.tipo, r.natureza, r.subnatureza, r.nivel_risco,
-        r.status_oc ?? r.status ?? 'ativo',
-        jsonOrNull(r.fotos ?? []),
-        r.lat, r.lng, r.endereco, r.proprietario, r.situacao,
-        r.recomendacao, r.conclusao, r.data_ocorrencia,
-        jsonOrNull(r.agentes ?? []),
-        r.responsavel_registro,
-        jsonOrNull(r.vistorias ?? []),
-        r.created_at ?? new Date().toISOString(),
-      ]
-    )
+  while (true) {
+    const rows = await fetchSupabase('ocorrencias', `&select=${CAMPOS}&order=id.asc&offset=${offset}&limit=${PAGE}`)
+    if (!rows.length) break
+    console.log(`  📋 ocorrencias: buscando ${offset + 1}–${offset + rows.length}...`)
+
+    for (const r of rows) {
+      await query(
+        `INSERT INTO ocorrencias
+          (tipo, natureza, subnatureza, nivel_risco, status_oc, lat, lng, endereco,
+           proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes,
+           responsavel_registro, focos_incendio, poligono_area_queimada,
+           hora_inicio, hora_fim, horas_total, horas_sobreaviso, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+         ON CONFLICT DO NOTHING`,
+        [
+          r.tipo, r.natureza, r.subnatureza, r.nivel_risco,
+          r.status_oc ?? r.status ?? 'ativo',
+          r.lat, r.lng, r.endereco, r.proprietario, r.situacao,
+          r.recomendacao, r.conclusao, r.data_ocorrencia,
+          jsonOrNull(r.agentes ?? []),
+          r.responsavel_registro,
+          jsonOrNull(r.focos_incendio ?? null),
+          jsonOrNull(r.poligono_area_queimada ?? null),
+          r.hora_inicio ?? null, r.hora_fim ?? null,
+          r.horas_total ?? null, r.horas_sobreaviso ?? null,
+          r.created_at ?? new Date().toISOString(),
+        ]
+      )
+    }
+
+    total += rows.length
+    if (rows.length < PAGE) break
+    offset += PAGE
   }
-  return rows.length
+
+  console.log(`  📋 ocorrencias: ${total} registros migrados`)
+  return total
 }
 
 async function migrarEscalaEstado() {
