@@ -244,8 +244,9 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   async function adicionarFotos(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files || files.length === 0) return
+    const fileArray = Array.from(files)
     e.target.value = ''
-    for (const file of Array.from(files)) {
+    for (const file of fileArray) {
       await new Promise<void>((resolve) => {
         const reader = new FileReader()
         reader.onload = async (ev) => {
