@@ -214,10 +214,10 @@ export async function enviarOcorrenciaServidor(
         console.warn('[api] Supabase insert: coluna ausente, tentando schema base.', error.message)
         const {
           hora_inicio: _hi, hora_fim: _hf, horas_total: _ht, horas_sobreaviso: _hs,
-          focos_incendio: _fi,
+          focos_incendio: _fi, poligono_area_queimada: _paq,
           ...payloadBase
         } = payload as Record<string, unknown>
-        void _hi; void _hf; void _ht; void _hs; void _fi
+        void _hi; void _hf; void _ht; void _hs; void _fi; void _paq
         const r2 = await supabase.from('ocorrencias').insert(payloadBase).select().single()
         data = r2.data
         error = r2.error
@@ -307,9 +307,9 @@ export async function atualizarOcorrencia(
       .select()
       .single()
     if (error && isColumnMissingError(error)) {
-      // Colunas hora_* ausentes no Supabase — tenta sem elas
-      const { hora_inicio: _hi, hora_fim: _hf, horas_total: _ht, horas_sobreaviso: _hs, ...payloadBase } = payload as Record<string, unknown>
-      void _hi; void _hf; void _ht; void _hs
+      // Colunas ausentes no Supabase — tenta sem elas
+      const { hora_inicio: _hi, hora_fim: _hf, horas_total: _ht, horas_sobreaviso: _hs, poligono_area_queimada: _paq, ...payloadBase } = payload as Record<string, unknown>
+      void _hi; void _hf; void _ht; void _hs; void _paq
       const r2 = await supabase.from('ocorrencias').update(payloadBase).eq('id', id).select().single()
       data = r2.data
       error = r2.error
