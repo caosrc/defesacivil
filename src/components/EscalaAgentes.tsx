@@ -964,7 +964,7 @@ interface BancoHorasExtraSimplesProps {
   agente: string
   horasExtrasSimples: Record<string, Record<string, number>>
   justificativasExtrasSimples: Record<string, Record<string, string>>
-  onSalvarHora: (data: string, horas: number) => Promise<{ ok: boolean; mensagem?: string }>
+  onSalvarHora: (data: string, horas: number, justificativa?: string) => Promise<{ ok: boolean; mensagem?: string }>
   onSalvarJustificativa: (data: string, justificativa: string) => void
 }
 
@@ -998,6 +998,10 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
       setErro('Informe uma data e uma quantidade de horas válida.')
       return
     }
+    if (!novaJustif.trim()) {
+      setErro('A justificativa é obrigatória.')
+      return
+    }
     if (novaData < minData) {
       setErro(`Prazo encerrado. Só é possível lançar horas dos últimos 7 dias (a partir de ${fmtDataLonga(minData)}).`)
       return
@@ -1009,8 +1013,7 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
     setErro('')
     setSalvando(true)
     const atual = horasAgente[novaData] ?? 0
-    const resultado = await onSalvarHora(novaData, Math.min(24, atual + h))
-    if (novaJustif.trim()) onSalvarJustificativa(novaData, novaJustif.trim())
+    const resultado = await onSalvarHora(novaData, Math.min(24, atual + h), novaJustif.trim())
     setSalvando(false)
     if (resultado.ok) {
       setNovasHoras('')
@@ -1090,7 +1093,7 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
-            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#6b7280' }}>Justificativa (opcional)</label>
+            <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#6b7280' }}>Justificativa <span style={{ color: '#dc2626' }}>*</span></label>
             <textarea
               className="escala-justif-textarea"
               rows={2}
@@ -2589,7 +2592,7 @@ export default function EscalaAgentes() {
     }
   }
 
-  async function salvarHoraExtraSimples(data: string, horas: number): Promise<{ ok: boolean; mensagem?: string }> {
+  async function salvarHoraExtraSimples(data: string, horas: number, justificativa?: string): Promise<{ ok: boolean; mensagem?: string }> {
     const agenteHoras = { ...(dados.horasExtrasSimples[agenteLogado] ?? {}) }
     const agenteJustifs = { ...(dados.justificativasExtrasSimples?.[agenteLogado] ?? {}) }
     if (horas === 0) {
@@ -2597,6 +2600,14 @@ export default function EscalaAgentes() {
       delete agenteJustifs[data]
     } else {
       agenteHoras[data] = horas
+      if (justificativa !== undefined) {
+        const j = justificativa.trim().slice(0, 500)
+        if (j) {
+          agenteJustifs[data] = j
+        } else {
+          delete agenteJustifs[data]
+        }
+      }
     }
     const novos = {
       ...dados,
