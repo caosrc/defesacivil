@@ -892,7 +892,15 @@ function broadcastOcorrenciasAtualizadas() {
 // ── Ocorrências ─────────────────────────────────────────────────────────────
 app.get('/api/ocorrencias', async (req, res) => {
   try {
-    const result = await query('SELECT * FROM ocorrencias ORDER BY created_at DESC')
+    // Exclui fotos e vistorias (base64 pesado) da listagem — carregados sob demanda ao abrir
+    const result = await query(
+      `SELECT id, tipo, natureza, subnatureza, nivel_risco, status_oc,
+              lat, lng, endereco, proprietario, situacao, recomendacao, conclusao,
+              data_ocorrencia, hora_inicio, hora_fim, horas_total, horas_sobreaviso,
+              agentes, responsavel_registro, focos_incendio, poligono_area_queimada,
+              created_at
+       FROM ocorrencias ORDER BY created_at DESC`
+    )
     res.json(result.rows)
   } catch (err) {
     console.error('GET /api/ocorrencias error:', err)

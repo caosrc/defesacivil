@@ -70,18 +70,20 @@ function partesGmsParaDecimal(partes: DmsEdicao, negativo: string, limiteGraus: 
 export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado, onAtualizado }: Props) {
   const [o, setO] = useState<Ocorrencia>(oc)
 
-  // Busca fotos e vistorias sob demanda — a listagem não as carrega para reduzir egress
+  // Busca fotos e vistorias sempre ao abrir — a listagem não as carrega para não pesar
+  const [fotosCarregadasDoServidor, setFotosCarregadasDoServidor] = useState(false)
   useEffect(() => {
     if (oc._offline) return
-    if (Array.isArray(oc.fotos) && oc.fotos.length > 0) return
+    setFotosCarregadasDoServidor(false)
     buscarOcorrenciaCompleta(oc.id).then((completa) => {
-      if (!completa) return
+      if (!completa) { setFotosCarregadasDoServidor(true); return }
       setO((prev) => ({
         ...prev,
         fotos: completa.fotos ?? prev.fotos ?? [],
         vistorias: completa.vistorias ?? prev.vistorias ?? [],
       }))
-    }).catch(() => {})
+      setFotosCarregadasDoServidor(true)
+    }).catch(() => { setFotosCarregadasDoServidor(true) })
   }, [oc.id])
 
   const [editando, setEditando] = useState(false)
@@ -601,7 +603,12 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                 )}
                 <InfoRow icone="🕐" label="Registrado em" valor={dataFormatada} />
 
-                {totalFotos > 0 && (
+                {!fotosCarregadasDoServidor && !oc._offline && (
+                  <div className="fotos-detalhe">
+                    <div className="detalhe-label-row">🖼️ Carregando fotos...</div>
+                  </div>
+                )}
+                {fotosCarregadasDoServidor && totalFotos > 0 && (
                   <div className="fotos-detalhe">
                     <div className="detalhe-label-row">🖼️ Fotos ({totalFotos}) — toque para ampliar</div>
                     <div className="fotos-grid">

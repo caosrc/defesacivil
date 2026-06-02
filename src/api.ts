@@ -3,8 +3,8 @@ import { savePending, getCachedOcorrencias } from './offline'
 import { supabase, supabaseDisponivel } from './supabaseClient'
 
 // Redimensiona e recomprime um base64 para no máximo maxW pixels de largura
-// e qualidade JPEG reduzida. Isso mantém o payload do Supabase abaixo de 10 MB.
-async function comprimirFoto(dataUrl: string, maxW = 1024, qualidade = 0.65): Promise<string> {
+// e qualidade JPEG bem reduzida para manter as fotos leves no banco.
+async function comprimirFoto(dataUrl: string, maxW = 800, qualidade = 0.45): Promise<string> {
   if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl
   return new Promise((resolve) => {
     const img = new Image()
