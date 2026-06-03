@@ -2318,6 +2318,17 @@ function DetalheP({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const meuNomeAgente = getNomeAgenteGlobal()
 
+  // Sincroniza confirmações em tempo real quando outro agente confirma (via WS → parent → prop)
+  const numConfirmados = (plano.confirmacoes ?? []).filter(c => c.confirmado).length
+  useEffect(() => {
+    setPlanoLocal(prev => ({
+      ...prev,
+      confirmacoes: plano.confirmacoes ?? prev.confirmacoes,
+      fotosEvento: plano.fotosEvento ?? prev.fotosEvento,
+    }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numConfirmados, plano.id])
+
   async function confirmarPresenca(novoStatus: boolean) {
     if (!meuNomeAgente) return
     setSalvandoConf(true)
@@ -2668,7 +2679,11 @@ function DetalheP({
                 return (
                   <div key={ag} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.3rem 0', borderBottom: '1px solid #f0fdf4' }}>
                     <span style={{ fontSize: '0.88rem' }}>🧑‍🚒</span>
-                    <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: eEu ? 700 : 400, color: '#1f2937' }}>{ag}{eEu ? ' (você)' : ''}</span>
+                    <span style={{
+                      flex: 1, fontSize: '0.82rem',
+                      fontWeight: (eEu || conf?.confirmado) ? 700 : 400,
+                      color: conf?.confirmado ? '#059669' : '#1f2937',
+                    }}>{ag}{eEu ? ' (você)' : ''}</span>
                     {conf?.confirmado
                       ? <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, background: '#d1fae5', borderRadius: 10, padding: '0.1rem 0.5rem' }}>✅ Confirmado</span>
                       : <span style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600, background: '#fef9c3', borderRadius: 10, padding: '0.1rem 0.5rem' }}>⏳ Aguardando</span>
@@ -3168,7 +3183,16 @@ export default function Planejamento() {
   const [aberto, setAberto] = useState<Plano | null>(null)
   const planosRef = useRef<Plano[]>([])
 
-  useEffect(() => { salvarPlanos(planos); planosRef.current = planos }, [planos])
+  useEffect(() => {
+    salvarPlanos(planos)
+    planosRef.current = planos
+    // Mantém o plano aberto atualizado quando o WS atualiza a lista
+    setAberto(prev => {
+      if (!prev) return null
+      const atualizado = planos.find(p => p.id === prev.id)
+      return atualizado ?? prev
+    })
+  }, [planos])
 
   async function carregarDoServidor() {
     // Supabase (Netlify + Replit com VITE_USE_SUPABASE=true)
@@ -3255,6 +3279,9 @@ export default function Planejamento() {
           agentes: agentesNovos,
           planoNome: plano.nome,
           planoId: plano.id,
+          planoTipo: plano.tipo,
+          planoData: plano.dataInicio,
+          planoHorario: plano.horario,
           remetente: getNomeAgenteGlobal(),
         }),
       }).catch(() => {})

@@ -1102,11 +1102,16 @@ app.delete('/api/planejamentos/:id/fotos/:idx', async (req, res) => {
 // ── Push: notificar agentes escalados ────────────────────────────────────
 app.post('/api/push/escala', async (req, res) => {
   try {
-    const { agentes, planoNome, planoId, remetente } = req.body
+    const { agentes, planoNome, planoId, remetente, planoTipo, planoData, planoHorario } = req.body
     if (!Array.isArray(agentes) || agentes.length === 0) return res.json({ enviados: 0 })
+    const tipoLabel = { evento: 'Evento', operacao: 'Operação', simulado: 'Simulado', emergencia: 'Emergência' }[planoTipo] || 'Planejamento'
+    const dataInfo = planoData ? ` — ${new Date(planoData + 'T12:00:00').toLocaleDateString('pt-BR')}` : ''
+    const horarioInfo = planoHorario ? ` às ${planoHorario}` : ''
+    const remetenteInfo = remetente ? `${remetente} convocou você` : 'Você foi escalado'
+    const notifBody = `${remetenteInfo} para o ${tipoLabel}: ${planoNome}${dataInfo}${horarioInfo}. Confirme sua presença no app.`
     const payload = JSON.stringify({
-      title: '🗓️ Você foi escalado!',
-      body: `Você foi escalado para: ${planoNome}. Confirme sua presença no app.`,
+      title: '🗓️ Convocação — Defesa Civil',
+      body: notifBody,
       tag: `escala-${planoId}`,
       tipo: 'escala',
       url: '/',
