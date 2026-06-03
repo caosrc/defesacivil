@@ -81,6 +81,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         ...prev,
         fotos: completa.fotos ?? prev.fotos ?? [],
         vistorias: completa.vistorias ?? prev.vistorias ?? [],
+        focos_incendio: completa.focos_incendio ?? prev.focos_incendio ?? null,
+        poligono_area_queimada: completa.poligono_area_queimada ?? prev.poligono_area_queimada ?? null,
       }))
       setFotosCarregadasDoServidor(true)
     }).catch(() => { setFotosCarregadasDoServidor(true) })
@@ -149,6 +151,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [eRegistradoData, setERegistradoData] = useState(_createdDate)
   const [eRegistradoHora, setERegistradoHora] = useState(_createdTime)
   const ehIncendioOc = o.natureza === 'Incêndio em Área Urbana' || o.natureza === 'Incêndio em Área Rural'
+  const ehIncendioEdicao = eNatureza === 'Incêndio em Área Urbana' || eNatureza === 'Incêndio em Área Rural'
   const [ePoligonoArea, setEPoligonoArea] = useState<PontoPoligono[]>(
     Array.isArray(o.poligono_area_queimada) ? o.poligono_area_queimada : []
   )
@@ -305,7 +308,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         created_at: registradoEmIso,
         focos_incendio: Array.isArray(o.focos_incendio) && o.focos_incendio.length > 0 ? o.focos_incendio : null,
         vistorias: Array.isArray(o.vistorias) ? o.vistorias : [],
-        poligono_area_queimada: ehIncendioOc && ePoligonoArea.length >= 3 ? ePoligonoArea : null,
+        poligono_area_queimada: ehIncendioEdicao && ePoligonoArea.length >= 3 ? ePoligonoArea : null,
       }
       let atualizado: Ocorrencia
       if (o._offline && o._localId != null) {
@@ -894,7 +897,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                 </div>
 
                 {/* Polígono da Área Queimada (apenas para incêndios) */}
-                {ehIncendioOc && (
+                {ehIncendioEdicao && (
                   <PoligonoAreaQueimada
                     pontos={ePoligonoArea}
                     onChange={setEPoligonoArea}

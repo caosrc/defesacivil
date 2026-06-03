@@ -93,11 +93,11 @@ export class ApiError extends Error {
 
 // Campos leves para listagem/mapa — exclui fotos e vistorias (base64 pesado)
 const CAMPOS_LISTA_OCORRENCIA =
-  'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,hora_inicio,hora_fim,horas_total,horas_sobreaviso,agentes,responsavel_registro,focos_incendio,created_at'
+  'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,hora_inicio,hora_fim,horas_total,horas_sobreaviso,agentes,responsavel_registro,focos_incendio,poligono_area_queimada,created_at'
 
 // Fallback sem colunas que podem não existir em Supabase mais antigo
 const CAMPOS_LISTA_OCORRENCIA_BASE =
-  'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,agentes,responsavel_registro,focos_incendio,created_at'
+  'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,agentes,responsavel_registro,focos_incendio,poligono_area_queimada,created_at'
 
 function isColumnMissingError(e: unknown): boolean {
   if (e instanceof Error) {
@@ -174,7 +174,7 @@ export async function buscarOcorrenciaCompleta(id: number): Promise<Ocorrencia |
     try {
       const { data, error } = await supabase
         .from('ocorrencias')
-        .select('fotos,vistorias')
+        .select('fotos,vistorias,focos_incendio,poligono_area_queimada')
         .eq('id', id)
         .single()
       if (error) return null
