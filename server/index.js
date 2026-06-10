@@ -1249,18 +1249,32 @@ app.get('/api/checklists/meses', async (req, res) => {
 })
 
 app.get('/api/checklists', async (req, res) => {
+  const CAMPOS_LEVES = 'id, data_checklist, km, placa, motorista, itens, observacoes, created_at, tem_foto_frontal, tem_foto_traseira, tem_foto_direita, tem_foto_esquerda'
+  const SQL_LEVE = `SELECT id, data_checklist, km, placa, motorista, itens, observacoes, created_at,
+    (foto_frontal IS NOT NULL AND foto_frontal <> '') AS tem_foto_frontal,
+    (foto_traseira IS NOT NULL AND foto_traseira <> '') AS tem_foto_traseira,
+    (foto_direita IS NOT NULL AND foto_direita <> '') AS tem_foto_direita,
+    (foto_esquerda IS NOT NULL AND foto_esquerda <> '') AS tem_foto_esquerda
+    FROM checklists_viatura`
   try {
     const { mes } = req.query
     let result
     if (mes) {
-      result = await query(
-        `SELECT * FROM checklists_viatura WHERE data_checklist LIKE $1 ORDER BY created_at DESC`,
-        [`${mes}%`]
-      )
+      result = await query(`${SQL_LEVE} WHERE data_checklist LIKE $1 ORDER BY created_at DESC`, [`${mes}%`])
     } else {
-      result = await query('SELECT * FROM checklists_viatura ORDER BY created_at DESC')
+      result = await query(`${SQL_LEVE} ORDER BY created_at DESC`)
     }
     res.json(result.rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/api/checklists/:id', async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM checklists_viatura WHERE id = $1', [req.params.id])
+    if (!result.rows[0]) return res.status(404).json({ error: 'Checklist não encontrado' })
+    res.json(result.rows[0])
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

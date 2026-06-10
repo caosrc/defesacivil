@@ -372,6 +372,7 @@ export default function ChecklistViatura() {
   const [mesSelecionado, setMesSelecionado] = useState<string | null>(null)
   const [checklistsArquivo, setChecklistsArquivo] = useState<ChecklistData[]>([])
   const [carregandoArquivo, setCarregandoArquivo] = useState(false)
+  const [carregandoDetalhe, setCarregandoDetalhe] = useState(false)
 
   const hoje = dataLocalInput()
   const mesAtual = hoje.substring(0, 7)
@@ -417,6 +418,35 @@ export default function ChecklistViatura() {
     return !ct.includes('text/html')
   }
 
+  async function carregarChecklistCompleto(id: number): Promise<ChecklistData | null> {
+    if (supabaseDisponivel) {
+      try {
+        const { data, error } = await supabase
+          .from('checklists_viatura')
+          .select('*')
+          .eq('id', id)
+          .single()
+        if (error || !data) return null
+        return data as ChecklistData
+      } catch { return null }
+    }
+    try {
+      const res = await fetch(`/api/checklists/${id}`)
+      if (!res.ok) return null
+      return await res.json() as ChecklistData
+    } catch { return null }
+  }
+
+  async function abrirDetalhe(c: ChecklistData) {
+    setSelecionado(c)
+    setModo('detalhe')
+    if ((c as Record<string, unknown>)._local) return
+    setCarregandoDetalhe(true)
+    const completo = await carregarChecklistCompleto(c.id)
+    if (completo) setSelecionado(completo)
+    setCarregandoDetalhe(false)
+  }
+
   async function carregar() {
     setCarregando(true)
     const locais = carregarChecklistsLocais()
@@ -424,7 +454,7 @@ export default function ChecklistViatura() {
       try {
         const { data } = await supabase
           .from('checklists_viatura')
-          .select('*')
+          .select('id, data_checklist, km, placa, motorista, itens, observacoes, created_at')
           .order('created_at', { ascending: false })
           .limit(100)
         const servidor = (Array.isArray(data) ? data : []) as ChecklistData[]
@@ -494,7 +524,7 @@ export default function ChecklistViatura() {
 
         const { data, error } = await supabase
           .from('checklists_viatura')
-          .select('*')
+          .select('id, data_checklist, km, placa, motorista, itens, observacoes, created_at')
           .gte('data_checklist', `${mes}-01`)
           .lt('data_checklist', `${mesNext}-01`)
           .order('created_at', { ascending: false })
@@ -1091,15 +1121,18 @@ export default function ChecklistViatura() {
             )}
 
             <div className="ck-section-title" style={{ marginTop: '0.5rem' }}>FOTOS DO VEÍCULO</div>
-            <div className="ck-fotos-4col">
-              {fotos4.map(({ label, foto, icone }) => (
-                <div key={label} className="ck-foto-slot" style={{ cursor: 'default' }}>
-                  {foto
-                    ? <><img src={foto} alt={label} className="ck-foto-img" /><span className="ck-foto-nome">{label}</span></>
-                    : <div className="ck-foto-empty">{icone}<span className="ck-foto-label">{label}</span></div>}
+            {carregandoDetalhe
+              ? <div className="carregando" style={{ padding: '1rem', textAlign: 'center' }}>⏳ Carregando fotos...</div>
+              : <div className="ck-fotos-4col">
+                  {fotos4.map(({ label, foto, icone }) => (
+                    <div key={label} className="ck-foto-slot" style={{ cursor: 'default' }}>
+                      {foto
+                        ? <><img src={foto} alt={label} className="ck-foto-img" /><span className="ck-foto-nome">{label}</span></>
+                        : <div className="ck-foto-empty">{icone}<span className="ck-foto-label">{label}</span></div>}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+            }
 
             {c.fotos_avarias?.length > 0 && (
               <>
@@ -1227,7 +1260,7 @@ export default function ChecklistViatura() {
   function renderCardChecklist(c: ChecklistData) {
     const isLocal = (c as unknown as Record<string, unknown>)._local === true
     return (
-      <button key={c.id} className={`oc-card ${isLocal ? 'oc-card-offline' : ''}`} onClick={() => { setSelecionado(c); setModo('detalhe') }}>
+      <button key={c.id} className={`oc-card ${isLocal ? 'oc-card-offline' : ''}`} onClick={() => abrirDetalhe(c)}>
         <div className="oc-card-esq"><span className="oc-emoji">🚗</span></div>
         <div className="oc-card-corpo">
           <div className="oc-card-top">
@@ -1239,9 +1272,10 @@ export default function ChecklistViatura() {
             {c.motorista && <span>👤 {c.motorista}</span>}
             {c.placa && <span>🚘 {c.placa}</span>}
             {c.km && <span>🔢 {c.km} km</span>}
-            <span>
-              {[c.foto_frontal, c.foto_traseira, c.foto_direita, c.foto_esquerda].filter(Boolean).length}/4 fotos
-            </span>
+            {(c.foto_frontal || c.foto_traseira || c.foto_direita || c.foto_esquerda
+              || (c as Record<string,unknown>).tem_foto_frontal || (c as Record<string,unknown>).tem_foto_traseira
+              || (c as Record<string,unknown>).tem_foto_direita || (c as Record<string,unknown>).tem_foto_esquerda)
+              && <span>📷 fotos</span>}
           </div>
         </div>
       </button>
