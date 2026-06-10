@@ -29,7 +29,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm install && npm run build && node server/index.js"
+args = "npm run build && node server/index.js"
 waitForPort = 5000
 
 [[ports]]
