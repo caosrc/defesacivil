@@ -1483,6 +1483,49 @@ function ModalDetalhesBanco({
 
   const temConteudoMes = turnosMes.length > 0 || ocsMes.length > 0 || extMes.length > 0 || folgasMes.length > 0 || ocAutoMes.length > 0
 
+  // ── Resumo por categoria (todo o período) ────────────────────
+  const manualPorCateg = { noturno: 0, sabado: 0, domFer: 0 }
+  for (const [data, h] of Object.entries(horasOcAgente)) {
+    const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
+    if (ehFeriadoOuDomingo(data, feriadosCustom)) manualPorCateg.domFer += h * mult
+    else if (ehSabadoComum(data, feriadosCustom)) manualPorCateg.sabado += h * mult
+    else manualPorCateg.noturno += h * mult
+  }
+  const autoPorCateg = {
+    noturno: ocorrenciasItens.filter(i => i.motivo === 'noturno').reduce((a, i) => a + i.horasComMult, 0),
+    sabado: ocorrenciasItens.filter(i => i.motivo === 'sábado').reduce((a, i) => a + i.horasComMult, 0),
+    domFer: ocorrenciasItens.filter(i => i.motivo === 'dom/feriado').reduce((a, i) => a + i.horasComMult, 0),
+  }
+  const categNoturno = +(manualPorCateg.noturno + autoPorCateg.noturno).toFixed(2)
+  const categSabado = +(manualPorCateg.sabado + autoPorCateg.sabado).toFixed(2)
+  const categDomFer = +(manualPorCateg.domFer + autoPorCateg.domFer).toFixed(2)
+  const categManuais = horasManTotal
+  const totalFolgasDesc = descontosFolgasTotal + descontosLegTotal
+
+  // ── Saldo acumulado antes do mês visualizado ─────────────────
+  const saldoAntesMes = (() => {
+    const sbAnt = isSobreaviso
+      ? Object.entries(sobreavisoSemanal)
+          .filter(([d, lista]) => d < mesPfx && lista.includes(agente.nome) && d < hoje)
+          .length * HORAS_POR_DIA_SOBREAVISO
+      : 0
+    const ocManAnt = Object.entries(horasOcAgente)
+      .filter(([d]) => d < mesPfx)
+      .reduce((acc, [d, h]) => acc + h * multiplicadorDia(d, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom), 0)
+    const ocAutoAnt = ocorrenciasItens
+      .filter(i => i.data < mesPfx)
+      .reduce((acc, i) => acc + i.horasComMult, 0)
+    const extAnt = Object.entries(horasManAgente)
+      .filter(([d]) => d < mesPfx)
+      .reduce((acc, [, h]) => acc + h, 0)
+    const folgasAnt = folgasDoAgente(agente.nome, folgas)
+      .filter(d => d < mesPfx).length * horasPorFolga(agente.nome)
+    const legAnt = Object.entries(descontosFolgaBanco[agente.nome] ?? {})
+      .filter(([d]) => d < mesPfx)
+      .reduce((acc, [, h]) => acc + h, 0)
+    return +(sbAnt + ocManAnt + ocAutoAnt + extAnt - folgasAnt - legAnt).toFixed(2)
+  })()
+
   return (
     <div className="escala-modal-overlay" onClick={onFechar}>
       <div className="escala-modal bh-detalhe-modal" onClick={e => e.stopPropagation()}>
@@ -1504,6 +1547,63 @@ function ModalDetalhesBanco({
           <span className="bh-detalhe-total-valor" style={totalGeral < 0 ? { color: '#dc2626' } : {}}>
             {totalGeral >= 0 ? '' : '-'}{fmtH(Math.abs(totalGeral))}h
           </span>
+        </div>
+
+        <div className="bh-resumo-categorias">
+          <div className="bh-resumo-categ-titulo">📊 Composição do banco de horas</div>
+          <div className="bh-resumo-categ-lista">
+            {isSobreaviso && horasTurnosTotais > 0 && (
+              <div className="bh-resumo-categ-item">
+                <span className="bh-resumo-categ-icone">📟</span>
+                <span className="bh-resumo-categ-nome">Sobreaviso (turnos)</span>
+                <span className="bh-resumo-categ-valor positivo">+{fmtH(horasTurnosTotais)}h</span>
+              </div>
+            )}
+            {categNoturno > 0 && (
+              <div className="bh-resumo-categ-item">
+                <span className="bh-resumo-categ-icone">🌙</span>
+                <span className="bh-resumo-categ-nome">Ocorrências noturnas (17h–7h) ×{(1 + percSobreaviso / 100).toFixed(1)}</span>
+                <span className="bh-resumo-categ-valor positivo">+{fmtH(categNoturno)}h</span>
+              </div>
+            )}
+            {categSabado > 0 && (
+              <div className="bh-resumo-categ-item">
+                <span className="bh-resumo-categ-icone">🗓️</span>
+                <span className="bh-resumo-categ-nome">Ocorrências sábado ×{(1 + percSabado / 100).toFixed(1)}</span>
+                <span className="bh-resumo-categ-valor positivo">+{fmtH(categSabado)}h</span>
+              </div>
+            )}
+            {categDomFer > 0 && (
+              <div className="bh-resumo-categ-item">
+                <span className="bh-resumo-categ-icone">☀️</span>
+                <span className="bh-resumo-categ-nome">Ocorrências dom/feriado ×{(1 + percDomingoFeriado / 100).toFixed(1)}</span>
+                <span className="bh-resumo-categ-valor positivo">+{fmtH(categDomFer)}h</span>
+              </div>
+            )}
+            {categManuais > 0 && (
+              <div className="bh-resumo-categ-item">
+                <span className="bh-resumo-categ-icone">⏱️</span>
+                <span className="bh-resumo-categ-nome">Horas extras manuais</span>
+                <span className="bh-resumo-categ-valor positivo">+{fmtH(categManuais)}h</span>
+              </div>
+            )}
+            {totalFolgasDesc > 0 && (
+              <div className="bh-resumo-categ-item">
+                <span className="bh-resumo-categ-icone">🏠</span>
+                <span className="bh-resumo-categ-nome">Folgas consumidas</span>
+                <span className="bh-resumo-categ-valor negativo">-{fmtH(totalFolgasDesc)}h</span>
+              </div>
+            )}
+            {ajusteBanco !== 0 && (
+              <div className="bh-resumo-categ-item">
+                <span className="bh-resumo-categ-icone">⚖️</span>
+                <span className="bh-resumo-categ-nome">Ajuste do coordenador</span>
+                <span className="bh-resumo-categ-valor" style={ajusteBanco >= 0 ? { color: '#16a34a' } : { color: '#dc2626' }}>
+                  {ajusteBanco > 0 ? '+' : ''}{fmtH(ajusteBanco)}h
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="bh-detalhe-mes-nav">
@@ -1668,12 +1768,22 @@ function ModalDetalhesBanco({
           )}
 
           {temConteudoMes && (
-            <div className="bh-detalhe-subtotal">
-              <span>Subtotal — {MESES[viewMonth]}</span>
-              <span style={totalMes < 0 ? { color: '#dc2626' } : { color: '#16a34a' }}>
-                {totalMes >= 0 ? '+' : ''}{fmtH(Math.round(totalMes * 100) / 100)}h
-              </span>
-            </div>
+            <>
+              {saldoAntesMes !== 0 && (
+                <div className="bh-detalhe-saldo-anterior">
+                  <span>Saldo acumulado até {viewMonth === 0 ? `Dez/${viewYear - 1}` : `${MESES[viewMonth - 1]}/${viewYear}`}</span>
+                  <span style={saldoAntesMes < 0 ? { color: '#dc2626' } : { color: '#64748b' }}>
+                    {saldoAntesMes >= 0 ? '+' : ''}{fmtH(saldoAntesMes)}h
+                  </span>
+                </div>
+              )}
+              <div className="bh-detalhe-subtotal">
+                <span>Subtotal — {MESES[viewMonth]}</span>
+                <span style={totalMes < 0 ? { color: '#dc2626' } : { color: '#16a34a' }}>
+                  {totalMes >= 0 ? '+' : ''}{fmtH(Math.round(totalMes * 100) / 100)}h
+                </span>
+              </div>
+            </>
           )}
         </div>
 

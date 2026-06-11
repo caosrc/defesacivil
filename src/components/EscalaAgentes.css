@@ -1796,6 +1796,77 @@
   color: #4b5563;
 }
 
+.bh-resumo-categorias {
+  background: #f8fafc;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  margin: 0 0.75rem;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.bh-resumo-categ-titulo {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.45rem 0.75rem 0.35rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f1f5f9;
+}
+
+.bh-resumo-categ-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.bh-resumo-categ-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.38rem 0.75rem;
+  font-size: 0.78rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+.bh-resumo-categ-item:last-child { border-bottom: none; }
+
+.bh-resumo-categ-icone {
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  width: 1.2rem;
+  text-align: center;
+}
+
+.bh-resumo-categ-nome {
+  flex: 1;
+  color: #374151;
+  font-size: 0.77rem;
+}
+
+.bh-resumo-categ-valor {
+  font-weight: 700;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 3rem;
+  text-align: right;
+}
+
+.bh-detalhe-saldo-anterior {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 7px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 0.25rem;
+}
+
 .bh-detalhe-subtotal {
   display: flex;
   justify-content: space-between;
