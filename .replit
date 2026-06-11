@@ -29,7 +29,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npx vite build && node server/index.js"
+args = "npm run start"
 waitForPort = 5000
 
 [[ports]]
