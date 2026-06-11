@@ -8,7 +8,7 @@ import { exportarOcorrenciaExcel } from '../exportExcel'
 import { formatarCoordenadas, parseDateLocal, mensagemErroGps, adicionarMarcaDagua } from '../utils'
 import ModalSenha from './ModalSenha'
 import PoligonoAreaQueimada, { calcularAreaM2, formatarArea, type PontoPoligono } from './PoligonoAreaQueimada'
-import { calcularHorasTotal, calcularHorasSobreaviso, formatarHoras, sincronizarHorasEscala } from '../horasUtils'
+import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras, sincronizarHorasEscala } from '../horasUtils'
 
 interface Props {
   ocorrencia: Ocorrencia
@@ -280,6 +280,10 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
       const horasSobreaviso = (eHoraInicio && eHoraFim && eDataOcorrencia)
         ? calcularHorasSobreaviso(eDataOcorrencia, eHoraInicio, eHoraFim)
         : null
+      // Horas que entram no banco: sáb/dom/feriado → todas; seg-sex → somente após 17h
+      const horasBanco = (eHoraInicio && eHoraFim && eDataOcorrencia)
+        ? calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim)
+        : null
 
       const registradoEmIso = (eRegistradoData && eRegistradoHora)
         ? `${eRegistradoData}T${eRegistradoHora}:00`
@@ -318,7 +322,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         atualizado = await atualizarOcorrencia(o.id, dadosEditados)
       }
 
-      // Sincroniza banco de horas dos agentes (remove antigas, adiciona novas)
+      // Sincroniza banco de horas para TODOS os agentes (sáb/dom/feriado qualquer hora; seg-sex após 17h)
       // Usa sempre a data de criação (created_at) como chave no banco de horas,
       // para que editar data_ocorrencia NÃO mova as horas para outro dia.
       if (!o._offline) {
@@ -326,7 +330,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         sincronizarHorasEscala({
           agentes: eAgentes,
           dataStr: dataParaBanco,
-          horasSobreaviso: horasSobreaviso ?? 0,
+          horasSobreaviso: horasBanco ?? 0,
           ocId: o.id,
           natureza: eNatureza,
           oldAgentes: Array.isArray(o.agentes) ? o.agentes : [],
@@ -883,13 +887,21 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                   </div>
                   {eHoraInicio && eHoraFim && (() => {
                     const total = calcularHorasTotal(eHoraInicio, eHoraFim)
-                    const sobreaviso = calcularHorasSobreaviso(eDataOcorrencia, eHoraInicio, eHoraFim)
+                    const banco = calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim)
+                    const tipo = tipoDiaOcorrencia(eDataOcorrencia, eHoraInicio)
+                    const labelBanco = tipo === 'domingo_feriado'
+                      ? `☀️🚨 Dom/Feriado — ${formatarHoras(banco)} no banco (×2)`
+                      : tipo === 'sabado'
+                        ? `☀️🚨 Sábado — ${formatarHoras(banco)} no banco (×1,5)`
+                        : tipo === 'sobreaviso'
+                          ? `🌙 Sobreaviso — ${formatarHoras(banco)} no banco (×1,5)`
+                          : null
                     return (
                       <div className="horario-resumo">
                         <span className="horario-total">⏱ Total: <strong>{formatarHoras(total)}</strong></span>
-                        {sobreaviso > 0
-                          ? <span className="horario-sobreaviso">🌙 Sobreaviso: <strong>{formatarHoras(sobreaviso)}</strong></span>
-                          : <span className="horario-sem-sobreaviso">☀️ Sem horas de sobreaviso</span>
+                        {banco > 0 && labelBanco
+                          ? <span className="horario-sobreaviso">{labelBanco}</span>
+                          : <span className="horario-sem-sobreaviso">☀️ Sem horas no banco (horário comercial, seg–sex)</span>
                         }
                       </div>
                     )

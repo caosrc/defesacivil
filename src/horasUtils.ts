@@ -5,6 +5,7 @@ const FERIADOS_FIXOS_SET = new Set([
   '11-02', '11-15', '11-20', '12-25',
 ])
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const AGENTES_SEM_SOBREAVISO = new Set(['Talita', 'Cristiane', 'Sócrates'])
 
 function chaveDataDt(dt: Date): string {
@@ -22,6 +23,76 @@ function ehFimDeSemanaOuFeriado(chave: string, feriadosCustom: string[] = []): b
   if (dow === 0 || dow === 6) return true
   const mmdd = `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
   return FERIADOS_FIXOS_SET.has(mmdd)
+}
+
+// Domingo ou feriado (dom = 0, feriados fixos e custom)
+function ehDomingoOuFeriado(chave: string, feriadosCustom: string[] = []): boolean {
+  if (feriadosCustom.includes(chave)) return true
+  const [y, m, d] = chave.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  if (dt.getDay() === 0) return true
+  const mmdd = `${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  return FERIADOS_FIXOS_SET.has(mmdd)
+}
+
+// Sábado comum (que não seja feriado)
+function ehSabadoComumUtils(chave: string, feriadosCustom: string[] = []): boolean {
+  if (ehDomingoOuFeriado(chave, feriadosCustom)) return false
+  const [y, m, d] = chave.split('-').map(Number)
+  return new Date(y, m - 1, d).getDay() === 6
+}
+
+/**
+ * Calcula as horas que devem entrar no banco de horas de uma ocorrência.
+ *
+ * Regras:
+ *  - Sábado (qualquer horário)        → total de horas trabalhadas (×1,5 aplicado depois)
+ *  - Domingo / Feriado (qualquer h)   → total de horas trabalhadas (×2 aplicado depois)
+ *  - Seg–Sex após 17h (sobreaviso)    → horas no período 17h–07h  (×1,5 aplicado depois)
+ *  - Seg–Sex dentro do expediente     → 0 (sem banco de horas)
+ */
+export function calcularHorasOcorrenciaBanco(
+  dataStr: string,
+  horaInicio: string,
+  horaFim: string,
+  feriadosCustom: string[] = [],
+): number {
+  if (!dataStr || !horaInicio || !horaFim) return 0
+
+  const isDomFer = ehDomingoOuFeriado(dataStr, feriadosCustom)
+  const isSab = ehSabadoComumUtils(dataStr, feriadosCustom)
+
+  if (isDomFer || isSab) {
+    // Final de semana / feriado: todas as horas contam
+    const [hI, mI] = horaInicio.split(':').map(Number)
+    const [hF, mF] = horaFim.split(':').map(Number)
+    if (isNaN(hI) || isNaN(mI) || isNaN(hF) || isNaN(mF)) return 0
+    const inicioMin = hI * 60 + mI
+    const fimMin = hF * 60 + mF
+    const totalMin = fimMin >= inicioMin ? fimMin - inicioMin : 24 * 60 - inicioMin + fimMin
+    return Math.round(totalMin * 100 / 60) / 100
+  }
+
+  // Seg–Sex: somente horas do sobreaviso (após 17h / antes das 7h)
+  return calcularHorasSobreaviso(dataStr, horaInicio, horaFim, feriadosCustom)
+}
+
+/**
+ * Retorna o tipo de situação especial da ocorrência para exibir no resumo de horas.
+ */
+export function tipoDiaOcorrencia(
+  dataStr: string,
+  horaInicio: string,
+  feriadosCustom: string[] = [],
+): 'domingo_feriado' | 'sabado' | 'sobreaviso' | 'normal' {
+  if (!dataStr) return 'normal'
+  if (ehDomingoOuFeriado(dataStr, feriadosCustom)) return 'domingo_feriado'
+  if (ehSabadoComumUtils(dataStr, feriadosCustom)) return 'sabado'
+  if (horaInicio) {
+    const [h, m] = horaInicio.split(':').map(Number)
+    if (!isNaN(h) && (h * 60 + (m || 0)) >= 17 * 60) return 'sobreaviso'
+  }
+  return 'normal'
 }
 
 function minutesSobravisoNoDia(

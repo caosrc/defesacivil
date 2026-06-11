@@ -7,7 +7,7 @@ import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
 import { geocodificarEndereco } from '../offline'
 import { formatarCoordenadas, adicionarMarcaDagua, mensagemErroGps } from '../utils'
-import { calcularHorasTotal, calcularHorasSobreaviso, formatarHoras, sincronizarHorasEscala } from '../horasUtils'
+import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras, sincronizarHorasEscala } from '../horasUtils'
 import PoligonoAreaQueimada, { type PontoPoligono } from './PoligonoAreaQueimada'
 
 // Fix Leaflet default icon
@@ -345,6 +345,10 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     const horasSobreaviso = (horaInicio && horaFim && dataOcorrencia)
       ? calcularHorasSobreaviso(dataOcorrencia, horaInicio, horaFim)
       : null
+    // Horas que entram no banco: sáb/dom/feriado → todas as horas; seg-sex → somente após 17h
+    const horasBanco = (horaInicio && horaFim && dataOcorrencia)
+      ? calcularHorasOcorrenciaBanco(dataOcorrencia, horaInicio, horaFim)
+      : null
 
     const payload = {
       tipo: tipoFinal,
@@ -383,12 +387,12 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
         return
       }
 
-      // Atualiza banco de horas dos agentes se houver horas de sobreaviso
-      if (!foiOffline && horasSobreaviso && horasSobreaviso > 0 && agentes.length > 0 && dataOcorrencia) {
+      // Atualiza banco de horas para TODOS os agentes: sáb/dom/feriado (qualquer horário) ou seg-sex após 17h
+      if (!foiOffline && horasBanco && horasBanco > 0 && agentes.length > 0 && dataOcorrencia) {
         sincronizarHorasEscala({
           agentes,
           dataStr: dataOcorrencia,
-          horasSobreaviso,
+          horasSobreaviso: horasBanco,
           ocId: (resultado as any).id ?? 'novo',
           natureza,
         }).catch(() => {})
@@ -587,18 +591,26 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
             </div>
             {horaInicio && horaFim && (() => {
               const total = calcularHorasTotal(horaInicio, horaFim)
-              const sobreaviso = calcularHorasSobreaviso(dataOcorrencia, horaInicio, horaFim)
+              const banco = calcularHorasOcorrenciaBanco(dataOcorrencia, horaInicio, horaFim)
+              const tipo = tipoDiaOcorrencia(dataOcorrencia, horaInicio)
+              const labelBanco = tipo === 'domingo_feriado'
+                ? `☀️🚨 Dom/Feriado — ${formatarHoras(banco)} no banco (×2)`
+                : tipo === 'sabado'
+                  ? `☀️🚨 Sábado — ${formatarHoras(banco)} no banco (×1,5)`
+                  : tipo === 'sobreaviso'
+                    ? `🌙 Sobreaviso — ${formatarHoras(banco)} no banco (×1,5)`
+                    : null
               return (
                 <div className="horario-resumo">
                   <span className="horario-total">⏱ Total: <strong>{formatarHoras(total)}</strong></span>
-                  {sobreaviso > 0
-                    ? <span className="horario-sobreaviso">🌙 Sobreaviso: <strong>{formatarHoras(sobreaviso)}</strong></span>
-                    : <span className="horario-sem-sobreaviso">☀️ Sem horas de sobreaviso (horário comercial)</span>
+                  {banco > 0 && labelBanco
+                    ? <span className="horario-sobreaviso">{labelBanco}</span>
+                    : <span className="horario-sem-sobreaviso">☀️ Sem horas no banco (horário comercial, seg–sex)</span>
                   }
                 </div>
               )
             })()}
-            <div className="geo-dica">💡 Horas entre 17h e 7h entram no banco de horas. Das 7h às 17h não contam.</div>
+            <div className="geo-dica">💡 Sáb/Dom/Feriado (qualquer hora) e seg–sex após 17h entram no banco de horas com multiplicador.</div>
           </div>
 
           {/* 6 - Fotos */}

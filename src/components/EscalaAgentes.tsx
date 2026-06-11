@@ -1114,7 +1114,7 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
       <div className="bh-bloco">
         <div className="bh-bloco-header">
           <span className="bh-bloco-icone">⏱️</span>
-          <span className="bh-bloco-titulo">Horas extras (×1 dia útil · ×1,5 sábado · ×2 domingo)</span>
+          <span className="bh-bloco-titulo">Horas extras manuais (sem multiplicador)</span>
           <span className="bh-bloco-total">{fmtH(total)}h</span>
         </div>
 
@@ -1306,8 +1306,8 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
       return { ...ag, total, calculado, ajuste, diasFolga, horasFolga, desobreaviso, temFolga, tipo: 'sobreaviso' as const }
     })
     const extras = AGENTES_HORAS_EXTRAS.map(ag => {
-      // Horas de ocorrências em horasTrabalhadasSobreaviso (percSobreaviso=0) + entradas manuais
-      const calculadoOc = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, 0, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
+      // Horas de ocorrências em horasTrabalhadasSobreaviso (com multiplicadores: sáb ×1,5; dom/fer ×2; seg-sex após 17h ×1,5)
+      const calculadoOc = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
       const horasManuais = horasExtrasSimples[ag.nome] ?? {}
       const calculado = calculadoOc + Object.values(horasManuais).reduce((acc, h) => acc + h, 0)
       const ajuste = ajustesBanco[ag.nome] ?? 0
@@ -2881,7 +2881,7 @@ export default function EscalaAgentes() {
       {!isMoises && isHorasExtras && (() => {
         const horasOc = calcularBancoHoras(
           agenteLogado, dados.sobreaviso, dados.horasTrabalhadasSobreaviso,
-          dados.percDomingoFeriado, 0, dados.percSabado,
+          dados.percDomingoFeriado, dados.percSobreaviso, dados.percSabado,
           dados.feriadosCustom, dados.descontosFolgaBanco, dados.folgas, hoje,
         )
         return (
