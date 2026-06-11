@@ -9,7 +9,8 @@
     "start": "npm run build && node server/index.js",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "node scripts/push-to-github.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",
