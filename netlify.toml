@@ -1,5 +1,5 @@
 [build]
-  command = "npm install --no-optional && npm run build"
+  command = "npm install --omit=optional && npm run build"
   publish = "dist"
 
 [build.environment]
