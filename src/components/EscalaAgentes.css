@@ -1635,6 +1635,219 @@
   text-align: center;
 }
 
+/* ── Modal de Detalhes do Banco de Horas ── */
+.bh-detalhe-modal {
+  max-width: 520px;
+  width: 95vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.bh-detalhe-total-geral {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  background: #f5f3ff;
+  border-bottom: 1px solid #ede9fe;
+  gap: 1rem;
+}
+.bh-detalhe-total-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #6b7280;
+}
+.bh-detalhe-total-valor {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #5b21b6;
+}
+
+.bh-detalhe-mes-nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 1rem;
+  background: #faf5ff;
+  border-bottom: 1px solid #ede9fe;
+}
+.bh-detalhe-mes-btn {
+  background: none;
+  border: 1.5px solid #c4b5fd;
+  border-radius: 8px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  color: #7c3aed;
+  transition: background 0.15s;
+}
+.bh-detalhe-mes-btn:hover { background: #ede9fe; }
+.bh-detalhe-mes-label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #374151;
+  min-width: 140px;
+  text-align: center;
+}
+
+.bh-detalhe-corpo {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.bh-detalhe-secao {
+  background: #f9fafb;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+.bh-detalhe-secao-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.45rem 0.75rem;
+  background: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
+}
+.bh-detalhe-secao-titulo {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #374151;
+}
+.bh-detalhe-secao-sub {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #5b21b6;
+}
+
+.bh-detalhe-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.bh-detalhe-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid #f3f4f6;
+  gap: 0.5rem;
+}
+.bh-detalhe-item:last-child { border-bottom: none; }
+.bh-detalhe-item--futuro { opacity: 0.55; }
+.bh-detalhe-item--oc { background: #fefce8; }
+.bh-detalhe-item--desc { background: #fef2f2; }
+
+.bh-detalhe-item-esq {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+.bh-detalhe-item-dir {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+}
+.bh-detalhe-item-data {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #374151;
+}
+.bh-detalhe-item-desc {
+  font-size: 0.68rem;
+  color: #6b7280;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+.bh-detalhe-item-val {
+  font-size: 0.85rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.bh-detalhe-item-mult-tag {
+  font-size: 0.65rem;
+  background: #fde68a;
+  color: #92400e;
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  font-weight: 700;
+  display: inline-block;
+  margin-top: 0.1rem;
+  width: fit-content;
+}
+.bh-detalhe-item-bruto {
+  font-size: 0.65rem;
+  color: #9ca3af;
+}
+.bh-detalhe-justif-linha {
+  display: block;
+  font-size: 0.67rem;
+  color: #4b5563;
+}
+
+.bh-detalhe-subtotal {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.45rem 0.75rem;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #166534;
+}
+
+.bh-detalhe-ajuste {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.85rem;
+  background: #fefce8;
+  border-top: 1px solid #fde68a;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #92400e;
+  flex-shrink: 0;
+}
+
+.bh-detalhe-vazio-mes {
+  text-align: center;
+  font-size: 0.8rem;
+  color: #9ca3af;
+  padding: 1.5rem;
+  font-style: italic;
+}
+
+.bh-detalhe-editar-btn {
+  background: #ede9fe;
+  border: 1.5px solid #c4b5fd;
+  border-radius: 8px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #5b21b6;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.bh-detalhe-editar-btn:hover { background: #ddd6fe; }
+
+.positivo { color: #16a34a; }
+.negativo { color: #dc2626; }
+.neutro { color: #9ca3af; }
+
 .escala-em-desenvolvimento {
   background: #fffbeb;
   border: 1.5px dashed #f59e0b;

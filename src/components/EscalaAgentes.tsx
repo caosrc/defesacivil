@@ -1271,10 +1271,276 @@ function BancoHorasExtraSimples({ agente, horasExtrasSimples, justificativasExtr
   )
 }
 
+// ── Modal de Detalhes do Banco de Horas ──────────────────────────
+interface ModalDetalhesBancoProps {
+  agente: { nome: string; cor: string; iniciais: string }
+  isExtras: boolean
+  sobreavisoSemanal: Record<string, string[]>
+  horasTrabalhadasSobreaviso: Record<string, Record<string, number>>
+  justificativasSobreaviso: Record<string, Record<string, string>>
+  horasExtrasSimples: Record<string, Record<string, number>>
+  justificativasExtrasSimples: Record<string, Record<string, string>>
+  folgas: Record<string, string[]>
+  descontosFolgaBanco: Record<string, Record<string, number>>
+  ajusteBanco: number
+  percDomingoFeriado: number
+  percSobreaviso: number
+  percSabado: number
+  feriadosCustom: string[]
+  hoje: string
+  onFechar: () => void
+  onEditar?: () => void
+}
+
+function ModalDetalhesBanco({
+  agente, isExtras,
+  sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso,
+  horasExtrasSimples, justificativasExtrasSimples,
+  folgas, descontosFolgaBanco, ajusteBanco,
+  percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom,
+  hoje, onFechar, onEditar,
+}: ModalDetalhesBancoProps) {
+  const hojeAno = Number(hoje.slice(0, 4))
+  const hojeMes = Number(hoje.slice(5, 7)) - 1
+  const [viewYear, setViewYear] = useState(hojeAno)
+  const [viewMonth, setViewMonth] = useState(hojeMes)
+
+  const mesPfx = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}`
+
+  function navMes(delta: number) {
+    let nm = viewMonth + delta
+    let ny = viewYear
+    if (nm < 0) { nm = 11; ny-- }
+    if (nm > 11) { nm = 0; ny++ }
+    setViewMonth(nm)
+    setViewYear(ny)
+  }
+
+  const isSobreaviso = !isExtras
+
+  const turnosMes = isSobreaviso
+    ? Object.entries(sobreavisoSemanal)
+        .filter(([data, lista]) => data.startsWith(mesPfx) && lista.includes(agente.nome))
+        .sort(([a], [b]) => a.localeCompare(b))
+    : []
+  const horasTurnosMes = turnosMes.filter(([data]) => data < hoje).length * HORAS_POR_DIA_SOBREAVISO
+
+  const horasOcAgente = horasTrabalhadasSobreaviso[agente.nome] ?? {}
+  const justifOcAgente = justificativasSobreaviso[agente.nome] ?? {}
+  const ocsMes = Object.entries(horasOcAgente)
+    .filter(([data]) => data.startsWith(mesPfx))
+    .sort(([a], [b]) => a.localeCompare(b))
+  const horasOcMes = ocsMes.reduce((acc, [data, h]) => {
+    return acc + h * multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
+  }, 0)
+
+  const horasManAgente = horasExtrasSimples[agente.nome] ?? {}
+  const justifManAgente = justificativasExtrasSimples[agente.nome] ?? {}
+  const extMes = Object.entries(horasManAgente)
+    .filter(([data]) => data.startsWith(mesPfx))
+    .sort(([a], [b]) => a.localeCompare(b))
+  const horasExtMes = extMes.reduce((acc, [, h]) => acc + h, 0)
+
+  const folgasMes = folgasDoAgente(agente.nome, folgas)
+    .filter(data => data.startsWith(mesPfx))
+  const descontoFolgasMes = folgasMes.length * horasPorFolga(agente.nome)
+  const descontosLegMes = Object.entries(descontosFolgaBanco[agente.nome] ?? {})
+    .filter(([data]) => data.startsWith(mesPfx))
+    .reduce((acc, [, h]) => acc + h, 0)
+
+  const totalMes = horasTurnosMes + horasOcMes + horasExtMes - descontoFolgasMes - descontosLegMes
+
+  const turnosTotaisPassados = isSobreaviso
+    ? Object.entries(sobreavisoSemanal)
+        .filter(([data, lista]) => lista.includes(agente.nome) && data < hoje).length
+    : 0
+  const horasTurnosTotais = turnosTotaisPassados * HORAS_POR_DIA_SOBREAVISO
+  const horasOcTotal = Object.entries(horasOcAgente).reduce((acc, [data, h]) => {
+    return acc + h * multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
+  }, 0)
+  const horasManTotal = Object.values(horasManAgente).reduce((acc, h) => acc + h, 0)
+  const descontosFolgasTotal = folgasDoAgente(agente.nome, folgas).length * horasPorFolga(agente.nome)
+  const descontosLegTotal = Object.values(descontosFolgaBanco[agente.nome] ?? {}).reduce((acc, h) => acc + h, 0)
+  const totalGeral = horasTurnosTotais + horasOcTotal + horasManTotal - descontosFolgasTotal - descontosLegTotal + ajusteBanco
+
+  const temConteudoMes = turnosMes.length > 0 || ocsMes.length > 0 || extMes.length > 0 || folgasMes.length > 0
+
+  return (
+    <div className="escala-modal-overlay" onClick={onFechar}>
+      <div className="escala-modal bh-detalhe-modal" onClick={e => e.stopPropagation()}>
+        <div className="escala-modal-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="bh-edit-cor" style={{ background: agente.cor }} />
+            <span className="escala-modal-titulo">{agente.nome} — Banco de Horas</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {onEditar && (
+              <button className="bh-detalhe-editar-btn" onClick={onEditar} title="Ajustar total manualmente">✏️ Ajustar</button>
+            )}
+            <button className="escala-modal-fechar" onClick={onFechar}>✕</button>
+          </div>
+        </div>
+
+        <div className="bh-detalhe-total-geral">
+          <span className="bh-detalhe-total-label">Total geral no banco</span>
+          <span className="bh-detalhe-total-valor" style={totalGeral < 0 ? { color: '#dc2626' } : {}}>
+            {totalGeral >= 0 ? '' : '-'}{fmtH(Math.abs(totalGeral))}h
+          </span>
+        </div>
+
+        <div className="bh-detalhe-mes-nav">
+          <button className="bh-detalhe-mes-btn" onClick={() => navMes(-1)}>◀</button>
+          <span className="bh-detalhe-mes-label">{MESES[viewMonth]} {viewYear}</span>
+          <button className="bh-detalhe-mes-btn" onClick={() => navMes(1)}>▶</button>
+        </div>
+
+        <div className="bh-detalhe-corpo">
+          {isSobreaviso && (
+            <div className="bh-detalhe-secao">
+              <div className="bh-detalhe-secao-header">
+                <span className="bh-detalhe-secao-titulo">📟 Turnos de sobreaviso</span>
+                <span className="bh-detalhe-secao-sub">{fmtH(horasTurnosMes)}h</span>
+              </div>
+              {turnosMes.length === 0 ? (
+                <p className="bh-detalhe-vazio">Nenhum turno neste mês.</p>
+              ) : (
+                <div className="bh-detalhe-lista">
+                  {turnosMes.map(([seg]) => {
+                    const proxSeg = proximaSegunda(seg)
+                    const passado = seg < hoje
+                    return (
+                      <div key={seg} className={`bh-detalhe-item ${passado ? '' : 'bh-detalhe-item--futuro'}`}>
+                        <div className="bh-detalhe-item-esq">
+                          <span className="bh-detalhe-item-data">{fmtDataCurta(seg)} → {fmtDataCurta(proxSeg)}</span>
+                          <span className="bh-detalhe-item-desc">Turno de sobreaviso ({HORAS_POR_DIA_SOBREAVISO}h base)</span>
+                        </div>
+                        <span className={`bh-detalhe-item-val ${passado ? 'positivo' : 'neutro'}`}>
+                          {passado ? `+${fmtH(HORAS_POR_DIA_SOBREAVISO)}h` : 'a vencer'}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {ocsMes.length > 0 && (
+            <div className="bh-detalhe-secao">
+              <div className="bh-detalhe-secao-header">
+                <span className="bh-detalhe-secao-titulo">🚨 Acionamentos em ocorrências</span>
+                <span className="bh-detalhe-secao-sub">{fmtH(Math.round(horasOcMes * 100) / 100)}h (c/ multiplicador)</span>
+              </div>
+              <div className="bh-detalhe-lista">
+                {ocsMes.map(([data, h]) => {
+                  const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
+                  const isFerOuDom = ehFeriadoOuDomingo(data, feriadosCustom)
+                  const isSab = ehSabadoComum(data, feriadosCustom)
+                  const multTag = isFerOuDom
+                    ? `×${mult.toFixed(1)} dom/feriado`
+                    : isSab
+                      ? `×${mult.toFixed(1)} sábado`
+                      : `×${mult.toFixed(1)} sobreaviso`
+                  const justif = justifOcAgente[data]
+                  const hFinal = Math.round(h * mult * 100) / 100
+                  return (
+                    <div key={data} className="bh-detalhe-item bh-detalhe-item--oc">
+                      <div className="bh-detalhe-item-esq">
+                        <span className="bh-detalhe-item-data">{fmtDataLonga(data)}</span>
+                        <span className="bh-detalhe-item-mult-tag">{multTag}</span>
+                        {justif && (
+                          <span className="bh-detalhe-item-desc">
+                            {justif.split('; ').map((j, i) => (
+                              <span key={i} className="bh-detalhe-justif-linha">📋 {j}</span>
+                            ))}
+                          </span>
+                        )}
+                      </div>
+                      <div className="bh-detalhe-item-dir">
+                        <span className="bh-detalhe-item-bruto">{fmtH(h)}h bruto</span>
+                        <span className="bh-detalhe-item-val positivo">+{fmtH(hFinal)}h</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {isExtras && extMes.length > 0 && (
+            <div className="bh-detalhe-secao">
+              <div className="bh-detalhe-secao-header">
+                <span className="bh-detalhe-secao-titulo">⏱️ Horas extras manuais</span>
+                <span className="bh-detalhe-secao-sub">{fmtH(horasExtMes)}h</span>
+              </div>
+              <div className="bh-detalhe-lista">
+                {extMes.map(([data, h]) => {
+                  const justif = justifManAgente[data]
+                  return (
+                    <div key={data} className="bh-detalhe-item">
+                      <div className="bh-detalhe-item-esq">
+                        <span className="bh-detalhe-item-data">{fmtDataLonga(data)}</span>
+                        {justif && <span className="bh-detalhe-item-desc">📋 {justif}</span>}
+                      </div>
+                      <span className="bh-detalhe-item-val positivo">+{fmtH(h)}h</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {folgasMes.length > 0 && (
+            <div className="bh-detalhe-secao">
+              <div className="bh-detalhe-secao-header">
+                <span className="bh-detalhe-secao-titulo">🏠 Folgas descontadas</span>
+                <span className="bh-detalhe-secao-sub">-{fmtH(descontoFolgasMes)}h</span>
+              </div>
+              <div className="bh-detalhe-lista">
+                {folgasMes.map(data => (
+                  <div key={data} className="bh-detalhe-item bh-detalhe-item--desc">
+                    <span className="bh-detalhe-item-data">{fmtDataLonga(data)}</span>
+                    <span className="bh-detalhe-item-val negativo">-{fmtH(horasPorFolga(agente.nome))}h</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!temConteudoMes && (
+            <div className="bh-detalhe-vazio-mes">
+              Nenhuma atividade em {MESES[viewMonth]} de {viewYear}.
+            </div>
+          )}
+
+          {temConteudoMes && (
+            <div className="bh-detalhe-subtotal">
+              <span>Subtotal — {MESES[viewMonth]}</span>
+              <span style={totalMes < 0 ? { color: '#dc2626' } : { color: '#16a34a' }}>
+                {totalMes >= 0 ? '+' : ''}{fmtH(Math.round(totalMes * 100) / 100)}h
+              </span>
+            </div>
+          )}
+        </div>
+
+        {ajusteBanco !== 0 && (
+          <div className="bh-detalhe-ajuste">
+            <span>⚖️ Ajuste manual do coordenador (total geral)</span>
+            <span style={ajusteBanco >= 0 ? { color: '#16a34a' } : { color: '#dc2626' }}>
+              {ajusteBanco > 0 ? '+' : ''}{fmtH(ajusteBanco)}h
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Banco de Horas: painel do Moisés ─────────────────────────────
 interface BancoHorasMoisesProps {
   sobreavisoSemanal: Record<string, string[]>
   horasTrabalhadasSobreaviso: Record<string, Record<string, number>>
+  justificativasSobreaviso: Record<string, Record<string, string>>
   descontosFolgaBanco: Record<string, Record<string, number>>
   folgas: Record<string, string[]>
   percDomingoFeriado: number
@@ -1282,16 +1548,18 @@ interface BancoHorasMoisesProps {
   percSabado: number
   feriadosCustom: string[]
   horasExtrasSimples: Record<string, Record<string, number>>
+  justificativasExtrasSimples: Record<string, Record<string, string>>
   ajustesBanco: Record<string, number>
   onAjusteChange: (agente: string, ajuste: number) => void
   podeEditar: boolean
   hoje?: string
 }
 
-function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, onAjusteChange, podeEditar, hoje: hojeprop }: BancoHorasMoisesProps) {
+function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, justificativasExtrasSimples, ajustesBanco, onAjusteChange, podeEditar, hoje: hojeprop }: BancoHorasMoisesProps) {
   const hoje = hojeprop ?? hojeStr()
   const [editando, setEditando] = useState<string | null>(null)
   const [valorTemp, setValorTemp] = useState<string>('')
+  const [detalheAgente, setDetalheAgente] = useState<string | null>(null)
 
   const lista = useMemo(() => {
     const sobreaviso = AGENTES_SOBREAVISO.map(ag => {
@@ -1361,40 +1629,24 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
               {ag.temFolga && (
                 <span className="bh-moises-badge-folga" title="De folga hoje">🏠</span>
               )}
-              {podeEditar ? (
-                <button
-                  type="button"
-                  className="bh-moises-horas-info bh-moises-horas-edit"
-                  onClick={() => abrirEdicao(ag)}
-                  title="Clique para ajustar as horas deste agente"
-                >
-                  <span className="bh-moises-h" style={ag.total < 0 ? { color: '#dc2626' } : {}}>
-                    {ag.total % 1 === 0 ? ag.total : ag.total.toFixed(1)}h
-                    {ag.ajuste !== 0 && (
-                      <span className="bh-moises-ajuste-badge" title={`Ajuste manual: ${ag.ajuste > 0 ? '+' : ''}${ag.ajuste}h`}>
-                        {ag.ajuste > 0 ? '+' : ''}{ag.ajuste % 1 === 0 ? ag.ajuste : ag.ajuste.toFixed(1)}
-                      </span>
-                    )}
-                  </span>
-                  <span className="bh-moises-semanas" title={`${ag.total.toFixed(2)}h ÷ ${ag.horasFolga}h = ${ag.diasFolga.toFixed(2)} dias de folga`}>
-                    {ag.diasFolga % 1 === 0 ? ag.diasFolga : ag.diasFolga.toFixed(1)} dia{ag.diasFolga === 1 ? '' : 's'} de folga ✏️
-                  </span>
-                </button>
-              ) : (
-                <div className="bh-moises-horas-info">
-                  <span className="bh-moises-h" style={ag.total < 0 ? { color: '#dc2626' } : {}}>
-                    {ag.total % 1 === 0 ? ag.total : ag.total.toFixed(1)}h
-                    {ag.ajuste !== 0 && (
-                      <span className="bh-moises-ajuste-badge" title={`Ajuste manual: ${ag.ajuste > 0 ? '+' : ''}${ag.ajuste}h`}>
-                        {ag.ajuste > 0 ? '+' : ''}{ag.ajuste % 1 === 0 ? ag.ajuste : ag.ajuste.toFixed(1)}
-                      </span>
-                    )}
-                  </span>
-                  <span className="bh-moises-semanas" title={`${ag.total.toFixed(2)}h ÷ ${ag.horasFolga}h = ${ag.diasFolga.toFixed(2)} dias de folga`}>
-                    {ag.diasFolga % 1 === 0 ? ag.diasFolga : ag.diasFolga.toFixed(1)} dia{ag.diasFolga === 1 ? '' : 's'} de folga
-                  </span>
-                </div>
-              )}
+              <button
+                type="button"
+                className="bh-moises-horas-info bh-moises-horas-edit"
+                onClick={() => setDetalheAgente(ag.nome)}
+                title="Clique para ver o detalhamento do banco de horas"
+              >
+                <span className="bh-moises-h" style={ag.total < 0 ? { color: '#dc2626' } : {}}>
+                  {ag.total % 1 === 0 ? ag.total : ag.total.toFixed(1)}h
+                  {ag.ajuste !== 0 && (
+                    <span className="bh-moises-ajuste-badge" title={`Ajuste manual: ${ag.ajuste > 0 ? '+' : ''}${ag.ajuste}h`}>
+                      {ag.ajuste > 0 ? '+' : ''}{ag.ajuste % 1 === 0 ? ag.ajuste : ag.ajuste.toFixed(1)}
+                    </span>
+                  )}
+                </span>
+                <span className="bh-moises-semanas" title={`${ag.total.toFixed(2)}h ÷ ${ag.horasFolga}h = ${ag.diasFolga.toFixed(2)} dias de folga`}>
+                  {ag.diasFolga % 1 === 0 ? ag.diasFolga : ag.diasFolga.toFixed(1)} dia{ag.diasFolga === 1 ? '' : 's'} de folga 🔍
+                </span>
+              </button>
             </div>
           </div>
         ))}
@@ -1412,7 +1664,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
               <div className="escala-modal-header">
                 <span className="escala-modal-titulo">
                   <span className="bh-edit-cor" style={{ background: ag.cor }} />
-                  Banco de horas — {ag.nome}
+                  Ajustar banco — {ag.nome}
                 </span>
                 <button className="escala-modal-fechar" onClick={() => setEditando(null)}>✕</button>
               </div>
@@ -1459,6 +1711,32 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, desco
               </div>
             </div>
           </div>
+        )
+      })()}
+
+      {detalheAgente && (() => {
+        const ag = lista.find(a => a.nome === detalheAgente)
+        if (!ag) return null
+        return (
+          <ModalDetalhesBanco
+            agente={{ nome: ag.nome, cor: ag.cor, iniciais: ag.iniciais }}
+            isExtras={ag.tipo === 'extras'}
+            sobreavisoSemanal={sobreavisoSemanal}
+            horasTrabalhadasSobreaviso={horasTrabalhadasSobreaviso}
+            justificativasSobreaviso={justificativasSobreaviso}
+            horasExtrasSimples={horasExtrasSimples}
+            justificativasExtrasSimples={justificativasExtrasSimples}
+            folgas={folgas}
+            descontosFolgaBanco={descontosFolgaBanco}
+            ajusteBanco={ag.ajuste}
+            percDomingoFeriado={percDomingoFeriado}
+            percSobreaviso={percSobreaviso}
+            percSabado={percSabado}
+            feriadosCustom={feriadosCustom}
+            hoje={hoje}
+            onFechar={() => setDetalheAgente(null)}
+            onEditar={podeEditar ? () => { setDetalheAgente(null); abrirEdicao(ag) } : undefined}
+          />
         )
       })()}
     </div>
@@ -2902,6 +3180,7 @@ export default function EscalaAgentes() {
         <BancoHorasMoises
           sobreavisoSemanal={dados.sobreaviso}
           horasTrabalhadasSobreaviso={dados.horasTrabalhadasSobreaviso}
+          justificativasSobreaviso={dados.justificativasSobreaviso ?? {}}
           descontosFolgaBanco={dados.descontosFolgaBanco}
           folgas={dados.folgas}
           percDomingoFeriado={dados.percDomingoFeriado}
@@ -2909,6 +3188,7 @@ export default function EscalaAgentes() {
           percSabado={dados.percSabado}
           feriadosCustom={dados.feriadosCustom}
           horasExtrasSimples={dados.horasExtrasSimples}
+          justificativasExtrasSimples={dados.justificativasExtrasSimples ?? {}}
           ajustesBanco={dados.ajustesBanco ?? {}}
           onAjusteChange={atualizarAjusteBanco}
           podeEditar={editando}
