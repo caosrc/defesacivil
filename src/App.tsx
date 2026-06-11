@@ -920,7 +920,7 @@ export default function App() {
         {aba === 'escala' && (
           <ErrorBoundary>
             <Suspense fallback={<LazyFallback />}>
-              <EscalaAgentes />
+              <EscalaAgentes ocorrencias={ocorrencias} />
             </Suspense>
           </ErrorBoundary>
         )}

@@ -2707,3 +2707,62 @@
   background: #fef3c7 !important;
   color: #92400e !important;
 }
+
+/* ── Ocorrências automáticas no banco de horas ─────────────────── */
+.bh-bloco-ocauto {
+  border-left: 3px solid #dc2626;
+}
+
+.bh-bloco-ocauto .bh-bloco-icone { color: #dc2626; }
+
+.bh-oc-auto-row {
+  flex-direction: column;
+  align-items: stretch;
+  background: #fff5f5;
+  border-color: #fecaca;
+  gap: 0.3rem;
+}
+
+.bh-oc-auto-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+}
+
+.bh-oc-auto-hora {
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.bh-oc-auto-nat {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.bh-oc-auto-end {
+  font-size: 0.76rem;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.bh-oc-auto-calc {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+}
+
+.bh-oc-auto-mult {
+  font-size: 0.76rem;
+  color: #b45309;
+  font-weight: 600;
+  background: #fef3c7;
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+}

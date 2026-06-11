@@ -4,6 +4,7 @@ import ModalSenha from './ModalSenha'
 import { wsOn, wsSend } from '../wsClient'
 import { supabase, supabaseDisponivel } from '../supabaseClient'
 import { getSenhaAgente } from '../types'
+import type { Ocorrencia } from '../types'
 import './EscalaAgentes.css'
 
 // ── Constantes ────────────────────────────────────────────────────
@@ -688,6 +689,73 @@ function _PainelEscalasSemanas({ sobreavisoSemanal, ferias: _ferias, onEscalar }
   )
 }
 
+// ── Horas automáticas de ocorrências ─────────────────────────────
+interface HoraOcorrenciaItem {
+  ocorrenciaId: number
+  data: string
+  natureza: string
+  endereco: string | null
+  horaInicio: string | null
+  horasBruto: number
+  multiplicador: number
+  horasComMult: number
+  motivo: 'dom/feriado' | 'sábado' | 'noturno'
+}
+
+function ehHorarioNoturno(horaInicio: string | null): boolean {
+  if (!horaInicio) return false
+  const h = Number(horaInicio.split(':')[0])
+  return h >= 17 || h < 7
+}
+
+function computarHorasOcorrencias(
+  agente: string,
+  ocorrencias: Ocorrencia[],
+  feriadosCustom: string[],
+  percDomFer: number,
+  percSobreaviso: number,
+  percSabado: number,
+): { total: number; itens: HoraOcorrenciaItem[] } {
+  const itens: HoraOcorrenciaItem[] = []
+  for (const oc of ocorrencias) {
+    if (!oc.data_ocorrencia) continue
+    if (!oc.agentes.includes(agente)) continue
+    const horas = oc.horas_total ?? 0
+    if (horas <= 0) continue
+
+    const data = oc.data_ocorrencia
+    let multiplicador = 1
+    let motivo: HoraOcorrenciaItem['motivo'] | null = null
+
+    if (ehFeriadoOuDomingo(data, feriadosCustom)) {
+      multiplicador = 1 + percDomFer / 100
+      motivo = 'dom/feriado'
+    } else if (ehSabadoComum(data, feriadosCustom)) {
+      multiplicador = 1 + percSabado / 100
+      motivo = 'sábado'
+    } else if (ehHorarioNoturno(oc.hora_inicio)) {
+      multiplicador = 1 + percSobreaviso / 100
+      motivo = 'noturno'
+    } else {
+      continue
+    }
+
+    itens.push({
+      ocorrenciaId: oc.id,
+      data,
+      natureza: oc.natureza,
+      endereco: oc.endereco,
+      horaInicio: oc.hora_inicio,
+      horasBruto: horas,
+      multiplicador,
+      horasComMult: +(horas * multiplicador).toFixed(2),
+      motivo,
+    })
+  }
+  const total = +(itens.reduce((acc, item) => acc + item.horasComMult, 0)).toFixed(2)
+  return { total, itens }
+}
+
 // ── Banco de Horas: visão do agente ──────────────────────────────
 interface BancoHorasAgenteProps {
   agente: string
@@ -705,13 +773,14 @@ interface BancoHorasAgenteProps {
   hideSobreaviso?: boolean
   hideTotalRow?: boolean
   ajusteBanco?: number
+  ocorrencias?: Ocorrencia[]
 }
 
 function fmtH(h: number): string {
   return h % 1 === 0 ? String(h) : h.toFixed(1)
 }
 
-function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, onUpdateHoras, onUpdateJustificativa, hideSobreaviso = false, hideTotalRow = false, ajusteBanco = 0 }: BancoHorasAgenteProps) {
+function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, onUpdateHoras, onUpdateJustificativa, hideSobreaviso = false, hideTotalRow = false, ajusteBanco = 0, ocorrencias = [] }: BancoHorasAgenteProps) {
   const info = AGENTE_MAP[agente]
   const hoje = hojeStr()
   const horasAgente = horasTrabalhadasSobreaviso[agente] ?? {}
@@ -735,6 +804,11 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
   const [semanaAberta, setSemanaAberta] = useState<string | null>(null)
 
   const estaDesobreaviso = (sobreavisoSemanal[hoje] ?? []).includes(agente)
+
+  // ── Horas automáticas de ocorrências ──────────────────────────
+  const { total: horasAutoOcorrencias, itens: itensOcorrencias } = useMemo(() => {
+    return computarHorasOcorrencias(agente, ocorrencias, feriadosCustom, percDomingoFeriado, percSobreaviso, percSabado)
+  }, [agente, ocorrencias, feriadosCustom, percDomingoFeriado, percSobreaviso, percSabado])
 
   // ── Cálculo separado dos buckets ──────────────────────────────
   // Bucket 1 — Sobreaviso: base (14h × turnos) + acionamentos em dias úteis
@@ -760,7 +834,7 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
     return { horasSobreaviso: base + extSb, horasFimSemana: extFS, descontosFolga: descontos, descontosAuto }
   }, [semanasDoAgente, horasAgente, descontosAgente, folgasConsumidas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, hoje])
 
-  const totalBruto = horasSobreaviso + horasFimSemana
+  const totalBruto = horasSobreaviso + horasFimSemana + horasAutoOcorrencias
   const totalGeral = totalBruto - descontosFolga - descontosAuto + ajusteBanco
 
   // Horas de acionamento em dias úteis de uma semana específica
@@ -952,6 +1026,42 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
           </div>
         )}
       </div>
+
+      {itensOcorrencias.length > 0 && (
+        <div className="bh-bloco bh-bloco-ocauto">
+          <div className="bh-bloco-header">
+            <span className="bh-bloco-icone">🚒</span>
+            <span className="bh-bloco-titulo">Ocorrências automáticas</span>
+            <span className="bh-bloco-total">+{fmtH(horasAutoOcorrencias)}h</span>
+          </div>
+          <div className="bh-domfer-lista">
+            {itensOcorrencias
+              .slice()
+              .sort((a, b) => b.data.localeCompare(a.data))
+              .map(item => {
+                const motivoTag =
+                  item.motivo === 'dom/feriado' ? `×${item.multiplicador.toFixed(1)} dom/feriado` :
+                  item.motivo === 'sábado' ? `×${item.multiplicador.toFixed(1)} sábado` :
+                  `×${item.multiplicador.toFixed(1)} noturno (17h–7h)`
+                return (
+                  <div key={`oc-${item.ocorrenciaId}`} className="bh-domfer-row bh-oc-auto-row">
+                    <div className="bh-oc-auto-info">
+                      <span className="bh-domfer-data">{fmtDataLonga(item.data)}</span>
+                      {item.horaInicio && <span className="bh-oc-auto-hora">🕐 {item.horaInicio}</span>}
+                      <span className="bh-oc-auto-nat">{item.natureza}</span>
+                      {item.endereco && <span className="bh-oc-auto-end">📍 {item.endereco}</span>}
+                    </div>
+                    <div className="bh-oc-auto-calc">
+                      <span className="bh-oc-auto-mult">{motivoTag}</span>
+                      <span className="bh-domfer-input">{fmtH(item.horasBruto)}h</span>
+                      <span className="bh-domfer-calc">= {fmtH(item.horasComMult)}h</span>
+                    </div>
+                  </div>
+                )
+              })}
+          </div>
+        </div>
+      )}
 
       {(descontosFolga + descontosAuto) > 0 && (
         <div className="bh-bloco bh-bloco-descontos">
@@ -1290,6 +1400,7 @@ interface ModalDetalhesBancoProps {
   hoje: string
   onFechar: () => void
   onEditar?: () => void
+  ocorrenciasItens?: HoraOcorrenciaItem[]
 }
 
 function ModalDetalhesBanco({
@@ -1298,7 +1409,7 @@ function ModalDetalhesBanco({
   horasExtrasSimples, justificativasExtrasSimples,
   folgas, descontosFolgaBanco, ajusteBanco,
   percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom,
-  hoje, onFechar, onEditar,
+  hoje, onFechar, onEditar, ocorrenciasItens = [],
 }: ModalDetalhesBancoProps) {
   const hojeAno = Number(hoje.slice(0, 4))
   const hojeMes = Number(hoje.slice(5, 7)) - 1
@@ -1341,6 +1452,12 @@ function ModalDetalhesBanco({
     .sort(([a], [b]) => a.localeCompare(b))
   const horasExtMes = extMes.reduce((acc, [, h]) => acc + h, 0)
 
+  // Ocorrências automáticas filtradas para o mês visível
+  const ocAutoMes = ocorrenciasItens
+    .filter(item => item.data.startsWith(mesPfx))
+    .sort((a, b) => a.data.localeCompare(b.data))
+  const horasOcAutoMes = ocAutoMes.reduce((acc, item) => acc + item.horasComMult, 0)
+
   const folgasMes = folgasDoAgente(agente.nome, folgas)
     .filter(data => data.startsWith(mesPfx))
   const descontoFolgasMes = folgasMes.length * horasPorFolga(agente.nome)
@@ -1348,7 +1465,7 @@ function ModalDetalhesBanco({
     .filter(([data]) => data.startsWith(mesPfx))
     .reduce((acc, [, h]) => acc + h, 0)
 
-  const totalMes = horasTurnosMes + horasOcMes + horasExtMes - descontoFolgasMes - descontosLegMes
+  const totalMes = horasTurnosMes + horasOcMes + horasExtMes + horasOcAutoMes - descontoFolgasMes - descontosLegMes
 
   const turnosTotaisPassados = isSobreaviso
     ? Object.entries(sobreavisoSemanal)
@@ -1359,11 +1476,12 @@ function ModalDetalhesBanco({
     return acc + h * multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
   }, 0)
   const horasManTotal = Object.values(horasManAgente).reduce((acc, h) => acc + h, 0)
+  const horasOcAutoTotal = ocorrenciasItens.reduce((acc, item) => acc + item.horasComMult, 0)
   const descontosFolgasTotal = folgasDoAgente(agente.nome, folgas).length * horasPorFolga(agente.nome)
   const descontosLegTotal = Object.values(descontosFolgaBanco[agente.nome] ?? {}).reduce((acc, h) => acc + h, 0)
-  const totalGeral = horasTurnosTotais + horasOcTotal + horasManTotal - descontosFolgasTotal - descontosLegTotal + ajusteBanco
+  const totalGeral = horasTurnosTotais + horasOcTotal + horasManTotal + horasOcAutoTotal - descontosFolgasTotal - descontosLegTotal + ajusteBanco
 
-  const temConteudoMes = turnosMes.length > 0 || ocsMes.length > 0 || extMes.length > 0 || folgasMes.length > 0
+  const temConteudoMes = turnosMes.length > 0 || ocsMes.length > 0 || extMes.length > 0 || folgasMes.length > 0 || ocAutoMes.length > 0
 
   return (
     <div className="escala-modal-overlay" onClick={onFechar}>
@@ -1467,6 +1585,42 @@ function ModalDetalhesBanco({
             </div>
           )}
 
+          {ocAutoMes.length > 0 && (
+            <div className="bh-detalhe-secao">
+              <div className="bh-detalhe-secao-header">
+                <span className="bh-detalhe-secao-titulo">🚒 Ocorrências automáticas</span>
+                <span className="bh-detalhe-secao-sub">{fmtH(Math.round(horasOcAutoMes * 100) / 100)}h (c/ multiplicador)</span>
+              </div>
+              <div className="bh-detalhe-lista">
+                {ocAutoMes.map(item => {
+                  const motivoTag =
+                    item.motivo === 'dom/feriado' ? `×${item.multiplicador.toFixed(1)} dom/feriado` :
+                    item.motivo === 'sábado' ? `×${item.multiplicador.toFixed(1)} sábado` :
+                    `×${item.multiplicador.toFixed(1)} noturno (17h–7h)`
+                  return (
+                    <div key={`ocauto-${item.ocorrenciaId}`} className="bh-detalhe-item bh-detalhe-item--oc">
+                      <div className="bh-detalhe-item-esq">
+                        <span className="bh-detalhe-item-data">{fmtDataLonga(item.data)}</span>
+                        <span className="bh-detalhe-item-mult-tag">{motivoTag}</span>
+                        <span className="bh-detalhe-item-desc">{item.natureza}</span>
+                        {item.horaInicio && (
+                          <span className="bh-detalhe-item-desc">🕐 {item.horaInicio}</span>
+                        )}
+                        {item.endereco && (
+                          <span className="bh-detalhe-item-desc">📍 {item.endereco}</span>
+                        )}
+                      </div>
+                      <div className="bh-detalhe-item-dir">
+                        <span className="bh-detalhe-item-bruto">{fmtH(item.horasBruto)}h bruto</span>
+                        <span className="bh-detalhe-item-val positivo">+{fmtH(item.horasComMult)}h</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {isExtras && extMes.length > 0 && (
             <div className="bh-detalhe-secao">
               <div className="bh-detalhe-secao-header">
@@ -1553,20 +1707,32 @@ interface BancoHorasMoisesProps {
   onAjusteChange: (agente: string, ajuste: number) => void
   podeEditar: boolean
   hoje?: string
+  ocorrencias?: Ocorrencia[]
 }
 
-function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, justificativasExtrasSimples, ajustesBanco, onAjusteChange, podeEditar, hoje: hojeprop }: BancoHorasMoisesProps) {
+function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, justificativasExtrasSimples, ajustesBanco, onAjusteChange, podeEditar, hoje: hojeprop, ocorrencias = [] }: BancoHorasMoisesProps) {
   const hoje = hojeprop ?? hojeStr()
   const [editando, setEditando] = useState<string | null>(null)
   const [valorTemp, setValorTemp] = useState<string>('')
   const [detalheAgente, setDetalheAgente] = useState<string | null>(null)
 
+  // Mapa de itens de ocorrências automáticas por agente
+  const ocAutoMap = useMemo(() => {
+    const map: Record<string, HoraOcorrenciaItem[]> = {}
+    for (const ag of AGENTES_ESCALA) {
+      const { itens } = computarHorasOcorrencias(ag.nome, ocorrencias, feriadosCustom, percDomingoFeriado, percSobreaviso, percSabado)
+      map[ag.nome] = itens
+    }
+    return map
+  }, [ocorrencias, feriadosCustom, percDomingoFeriado, percSobreaviso, percSabado])
+
   const lista = useMemo(() => {
     const sobreaviso = AGENTES_SOBREAVISO.map(ag => {
-      const calculado = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
+      const calculadoBase = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
+      const horasAutoOc = (ocAutoMap[ag.nome] ?? []).reduce((acc, item) => acc + item.horasComMult, 0)
+      const calculado = calculadoBase + horasAutoOc
       const ajuste = ajustesBanco[ag.nome] ?? 0
       const total = calculado + ajuste
-      // Dias de folga disponíveis = total de horas no banco ÷ horas por folga do agente
       const horasFolga = horasPorFolga(ag.nome)
       const diasFolga = total / horasFolga
       const desobreaviso = (sobreavisoSemanal[hoje] ?? []).includes(ag.nome)
@@ -1574,10 +1740,10 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
       return { ...ag, total, calculado, ajuste, diasFolga, horasFolga, desobreaviso, temFolga, tipo: 'sobreaviso' as const }
     })
     const extras = AGENTES_HORAS_EXTRAS.map(ag => {
-      // Horas de ocorrências em horasTrabalhadasSobreaviso (com multiplicadores: sáb ×1,5; dom/fer ×2; seg-sex após 17h ×1,5)
       const calculadoOc = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
       const horasManuais = horasExtrasSimples[ag.nome] ?? {}
-      const calculado = calculadoOc + Object.values(horasManuais).reduce((acc, h) => acc + h, 0)
+      const horasAutoOc = (ocAutoMap[ag.nome] ?? []).reduce((acc, item) => acc + item.horasComMult, 0)
+      const calculado = calculadoOc + Object.values(horasManuais).reduce((acc, h) => acc + h, 0) + horasAutoOc
       const ajuste = ajustesBanco[ag.nome] ?? 0
       const total = calculado + ajuste
       const horasFolga = horasPorFolga(ag.nome)
@@ -1585,7 +1751,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
       return { ...ag, total, calculado, ajuste, diasFolga, horasFolga, desobreaviso: false, temFolga: false, tipo: 'extras' as const }
     })
     return [...sobreaviso, ...extras].sort((a, b) => b.total - a.total)
-  }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, hoje])
+  }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, hoje, ocAutoMap])
 
   const totalGeral = lista.reduce((s, ag) => s + ag.total, 0)
 
@@ -1736,6 +1902,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
             hoje={hoje}
             onFechar={() => setDetalheAgente(null)}
             onEditar={podeEditar ? () => { setDetalheAgente(null); abrirEdicao(ag) } : undefined}
+            ocorrenciasItens={ocAutoMap[ag.nome] ?? []}
           />
         )
       })()}
@@ -2719,7 +2886,11 @@ async function exportarEscalaMensalExcel(dados: EscalaData, ano: number, mes: nu
 }
 
 // ── Componente principal ──────────────────────────────────────────
-export default function EscalaAgentes() {
+interface EscalaAgentesProps {
+  ocorrencias?: Ocorrencia[]
+}
+
+export default function EscalaAgentes({ ocorrencias = [] }: EscalaAgentesProps) {
   const agora = new Date()
   const [ano, setAno] = useState(agora.getFullYear())
   const [mes, setMes] = useState(agora.getMonth())
@@ -3131,6 +3302,7 @@ export default function EscalaAgentes() {
           onUpdateHoras={atualizarHorasTrabalhadasSobreaviso}
           onUpdateJustificativa={atualizarJustificativaSobreaviso}
           ajusteBanco={dados.ajustesBanco?.[agenteLogado] ?? 0}
+          ocorrencias={ocorrencias}
         />
       )}
 
@@ -3152,6 +3324,7 @@ export default function EscalaAgentes() {
           hideSobreaviso={true}
           hideTotalRow={true}
           ajusteBanco={0}
+          ocorrencias={ocorrencias}
         />
       )}
 
@@ -3193,6 +3366,7 @@ export default function EscalaAgentes() {
           onAjusteChange={atualizarAjusteBanco}
           podeEditar={editando}
           hoje={hoje}
+          ocorrencias={ocorrencias}
         />
       )}
 
