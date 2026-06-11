@@ -1,5 +1,5 @@
 [build]
-  command = "npm install --omit=optional --no-audit --no-fund && npm run build"
+  command = "npm install --omit=optional --ignore-scripts --no-audit --no-fund && npx vite build"
   publish = "dist"
 
 [build.environment]
