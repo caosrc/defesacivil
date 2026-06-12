@@ -1639,10 +1639,11 @@
 .bh-detalhe-modal {
   max-width: 520px;
   width: 95vw;
-  max-height: 85vh;
+  max-height: 92vh;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .bh-detalhe-total-geral {
@@ -1694,8 +1695,8 @@
 }
 
 .bh-detalhe-corpo {
-  overflow-y: auto;
-  flex: 1;
+  overflow-y: visible;
+  flex: none;
   padding: 0.5rem 0.75rem;
   display: flex;
   flex-direction: column;
