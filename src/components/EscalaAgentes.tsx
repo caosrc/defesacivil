@@ -2898,7 +2898,7 @@ function ModalAgenteCalendario({
 }
 
 // ── Exportação Excel da escala mensal ─────────────────────────────
-async function exportarEscalaMensalExcel(dados: EscalaData, ano: number, mes: number) {
+async function exportarEscalaMensalExcel(dados: EscalaData, ano: number, mes: number, ocorrencias: Ocorrencia[] = []) {
   const { default: ExcelJS } = await import('exceljs')
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Defesa Civil de Ouro Branco'
@@ -2906,6 +2906,13 @@ async function exportarEscalaMensalExcel(dados: EscalaData, ano: number, mes: nu
 
   const nomeMes = MESES[mes]
   const diasNoMes = new Date(ano, mes + 1, 0).getDate()
+  const hoje = hojeStr()
+
+  // ── helpers de formatação de data ──────────────────────────────
+  function fmtD(iso: string) {
+    const [y, m, d] = iso.split('-')
+    return `${d}/${m}/${y}`
+  }
 
   // ── Aba 1: Calendário do mês ────────────────────────────────────
   const wsCal = wb.addWorksheet(`Escala ${nomeMes}`, {
@@ -2965,80 +2972,208 @@ async function exportarEscalaMensalExcel(dados: EscalaData, ano: number, mes: nu
   wsCal.getColumn(4).width = 38
   wsCal.getColumn(5).width = 38
 
-  // ── Aba 2: Banco de Horas ───────────────────────────────────────
-  const wsBanco = wb.addWorksheet('Banco de Horas')
-  wsBanco.mergeCells('A1:F1')
-  const tb = wsBanco.getCell('A1')
-  tb.value = `Banco de Horas — ${nomeMes} de ${ano}`
-  tb.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } }
-  tb.alignment = { vertical: 'middle', horizontal: 'center' }
-  tb.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F4C81' } }
-  wsBanco.getRow(1).height = 28
+  // ── Aba 2: Banco de Horas — detalhado por agente ───────────────
+  const wsBH = wb.addWorksheet('Banco de Horas')
 
-  const hRow = wsBanco.addRow(['Agente', 'Tipo', 'Calculado (h)', 'Ajuste manual (h)', 'Total (h)', 'Dias de folga'])
-  hRow.eachCell(c => {
-    c.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+  // Título da aba
+  wsBH.mergeCells('A1:G1')
+  const tbh = wsBH.getCell('A1')
+  tbh.value = `Banco de Horas — ${nomeMes} de ${ano} — Defesa Civil de Ouro Branco`
+  tbh.font = { bold: true, size: 13, color: { argb: 'FFFFFFFF' } }
+  tbh.alignment = { vertical: 'middle', horizontal: 'center' }
+  tbh.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F4C81' } }
+  wsBH.getRow(1).height = 26
+
+  // Cabeçalho das colunas
+  const colHead = wsBH.addRow(['Agente', 'Categoria', 'Data', 'Detalhe', 'Horas brutas', 'Multiplicador', 'Horas calculadas'])
+  colHead.eachCell(c => {
+    c.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } }
     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1A4B8C' } }
-    c.alignment = { vertical: 'middle', horizontal: 'center' }
+    c.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true }
+    c.border = { bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } } }
   })
-  hRow.height = 22
+  colHead.height = 20
 
-  const hoje = hojeStr()
-  const linhas: { nome: string; tipo: string; calc: number; ajuste: number; total: number; dias: number }[] = []
+  // cores de fundo para linhas de detalhe por categoria
+  const CAT_BG: Record<string, string> = {
+    'Sobreaviso (base)':      'FFEEF2FF',
+    'Acionamento — dia útil': 'FFEEF2FF',
+    'Acionamento — sábado':   'FFFFF7E0',
+    'Acionamento — dom/feriado': 'FFFFE4E6',
+    'Ocorrência automática':  'FFEDFCEF',
+    'Hora extra manual':      'FFEEF2FF',
+    'Folga descontada':       'FFFFF0F0',
+    'Ajuste coordenador':     'FFFFF8E1',
+  }
+
+  function addDetalhe(
+    ws: typeof wsBH,
+    agente: string,
+    categoria: string,
+    data: string,
+    detalhe: string,
+    horasBrutas: number | string,
+    multiplicador: number | string,
+    horasCalc: number,
+  ) {
+    const bg = CAT_BG[categoria] ?? 'FFFFFFFF'
+    const r = ws.addRow([agente, categoria, data, detalhe, horasBrutas, multiplicador, Number(horasCalc.toFixed(2))])
+    r.eachCell((c, col) => {
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }
+      c.border = { bottom: { style: 'hair', color: { argb: 'FFE5E7EB' } } }
+      c.alignment = {
+        vertical: 'middle',
+        horizontal: col === 1 || col === 2 || col === 4 ? 'left' : 'center',
+        wrapText: true,
+      }
+      c.font = { size: 9 }
+    })
+    r.height = 16
+  }
+
+  function addAgentHeader(ws: typeof wsBH, nome: string, total: number, diasFolga: number) {
+    ws.mergeCells(`A${ws.rowCount + 1}:G${ws.rowCount + 1}`)
+    const r = ws.lastRow!
+    r.getCell(1).value = `${nome}   —   Total: ${total.toFixed(2)}h   |   Equivale a ${diasFolga.toFixed(1)} folga(s)`
+    r.getCell(1).font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } }
+    r.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF334155' } }
+    r.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' }
+    r.height = 20
+  }
+
+  function addSubtotal(ws: typeof wsBH, total: number) {
+    const r = ws.addRow(['', 'SUBTOTAL DO AGENTE', '', '', '', '', Number(total.toFixed(2))])
+    r.eachCell(c => {
+      c.font = { bold: true, size: 10 }
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } }
+      c.alignment = { vertical: 'middle', horizontal: 'center' }
+      c.border = { top: { style: 'thin', color: { argb: 'FF6EE7B7' } }, bottom: { style: 'thin', color: { argb: 'FF6EE7B7' } } }
+    })
+    r.getCell(2).alignment = { vertical: 'middle', horizontal: 'left' }
+    r.height = 18
+    // linha vazia separadora
+    ws.addRow([])
+  }
+
+  let totalGeralBH = 0
+
   for (const ag of AGENTES_ESCALA) {
     const ehExtra = AGENTES_SEM_SOBREAVISO.has(ag.nome)
-    let calc = 0
-    if (ehExtra) {
-      // TCS: horas de ocorrências em horasTrabalhadasSobreaviso (percSobreaviso=0, sáb ×1,5, dom ×2) + entradas manuais
-      calc = calcularBancoHoras(
-        ag.nome, dados.sobreaviso, dados.horasTrabalhadasSobreaviso,
-        dados.percDomingoFeriado, 0, dados.percSabado,
-        dados.feriadosCustom, dados.descontosFolgaBanco, dados.folgas, hoje,
-      )
-      const horasManuais = dados.horasExtrasSimples?.[ag.nome] ?? {}
-      calc += Object.values(horasManuais).reduce((a, h) => a + h, 0)
-    } else {
-      calc = calcularBancoHoras(
-        ag.nome, dados.sobreaviso, dados.horasTrabalhadasSobreaviso,
-        dados.percDomingoFeriado, dados.percSobreaviso, dados.percSabado,
-        dados.feriadosCustom, dados.descontosFolgaBanco, dados.folgas, hoje,
-      )
-    }
+    const horasAg = dados.horasTrabalhadasSobreaviso[ag.nome] ?? {}
+    const folgasAg = folgasDoAgente(ag.nome, dados.folgas)
     const ajuste = dados.ajustesBanco?.[ag.nome] ?? 0
-    const total = calc + ajuste
-    // Cada agente pode ter horas/folga diferentes (Talita/Cristiane = 4h, Sócrates = 6h, demais = 8h)
-    const dias = Math.max(0, total) / horasPorFolga(ag.nome)
-    linhas.push({ nome: ag.nome, tipo: ehExtra ? 'Horas extras' : 'Sobreaviso', calc, ajuste, total, dias })
-  }
-  linhas.sort((a, b) => b.total - a.total)
-  let totalGeral = 0
-  for (const l of linhas) {
-    totalGeral += l.total
-    const r = wsBanco.addRow([
-      l.nome,
-      l.tipo,
-      Number(l.calc.toFixed(2)),
-      Number(l.ajuste.toFixed(2)),
-      Number(l.total.toFixed(2)),
-      Number(l.dias.toFixed(2)),
-    ])
-    r.eachCell((c, col) => {
-      c.alignment = { vertical: 'middle', horizontal: col === 1 || col === 2 ? 'left' : 'center' }
-      c.border = { bottom: { style: 'hair', color: { argb: 'FFE5E7EB' } } }
-    })
-  }
-  const totRow = wsBanco.addRow(['TOTAL', '', '', '', Number(totalGeral.toFixed(2)), Number((Math.max(0, totalGeral) / HORAS_POR_FOLGA_BANCO).toFixed(2))])
-  totRow.eachCell(c => {
-    c.font = { bold: true }
-    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E7EF' } }
-  })
+    const hFolga = horasPorFolga(ag.nome)
 
-  wsBanco.getColumn(1).width = 16
-  wsBanco.getColumn(2).width = 14
-  wsBanco.getColumn(3).width = 16
-  wsBanco.getColumn(4).width = 18
-  wsBanco.getColumn(5).width = 14
-  wsBanco.getColumn(6).width = 16
+    // Ocorrências automáticas do agente
+    const { itens: itensOc } = computarHorasOcorrencias(
+      ag.nome, ocorrencias, dados.feriadosCustom,
+      dados.percDomingoFeriado, ehExtra ? 0 : dados.percSobreaviso, dados.percSabado,
+    )
+
+    let totalAg = 0
+    const linhasAg: Parameters<typeof addDetalhe>[] = []
+
+    if (!ehExtra) {
+      // ── Agentes com sobreaviso ──────────────────────────────────
+      const semanasAg = Object.entries(dados.sobreavisoSemanal ?? {})
+        .filter(([, lista]) => lista.includes(ag.nome))
+        .map(([seg]) => seg)
+        .filter(d => d < hoje)
+        .sort()
+
+      // Turnos base
+      for (const seg of semanasAg) {
+        linhasAg.push([wsBH, '', 'Sobreaviso (base)', fmtD(seg), 'Turno de sobreaviso', HORAS_POR_DIA_SOBREAVISO, '×1.0', HORAS_POR_DIA_SOBREAVISO])
+        totalAg += HORAS_POR_DIA_SOBREAVISO
+      }
+
+      // Acionamentos manuais
+      for (const [data, h] of Object.entries(horasAg).sort(([a], [b]) => a.localeCompare(b))) {
+        if (!h) continue
+        const isFerOuDom = ehFeriadoOuDomingo(data, dados.feriadosCustom)
+        const isSabado = ehSabadoComum(data, dados.feriadosCustom)
+        const mult = multiplicadorDia(data, dados.percDomingoFeriado, dados.percSobreaviso, dados.percSabado, dados.feriadosCustom)
+        const hCalc = h * mult
+        let cat: string
+        if (isFerOuDom) cat = 'Acionamento — dom/feriado'
+        else if (isSabado) cat = 'Acionamento — sábado'
+        else cat = 'Acionamento — dia útil'
+        linhasAg.push([wsBH, '', cat, fmtD(data), 'Acionamento em ocorrência', h, `×${mult.toFixed(1)}`, hCalc])
+        totalAg += hCalc
+      }
+    } else {
+      // ── Agentes sem sobreaviso (horas extras manuais) ──────────
+      const horasManuais = dados.horasExtrasSimples?.[ag.nome] ?? {}
+      for (const [data, h] of Object.entries(horasManuais).sort(([a], [b]) => a.localeCompare(b))) {
+        if (!h) continue
+        linhasAg.push([wsBH, '', 'Hora extra manual', fmtD(data), '', h, '×1.0', h])
+        totalAg += h
+      }
+    }
+
+    // Ocorrências automáticas
+    for (const item of itensOc.sort((a, b) => a.data.localeCompare(b.data))) {
+      const motivoTag =
+        item.motivo === 'dom/feriado' ? 'Dom/Feriado' :
+        item.motivo === 'sábado' ? 'Sábado' : 'Noturno 17h–7h'
+      const detalhe = [item.natureza, item.endereco].filter(Boolean).join(' — ')
+      linhasAg.push([wsBH, '', 'Ocorrência automática', fmtD(item.data), detalhe, item.horasBruto, `×${item.multiplicador.toFixed(1)} (${motivoTag})`, item.horasComMult])
+      totalAg += item.horasComMult
+    }
+
+    // Folgas descontadas
+    for (const data of folgasAg.sort()) {
+      linhasAg.push([wsBH, '', 'Folga descontada', fmtD(data), `${hFolga}h descontadas`, '', '', -hFolga])
+      totalAg -= hFolga
+    }
+    // Descontos legado
+    const descLeg = dados.descontosFolgaBanco[ag.nome] ?? {}
+    for (const [data, h] of Object.entries(descLeg).sort(([a], [b]) => a.localeCompare(b))) {
+      if (!h) continue
+      linhasAg.push([wsBH, '', 'Folga descontada', fmtD(data), `${h}h descontadas`, '', '', -h])
+      totalAg -= h
+    }
+
+    // Ajuste
+    if (ajuste !== 0) {
+      linhasAg.push([wsBH, '', 'Ajuste coordenador', '—', ajuste > 0 ? 'Acréscimo' : 'Decréscimo', '', '', ajuste])
+      totalAg += ajuste
+    }
+
+    const diasFolga = Math.max(0, totalAg) / hFolga
+    totalGeralBH += totalAg
+
+    // Escrever no worksheet
+    addAgentHeader(wsBH, ag.nome, totalAg, diasFolga)
+    for (const args of linhasAg) {
+      addDetalhe(...args)
+    }
+    if (linhasAg.length === 0) {
+      const r = wsBH.addRow(['', 'Sem registros neste período', '', '', '', '', ''])
+      r.getCell(2).font = { italic: true, color: { argb: 'FF9CA3AF' }, size: 9 }
+      r.height = 14
+    }
+    addSubtotal(wsBH, totalAg)
+  }
+
+  // Linha de total geral
+  const totRow = wsBH.addRow(['TOTAL GERAL', '', '', '', '', '', Number(totalGeralBH.toFixed(2))])
+  totRow.eachCell(c => {
+    c.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } }
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F4C81' } }
+    c.alignment = { vertical: 'middle', horizontal: 'center' }
+  })
+  totRow.getCell(1).alignment = { vertical: 'middle', horizontal: 'left' }
+  totRow.height = 22
+
+  // Larguras das colunas
+  wsBH.getColumn(1).width = 18  // Agente
+  wsBH.getColumn(2).width = 24  // Categoria
+  wsBH.getColumn(3).width = 14  // Data
+  wsBH.getColumn(4).width = 36  // Detalhe
+  wsBH.getColumn(5).width = 14  // Horas brutas
+  wsBH.getColumn(6).width = 20  // Multiplicador
+  wsBH.getColumn(7).width = 18  // Horas calculadas
 
   // ── Download ────────────────────────────────────────────────────
   const buffer = await wb.xlsx.writeBuffer()
@@ -3359,7 +3494,7 @@ export default function EscalaAgentes({ ocorrencias = [] }: EscalaAgentesProps) 
           <button
             className="escala-btn-exportar"
             onClick={() => {
-              exportarEscalaMensalExcel(dados, ano, mes).catch(err => {
+              exportarEscalaMensalExcel(dados, ano, mes, ocorrencias).catch(err => {
                 console.error('Falha ao exportar Excel:', err)
                 alert('Não foi possível gerar o arquivo Excel. Tente novamente.')
               })
