@@ -160,10 +160,72 @@ async function gerarDocxBlob(o: Ocorrencia): Promise<Uint8Array> {
   return docZip.generateAsync({ type: 'uint8array' })
 }
 
+interface ArquivoParaSalvar {
+  nome: string
+  dados: Uint8Array | string
+  base64?: boolean
+}
+
+function base64ParaUint8Array(base64: string): Uint8Array {
+  const bin = atob(base64)
+  const arr = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i)
+  return arr
+}
+
+async function salvarNaPastaEscolhida(
+  nomePasta: string,
+  arquivos: ArquivoParaSalvar[]
+): Promise<void> {
+  const rootHandle = await (window as any).showDirectoryPicker({ mode: 'readwrite' })
+
+  let pastaHandle: FileSystemDirectoryHandle
+  try {
+    pastaHandle = await rootHandle.getDirectoryHandle(nomePasta, { create: true })
+  } catch {
+    pastaHandle = rootHandle
+  }
+
+  for (const arq of arquivos) {
+    const fileHandle = await pastaHandle.getFileHandle(arq.nome, { create: true })
+    const writable = await fileHandle.createWritable()
+    const dados = typeof arq.dados === 'string' && arq.base64
+      ? base64ParaUint8Array(arq.dados)
+      : arq.dados
+    await writable.write(dados)
+    await writable.close()
+  }
+}
+
+async function salvarComoZip(
+  nomePasta: string,
+  arquivos: ArquivoParaSalvar[]
+): Promise<void> {
+  const zip = new JSZip()
+  const pasta = zip.folder(nomePasta)!
+
+  for (const arq of arquivos) {
+    if (typeof arq.dados === 'string' && arq.base64) {
+      pasta.file(arq.nome, arq.dados, { base64: true })
+    } else {
+      pasta.file(arq.nome, arq.dados as Uint8Array)
+    }
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${nomePasta}.zip`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
 export async function exportarPastaOcorrencia(o: Ocorrencia): Promise<void> {
   const nomeBase = nomePastaOcorrencia(o)
-  const zip = new JSZip()
-  const pasta = zip.folder(nomeBase)!
+  const arquivos: ArquivoParaSalvar[] = []
 
   const fotos = Array.isArray(o.fotos) ? o.fotos : []
   const dataFoto = dataFormatadaBR(o.data_ocorrencia || o.created_at)
@@ -183,20 +245,26 @@ export async function exportarPastaOcorrencia(o: Ocorrencia): Promise<void> {
     if (!match) continue
 
     const ext = match[1] === 'png' ? 'png' : 'jpg'
-    const nomeArq = `Foto ${i + 1} - ${dataFoto} - ${horaStr}.${ext}`
-    pasta.file(nomeArq, match[2], { base64: true })
+    arquivos.push({
+      nome: `Foto ${i + 1} - ${dataFoto} - ${horaStr}.${ext}`,
+      dados: match[2],
+      base64: true,
+    })
   }
 
   const docBytes = await gerarDocxBlob(o)
-  pasta.file('Relatorio simplificado.docx', docBytes)
+  arquivos.push({ nome: 'Relatorio simplificado.docx', dados: docBytes })
 
-  const blob = await zip.generateAsync({ type: 'blob' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${nomeBase}.zip`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  const temSupporte = 'showDirectoryPicker' in window
+
+  if (temSupporte) {
+    try {
+      await salvarNaPastaEscolhida(nomeBase, arquivos)
+      return
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return
+    }
+  }
+
+  await salvarComoZip(nomeBase, arquivos)
 }
