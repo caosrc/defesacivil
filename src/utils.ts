@@ -72,11 +72,12 @@ export async function adicionarMarcaDagua(
   lng?: number | null,
   maxWidth = 1280,
   qualidade = 0.70,
+  comMarca = true,
 ): Promise<string> {
   let useLat = lat ?? null
   let useLng = lng ?? null
 
-  if (useLat == null || useLng == null) {
+  if (comMarca && (useLat == null || useLng == null)) {
     const gps = await obterGpsAtual()
     if (gps) { useLat = gps.lat; useLng = gps.lng }
   }
@@ -97,37 +98,39 @@ export async function adicionarMarcaDagua(
 
       ctx.drawImage(img, 0, 0, drawW, drawH)
 
-      const agora = new Date()
-      const dia = agora.getDate().toString().padStart(2, '0')
-      const mes = MESES_ABR[agora.getMonth()]
-      const ano = agora.getFullYear()
-      const hora = agora.toTimeString().slice(0, 8)
-      const dataHora = `${dia} de ${mes}. de ${ano} ${hora}`
+      if (comMarca) {
+        const agora = new Date()
+        const dia = agora.getDate().toString().padStart(2, '0')
+        const mes = MESES_ABR[agora.getMonth()]
+        const ano = agora.getFullYear()
+        const hora = agora.toTimeString().slice(0, 8)
+        const dataHora = `${dia} de ${mes}. de ${ano} ${hora}`
 
-      const linhas: string[] = [dataHora]
-      if (useLat != null && useLng != null) {
-        linhas.push(`${gmsCompacto(useLat, 'N', 'S')} ${gmsCompacto(useLng, 'L', 'O')}`)
+        const linhas: string[] = [dataHora]
+        if (useLat != null && useLng != null) {
+          linhas.push(`${gmsCompacto(useLat, 'N', 'S')} ${gmsCompacto(useLng, 'L', 'O')}`)
+        }
+        linhas.push('DEFESA CIVIL - OURO BRANCO')
+
+        const fontSize = Math.max(14, Math.round(drawW * 0.022))
+        const lineHeight = fontSize * 1.45
+        const margem = Math.round(drawW * 0.022)
+
+        ctx.font = `bold ${fontSize}px Arial, sans-serif`
+        ctx.textAlign = 'right'
+        ctx.shadowColor = 'rgba(0,0,0,1)'
+        ctx.shadowBlur = 8
+        ctx.shadowOffsetX = 1
+        ctx.shadowOffsetY = 1
+        ctx.fillStyle = '#ffffff'
+
+        const baseY = drawH - margem - (linhas.length - 1) * lineHeight
+        const baseX = drawW - margem
+
+        linhas.forEach((linha, i) => {
+          ctx.fillText(linha, baseX, baseY + i * lineHeight)
+        })
       }
-      linhas.push('DEFESA CIVIL - OURO BRANCO')
-
-      const fontSize = Math.max(14, Math.round(drawW * 0.022))
-      const lineHeight = fontSize * 1.45
-      const margem = Math.round(drawW * 0.022)
-
-      ctx.font = `bold ${fontSize}px Arial, sans-serif`
-      ctx.textAlign = 'right'
-      ctx.shadowColor = 'rgba(0,0,0,1)'
-      ctx.shadowBlur = 8
-      ctx.shadowOffsetX = 1
-      ctx.shadowOffsetY = 1
-      ctx.fillStyle = '#ffffff'
-
-      const baseY = drawH - margem - (linhas.length - 1) * lineHeight
-      const baseX = drawW - margem
-
-      linhas.forEach((linha, i) => {
-        ctx.fillText(linha, baseX, baseY + i * lineHeight)
-      })
 
       resolve(canvas.toDataURL('image/jpeg', qualidade))
     }

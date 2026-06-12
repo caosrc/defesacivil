@@ -211,7 +211,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setEditando(true)
   }
 
-  function adicionarFotosEdicao(e: React.ChangeEvent<HTMLInputElement>) {
+  function adicionarFotosEdicao(e: React.ChangeEvent<HTMLInputElement>, camera = false) {
     const files = e.target.files
     if (!files) return
     setFotosCarregando((n) => n + files.length)
@@ -220,8 +220,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
       reader.onload = async (ev) => {
         try {
           if (ev.target?.result) {
-            const comMarca = await adicionarMarcaDagua(ev.target.result as string, o.lat ?? null, o.lng ?? null)
-            setEFotos((prev) => [...prev, comMarca])
+            const resultado = await adicionarMarcaDagua(ev.target.result as string, o.lat ?? null, o.lng ?? null, 1280, 0.70, camera)
+            setEFotos((prev) => [...prev, resultado])
           }
         } finally {
           setFotosCarregando((n) => Math.max(0, n - 1))
@@ -433,15 +433,15 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setErroVistoria('')
   }
 
-  function adicionarFotosVistoria(e: React.ChangeEvent<HTMLInputElement>) {
+  function adicionarFotosVistoria(e: React.ChangeEvent<HTMLInputElement>, camera = false) {
     const files = e.target.files
     if (!files) return
     Array.from(files).forEach((file) => {
       const reader = new FileReader()
       reader.onload = async (ev) => {
         if (ev.target?.result) {
-          const comMarca = await adicionarMarcaDagua(ev.target.result as string, o.lat, o.lng)
-          setNovaVistoriaFotos((prev) => [...prev, comMarca])
+          const resultado = await adicionarMarcaDagua(ev.target.result as string, o.lat, o.lng, 1280, 0.70, camera)
+          setNovaVistoriaFotos((prev) => [...prev, resultado])
         }
       }
       reader.readAsDataURL(file)
@@ -794,8 +794,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                           <span>🖼️</span><span>Carregar Foto</span>
                         </button>
                       </div>
-                      <input ref={camVistoriaRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={adicionarFotosVistoria} />
-                      <input ref={galVistoriaRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={adicionarFotosVistoria} />
+                      <input ref={camVistoriaRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => adicionarFotosVistoria(e, true)} />
+                      <input ref={galVistoriaRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => adicionarFotosVistoria(e, false)} />
                     </div>
                     <div className="campo">
                       <label className="campo-label">📝 Observação</label>
@@ -1188,8 +1188,8 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                       <span>🖼️</span><span>Carregar Foto</span>
                     </button>
                   </div>
-                  <input ref={camEditRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={adicionarFotosEdicao} />
-                  <input ref={galEditRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={adicionarFotosEdicao} />
+                  <input ref={camEditRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={(e) => adicionarFotosEdicao(e, true)} />
+                  <input ref={galEditRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => adicionarFotosEdicao(e, false)} />
                 </div>
 
                 {erroEdit && <div className="erro-msg">⚠️ {erroEdit}</div>}

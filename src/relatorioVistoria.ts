@@ -149,6 +149,7 @@ export async function gerarRelatorioVistoria(ocorrencia: Ocorrencia): Promise<Bl
     .replace(/[“”]/g, '')
     .replace(/,\s*Zona Rural de Olaria/g, '')
     .replace(/\s+Zona Rural de Olaria,\s*coordenadas/g, ' coordenadas')
+    .replace(/,\s{2,}coordenadas/g, ', coordenadas')
     .replace(/\s*descreva a conclus.o\.?/gi, '')
 
   const relsFile = zip.file('word/_rels/document.xml.rels')
@@ -233,6 +234,13 @@ export async function gerarRelatorioVistoria(ocorrencia: Ocorrencia): Promise<Bl
     const insertAfter = documentXml.indexOf('</w:tr>', lastFigureIdx) + 7
     documentXml = documentXml.slice(0, insertAfter) + extraRows.join('') + documentXml.slice(insertAfter)
   }
+
+  // Remove linhas do template com slots de foto não preenchidos
+  // (linhas que ainda têm "SEQ Figura" mas não têm nenhuma imagem inserida)
+  documentXml = documentXml.replace(/<w:tr\b[\s\S]*?<\/w:tr>/g, (row) => {
+    if (row.includes('SEQ Figura') && !row.includes('<w:drawing>')) return ''
+    return row
+  })
 
   documentXml = documentXml.replace(/<w:tc>([\s\S]*?)<\/w:tc>/g, (match, content: string) => {
     if (!content.includes('<w:drawing>')) return match

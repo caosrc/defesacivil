@@ -273,6 +273,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   async function processarFotos(
     files: File[],
     salvarNoCelular: boolean,
+    comMarca = true,
   ): Promise<void> {
     for (const file of files) {
       await new Promise<void>((resolve) => {
@@ -280,10 +281,10 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
         reader.onload = async (ev) => {
           try {
             if (ev.target?.result) {
-              const comMarca = await adicionarMarcaDagua(ev.target.result as string, lat, lng)
-              setFotos((prev) => [...prev, comMarca])
+              const resultado = await adicionarMarcaDagua(ev.target.result as string, lat, lng, 1280, 0.70, comMarca)
+              setFotos((prev) => [...prev, resultado])
               if (salvarNoCelular) {
-                salvarFotoNoDispositivo(comMarca)
+                salvarFotoNoDispositivo(resultado)
               }
             }
           } finally {
@@ -309,7 +310,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     if (!files || files.length === 0) return
     const fileArray = Array.from(files)
     e.target.value = ''
-    await processarFotos(fileArray, false)
+    await processarFotos(fileArray, false, false)
   }
 
   async function salvar() {
