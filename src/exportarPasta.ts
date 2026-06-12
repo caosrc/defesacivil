@@ -255,16 +255,5 @@ export async function exportarPastaOcorrencia(o: Ocorrencia): Promise<void> {
   const docBytes = await gerarDocxBlob(o)
   arquivos.push({ nome: 'Relatorio simplificado.docx', dados: docBytes })
 
-  const temSupporte = 'showDirectoryPicker' in window
-
-  if (temSupporte) {
-    try {
-      await salvarNaPastaEscolhida(nomeBase, arquivos)
-      return
-    } catch (err: any) {
-      if (err?.name === 'AbortError') return
-    }
-  }
-
   await salvarComoZip(nomeBase, arquivos)
 }
