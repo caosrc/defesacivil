@@ -202,12 +202,13 @@ async function salvarComoZip(
   arquivos: ArquivoParaSalvar[]
 ): Promise<void> {
   const zip = new JSZip()
+  const pasta = zip.folder(nomePasta)!
 
   for (const arq of arquivos) {
     if (typeof arq.dados === 'string' && arq.base64) {
-      zip.file(arq.nome, arq.dados, { base64: true })
+      pasta.file(arq.nome, arq.dados, { base64: true })
     } else {
-      zip.file(arq.nome, arq.dados as Uint8Array)
+      pasta.file(arq.nome, arq.dados as Uint8Array)
     }
   }
 
