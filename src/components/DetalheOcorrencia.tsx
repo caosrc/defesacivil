@@ -98,6 +98,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [fotoAmpliada, setFotoAmpliada] = useState<number | null>(null)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
   const [gerandoPasta, setGerandoPasta] = useState(false)
+  const [eDescricoesFotos, setEDescricoesFotos] = useState<string[]>([])
   const [eFotos, setEFotos] = useState<string[]>(Array.isArray(o.fotos) ? o.fotos : [])
   const [eFotoAmpliada, setEFotoAmpliada] = useState<number | null>(null)
   const [fotosCarregando, setFotosCarregando] = useState(0)
@@ -202,6 +203,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setEConclusao(o.conclusao ?? '')
     setEAgentes(Array.isArray(o.agentes) ? o.agentes : [])
     setEFotos(Array.isArray(o.fotos) ? [...o.fotos] : [])
+    setEDescricoesFotos(Array.isArray(o.descricoes_fotos) ? [...o.descricoes_fotos] : [])
     setEFotoAmpliada(null)
     setFotosCarregando(0)
     setGeoMsg('')
@@ -303,6 +305,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         horas_total: horasTotal,
         horas_sobreaviso: horasSobreaviso,
         fotos: eFotos,
+        descricoes_fotos: eDescricoesFotos,
         lat: finalLat,
         lng: finalLng,
         endereco: eEndereco || null,
@@ -674,14 +677,18 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                     <div className="detalhe-label-row">🖼️ Fotos ({totalFotos}) — toque para ampliar</div>
                     <div className="fotos-grid">
                       {o.fotos.map((f, i) => (
-                        <button
-                          key={i}
-                          className="foto-btn"
-                          onClick={() => setFotoAmpliada(i)}
-                          title="Ampliar foto"
-                        >
-                          <img src={f} alt={`Foto ${i + 1}`} className="foto-detalhe" />
-                        </button>
+                        <div key={i} className="foto-item">
+                          <button
+                            className="foto-btn"
+                            onClick={() => setFotoAmpliada(i)}
+                            title="Ampliar foto"
+                          >
+                            <img src={f} alt={`Foto ${i + 1}`} className="foto-detalhe" />
+                          </button>
+                          {o.descricoes_fotos?.[i] && (
+                            <p className="foto-legenda-view">Figura {i + 1} — {o.descricoes_fotos[i]}</p>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -1156,6 +1163,20 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                           onClick={() => setEFotos((p) => p.filter((_, j) => j !== i))}
                           title="Remover foto"
                         >✕</button>
+                        <input
+                          className="foto-descricao-input"
+                          type="text"
+                          placeholder={`Legenda (opcional)`}
+                          value={eDescricoesFotos[i] ?? ''}
+                          onChange={e => {
+                            const val = e.target.value
+                            setEDescricoesFotos(prev => {
+                              const next = [...prev]
+                              next[i] = val
+                              return next
+                            })
+                          }}
+                        />
                       </div>
                     ))}
                   </div>

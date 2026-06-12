@@ -17,6 +17,7 @@ export interface Ocorrencia {
   nivel_risco: NivelRisco
   status_oc: StatusOc
   fotos: string[]
+  descricoes_fotos?: string[] | null
   lat: number | null
   lng: number | null
   endereco: string | null

@@ -847,6 +847,7 @@ async function initDb() {
 
   await query(`ALTER TABLE planejamentos ADD COLUMN IF NOT EXISTS confirmacoes_agentes JSONB DEFAULT '[]'`)
   await query(`ALTER TABLE planejamentos ADD COLUMN IF NOT EXISTS fotos_evento JSONB DEFAULT '[]'`)
+  await query(`ALTER TABLE ocorrencias ADD COLUMN IF NOT EXISTS descricoes_fotos JSONB DEFAULT '[]'`)
 
   console.log('[DB] Tabelas verificadas/criadas com sucesso')
 
@@ -909,13 +910,14 @@ app.get('/api/ocorrencias', async (req, res) => {
 })
 
 app.post('/api/ocorrencias', async (req, res) => {
-  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes, responsavel_registro, vistorias, focos_incendio, poligono_area_queimada } = req.body
+  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, descricoes_fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes, responsavel_registro, vistorias, focos_incendio, poligono_area_queimada } = req.body
   try {
     const result = await query(
-      `INSERT INTO ocorrencias (tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes, responsavel_registro, vistorias, focos_incendio, poligono_area_queimada)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING *`,
+      `INSERT INTO ocorrencias (tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, descricoes_fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, agentes, responsavel_registro, vistorias, focos_incendio, poligono_area_queimada)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
       [tipo, natureza, subnatureza || null, nivel_risco, status_oc || 'ativo',
        JSON.stringify(Array.isArray(fotos) ? fotos : []),
+       JSON.stringify(Array.isArray(descricoes_fotos) ? descricoes_fotos : []),
        lat || null, lng || null, endereco || null, proprietario || null,
        situacao || null, recomendacao || null, conclusao || null,
        data_ocorrencia || null,
@@ -946,19 +948,20 @@ app.get('/api/ocorrencias/:id', async (req, res) => {
 app.put('/api/ocorrencias/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10)
   if (isNaN(id)) return res.status(400).json({ error: 'ID inválido' })
-  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, hora_inicio, hora_fim, horas_total, horas_sobreaviso, agentes, vistorias, focos_incendio, poligono_area_queimada, created_at } = req.body
+  const { tipo, natureza, subnatureza, nivel_risco, status_oc, fotos, descricoes_fotos, lat, lng, endereco, proprietario, situacao, recomendacao, conclusao, data_ocorrencia, hora_inicio, hora_fim, horas_total, horas_sobreaviso, agentes, vistorias, focos_incendio, poligono_area_queimada, created_at } = req.body
   console.log(`PUT /api/ocorrencias/${id} — tipo=${tipo} natureza=${natureza}`)
   try {
     const result = await query(
       `UPDATE ocorrencias SET tipo=$1, natureza=$2, subnatureza=$3, nivel_risco=$4, status_oc=$5,
-       fotos=$6, lat=$7, lng=$8, endereco=$9, proprietario=$10, situacao=$11, recomendacao=$12,
-       conclusao=$13, data_ocorrencia=$14, hora_inicio=$15, hora_fim=$16,
-       horas_total=$17, horas_sobreaviso=$18,
-       agentes=$19, vistorias=$20, focos_incendio=$21,
-       poligono_area_queimada=$22, created_at=COALESCE($23, created_at)
-       WHERE id=$24 RETURNING *`,
+       fotos=$6, descricoes_fotos=$7, lat=$8, lng=$9, endereco=$10, proprietario=$11, situacao=$12, recomendacao=$13,
+       conclusao=$14, data_ocorrencia=$15, hora_inicio=$16, hora_fim=$17,
+       horas_total=$18, horas_sobreaviso=$19,
+       agentes=$20, vistorias=$21, focos_incendio=$22,
+       poligono_area_queimada=$23, created_at=COALESCE($24, created_at)
+       WHERE id=$25 RETURNING *`,
       [tipo, natureza, subnatureza || null, nivel_risco, status_oc,
        JSON.stringify(Array.isArray(fotos) ? fotos : []),
+       JSON.stringify(Array.isArray(descricoes_fotos) ? descricoes_fotos : []),
        lat != null && lat !== '' ? lat : null,
        lng != null && lng !== '' ? lng : null,
        endereco || null, proprietario || null,

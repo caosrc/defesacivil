@@ -2092,23 +2092,53 @@ input, select, textarea { font-family: inherit; }
 .foto-wrap {
   position: relative;
   width: 80px;
-  height: 80px;
-  border-radius: 8px;
-  overflow: hidden;
   flex-shrink: 0;
-  border: 1.5px solid #e5e7eb;
-  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
 }
 .foto-wrap .foto-thumb {
-  width: 100%;
-  height: 100%;
+  width: 80px;
+  height: 80px;
   object-fit: cover;
-  border-radius: 0;
-  border: none;
+  border-radius: 8px;
+  border: 1.5px solid #e5e7eb;
   display: block;
   transition: transform 0.15s;
+  cursor: pointer;
 }
 .foto-wrap:hover .foto-thumb { transform: scale(1.05); }
+
+.foto-descricao-input {
+  width: 100%;
+  font-size: 0.68rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 2px 4px;
+  text-align: center;
+  color: #374151;
+  background: #f9fafb;
+  outline: none;
+  min-width: 0;
+}
+.foto-descricao-input:focus { border-color: #6366f1; background: #fff; }
+
+.foto-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.foto-legenda-view {
+  font-size: 0.7rem;
+  color: #6b7280;
+  text-align: center;
+  margin: 0;
+  line-height: 1.3;
+  max-width: 90px;
+  word-break: break-word;
+}
 
 /* ── Lightbox ───────────────────────────────────────────────────── */
 .foto-lightbox {

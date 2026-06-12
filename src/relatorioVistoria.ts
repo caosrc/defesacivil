@@ -162,11 +162,10 @@ export async function gerarRelatorioVistoria(ocorrencia: Ocorrencia): Promise<Bl
   const ids = [...relsXml.matchAll(/Id="rId(\d+)"/g)].map((match) => Number(match[1]))
   let proximoId = Math.max(0, ...ids) + 1
 
-  const fotos = Array.isArray(ocorrencia.fotos) ? ocorrencia.fotos.slice(0, 6) : []
-  fotos.forEach((foto, index) => {
-    const imagem = parseDataUrl(foto)
-    if (!imagem) return
-    const numero = index + 1
+  const fotos = Array.isArray(ocorrencia.fotos) ? ocorrencia.fotos : []
+  const descricoes = Array.isArray(ocorrencia.descricoes_fotos) ? ocorrencia.descricoes_fotos : []
+
+  function adicionarImagem(imagem: ImagemDataUrl, numero: number): string {
     const rId = `rId${proximoId++}`
     const target = `media/relatorio_foto_${numero}.${imagem.extension}`
     zip.file(`word/${target}`, imagem.bytes)
@@ -174,17 +173,66 @@ export async function gerarRelatorioVistoria(ocorrencia: Ocorrencia): Promise<Bl
       '</Relationships>',
       `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${target}" /></Relationships>`
     )
-
     if (!contentTypesXml.includes(`Extension="${imagem.extension}"`)) {
       contentTypesXml = contentTypesXml.replace(
         '</Types>',
         `<Default Extension="${imagem.extension}" ContentType="${imagem.mime}"/></Types>`
       )
     }
+    return rId
+  }
+
+  function captionFiguraXml(numero: number, descricao: string): string {
+    const descRun = descricao
+      ? `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xmlEscape(descricao)}</w:t></w:r>`
+      : ''
+    return `<w:p><w:pPr><w:pStyle w:val="2024"/><w:pBdr></w:pBdr><w:spacing/><w:ind/><w:jc w:val="center"/><w:rPr><w:highlight w:val="none"/></w:rPr></w:pPr><w:r><w:t xml:space="preserve">Figura </w:t></w:r><w:r><w:fldChar w:fldCharType="begin"/><w:instrText xml:space="preserve"> SEQ Figura \\* Arabic </w:instrText><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t xml:space="preserve">${numero} </w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r><w:r><w:t xml:space="preserve">- </w:t></w:r>${descRun}</w:p>`
+  }
+
+  function cellFotoXml(content: string, width: number): string {
+    return `<w:tc><w:tcPr><w:tcBorders><w:top w:val="none" w:color="000000" w:sz="4" w:space="0"/><w:left w:val="none" w:color="000000" w:sz="4" w:space="0"/><w:bottom w:val="none" w:color="000000" w:sz="4" w:space="0"/><w:right w:val="none" w:color="000000" w:sz="4" w:space="0"/></w:tcBorders><w:tcW w:w="${width}" w:type="dxa"/><w:textDirection w:val="lrTb"/><w:noWrap w:val="false"/></w:tcPr>${content}</w:tc>`
+  }
+
+  // Fotos 1-6: usar slots do template
+  fotos.slice(0, 6).forEach((foto, index) => {
+    const imagem = parseDataUrl(foto)
+    if (!imagem) return
+    const numero = index + 1
+    const rId = adicionarImagem(imagem, numero)
+    const desc = descricoes[index] ?? ''
 
     const captionRegex = new RegExp(`(<w:p\\b(?:(?!<\\/w:p>)[\\s\\S])*?SEQ Figura(?:(?!<\\/w:p>)[\\s\\S])*?<w:t[^>]*>\\s*${numero}\\s*<\\/w:t>(?:(?!<\\/w:p>)[\\s\\S])*?<\\/w:p>)`)
-    documentXml = documentXml.replace(captionRegex, `${imageDrawingXml(rId, numero)}$1`)
+    documentXml = documentXml.replace(captionRegex, (_match, captionPara: string) => {
+      const captionComDesc = desc
+        ? captionPara.replace(/<\/w:p>$/, `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${xmlEscape(desc)}</w:t></w:r></w:p>`)
+        : captionPara
+      return `${imageDrawingXml(rId, numero)}${captionComDesc}`
+    })
   })
+
+  // Fotos 7+: gerar novas linhas na tabela de fotos
+  const fotosExtra = fotos.slice(6)
+  if (fotosExtra.length > 0) {
+    const extraRows: string[] = []
+    for (let i = 0; i < fotosExtra.length; i += 2) {
+      const buildCell = (fotoDataUrl: string | undefined, numero: number, width: number): string => {
+        if (!fotoDataUrl) return cellFotoXml(`<w:p><w:pPr><w:jc w:val="center"/></w:pPr></w:p>`, width)
+        const imagem = parseDataUrl(fotoDataUrl)
+        if (!imagem) return cellFotoXml(`<w:p><w:pPr><w:jc w:val="center"/></w:pPr></w:p>`, width)
+        const rId = adicionarImagem(imagem, numero)
+        const desc = descricoes[numero - 1] ?? ''
+        return cellFotoXml(`${imageDrawingXml(rId, numero)}${captionFiguraXml(numero, desc)}`, width)
+      }
+      const numero1 = 7 + i
+      const numero2 = 8 + i
+      const cell1 = buildCell(fotosExtra[i], numero1, 4960)
+      const cell2 = buildCell(fotosExtra[i + 1], numero2, 4961)
+      extraRows.push(`<w:tr><w:trPr><w:trHeight w:val="6052"/></w:trPr>${cell1}${cell2}</w:tr>`)
+    }
+    const lastFigureIdx = documentXml.lastIndexOf('SEQ Figura')
+    const insertAfter = documentXml.indexOf('</w:tr>', lastFigureIdx) + 7
+    documentXml = documentXml.slice(0, insertAfter) + extraRows.join('') + documentXml.slice(insertAfter)
+  }
 
   documentXml = documentXml.replace(/<w:tc>([\s\S]*?)<\/w:tc>/g, (match, content: string) => {
     if (!content.includes('<w:drawing>')) return match
