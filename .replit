@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "postgresql-16"]
+modules = ["nodejs-20", "web"]
 [agent]
 expertMode = true
 stack = "BEST_EFFORT_FALLBACK"
@@ -50,6 +50,6 @@ build = ["npx", "vite", "build"]
 [userenv.shared]
 VITE_USE_SUPABASE = "false"
 VAPID_SUBJECT = "mailto:defesacivilob@gmail.com"
-VAPID_PUBLIC_KEY = "BLEtJJ68c7uvAE1JrMXEVXbGZh3BYAQqy8zb9hDV_p54x16F8LumhOJdwYaAP9OoyRO56m3YnMhlW0ZoEbQvGyE"
+VAPID_PUBLIC_KEY = "BM-gE-wibZiGkyOPTZVRfjL0cVY7pzBfDTIAHaSTZDOoiq03OiTaUYN8RfKHCfpyrkoML2EukgmbqwrT6HxBkBk"
 NODE_ENV = "production"
 PORT = "5000"
