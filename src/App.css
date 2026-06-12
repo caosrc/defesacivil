@@ -2666,14 +2666,15 @@ input, select, textarea { font-family: inherit; }
 .modal-header-acoes {
   display: flex; align-items: center; gap: 0.4rem;
 }
-.btn-editar-header {
+.btn-editar-header, .btn-pasta-header {
   background: rgba(255,255,255,0.2);
   border: none; width: 34px; height: 34px;
   border-radius: 50%; font-size: 1rem; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: background 0.15s;
 }
-.btn-editar-header:hover { background: rgba(255,255,255,0.35); }
+.btn-editar-header:hover, .btn-pasta-header:hover { background: rgba(255,255,255,0.35); }
+.btn-pasta-header:disabled { opacity: 0.5; cursor: default; }
 
 /* Edit mode form inside modal */
 .edit-form {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import type { Ocorrencia, NivelRisco, StatusOc, VistoriaAdicional } from '../types'
+import { exportarPastaOcorrencia, nomePastaOcorrencia } from '../exportarPasta'
 import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES, getSenhaAgente } from '../types'
 import { deletarOcorrencia, atualizarOcorrencia, buscarOcorrenciaCompleta } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
@@ -96,6 +97,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [erroEdit, setErroEdit] = useState('')
   const [fotoAmpliada, setFotoAmpliada] = useState<number | null>(null)
   const [gerandoRelatorio, setGerandoRelatorio] = useState(false)
+  const [gerandoPasta, setGerandoPasta] = useState(false)
   const [eFotos, setEFotos] = useState<string[]>(Array.isArray(o.fotos) ? o.fotos : [])
   const [eFotoAmpliada, setEFotoAmpliada] = useState<number | null>(null)
   const [fotosCarregando, setFotosCarregando] = useState(0)
@@ -509,6 +511,17 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     }
   }
 
+  async function baixarPasta() {
+    setGerandoPasta(true)
+    try {
+      await exportarPastaOcorrencia(o)
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Erro ao gerar pasta')
+    } finally {
+      setGerandoPasta(false)
+    }
+  }
+
   async function confirmarDelete() {
     if (!confirm(`Excluir ocorrência #${o.id}? Esta ação não pode ser desfeita.`)) return
     await deletarOcorrencia(o.id)
@@ -532,6 +545,16 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
               </div>
             </div>
             <div className="modal-header-acoes">
+              {!editando && (
+                <button
+                  className="btn-pasta-header"
+                  onClick={baixarPasta}
+                  disabled={gerandoPasta || !fotosCarregadasDoServidor}
+                  title={`Baixar pasta: ${nomePastaOcorrencia(o)}`}
+                >
+                  {gerandoPasta ? '⏳' : '📁'}
+                </button>
+              )}
               {!editando && podeEditar && (
                 <button className="btn-editar-header" onClick={() => solicitarOuExecutar('editar')} title="Editar ocorrência">
                   ✏️
