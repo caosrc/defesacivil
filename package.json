@@ -20,7 +20,7 @@
     "concurrently": "^9.2.1",
     "cors": "^2.8.6",
     "exceljs": "^4.4.0",
-    "express": "^4.21.2",
+    "express": "^4.22.2",
     "jszip": "^3.10.1",
     "leaflet": "^1.9.4",
     "pg": "^8.21.0",
