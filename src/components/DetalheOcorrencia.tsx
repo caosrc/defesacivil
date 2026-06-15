@@ -149,10 +149,6 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [eDataOcorrencia, setEDataOcorrencia] = useState(o.data_ocorrencia ?? '')
   const [eHoraInicio, setEHoraInicio] = useState(o.hora_inicio ?? '')
   const [eHoraFim, setEHoraFim] = useState(o.hora_fim ?? '')
-  const _createdDate = o.created_at ? o.created_at.slice(0, 10) : ''
-  const _createdTime = o.created_at ? new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false }) : ''
-  const [eRegistradoData, setERegistradoData] = useState(_createdDate)
-  const [eRegistradoHora, setERegistradoHora] = useState(_createdTime)
   const ehIncendioOc = o.natureza === 'Incêndio em Área Urbana' || o.natureza === 'Incêndio em Área Rural'
   const ehIncendioEdicao = eNatureza === 'Incêndio em Área Urbana' || eNatureza === 'Incêndio em Área Rural'
   const [ePoligonoArea, setEPoligonoArea] = useState<PontoPoligono[]>(
@@ -188,8 +184,6 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setEDataOcorrencia(o.data_ocorrencia ?? '')
     setEHoraInicio(o.hora_inicio ?? '')
     setEHoraFim(o.hora_fim ?? '')
-    setERegistradoData(o.created_at ? o.created_at.slice(0, 10) : '')
-    setERegistradoHora(o.created_at ? new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false }) : '')
     setEPoligonoArea(Array.isArray(o.poligono_area_queimada) ? o.poligono_area_queimada : [])
     const partes = (o.endereco ?? '').split(', ')
     setERua(partes[0] ?? '')
@@ -289,10 +283,6 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         ? calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim)
         : null
 
-      const registradoEmIso = (eRegistradoData && eRegistradoHora)
-        ? `${eRegistradoData}T${eRegistradoHora}:00`
-        : (eRegistradoData ? `${eRegistradoData}T00:00:00` : undefined)
-
       const dadosEditados = {
         tipo: tipoFinal,
         natureza: eNatureza,
@@ -314,7 +304,6 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         recomendacao: eRecomendacao || null,
         conclusao: eConclusao || null,
         agentes: eAgentes,
-        created_at: registradoEmIso,
         focos_incendio: Array.isArray(o.focos_incendio) && o.focos_incendio.length > 0 ? o.focos_incendio : null,
         vistorias: Array.isArray(o.vistorias) ? o.vistorias : [],
         poligono_area_queimada: ehIncendioEdicao && ePoligonoArea.length >= 3 ? ePoligonoArea : null,
@@ -930,32 +919,6 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                     focoLng={Array.isArray(o.focos_incendio) && o.focos_incendio.length > 0 ? o.focos_incendio[0].lng : o.lng}
                   />
                 )}
-
-                {/* Registrado em */}
-                <div className="campo campo-edit">
-                  <label className="campo-label">🕐 Registrado em</label>
-                  <div className="horario-row">
-                    <div className="horario-item">
-                      <label className="horario-sublabel">Data</label>
-                      <input
-                        className="campo-input"
-                        type="date"
-                        value={eRegistradoData}
-                        max={new Date().toISOString().split('T')[0]}
-                        onChange={(e) => setERegistradoData(e.target.value)}
-                      />
-                    </div>
-                    <div className="horario-item">
-                      <label className="horario-sublabel">Hora</label>
-                      <input
-                        className="campo-input"
-                        type="time"
-                        value={eRegistradoHora}
-                        onChange={(e) => setERegistradoHora(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
 
                 {/* Endereço */}
                 <div className="campo campo-edit">

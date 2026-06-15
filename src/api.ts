@@ -101,17 +101,17 @@ const CAMPOS_LISTA_OCORRENCIA_BASE =
 
 function isColumnMissingError(e: unknown): boolean {
   if (e instanceof Error) {
-    return e.message.includes('does not exist') || e.message.includes('42703')
+    return e.message.includes('does not exist') || e.message.includes('42703') || e.message.includes('schema cache')
   }
   // Supabase retorna plain objects {code, message} — não são instâncias de Error
   if (e && typeof e === 'object') {
     const err = e as Record<string, unknown>
     const code = String(err.code ?? '')
     const message = String(err.message ?? '')
-    return code === '42703' || message.includes('does not exist')
+    return code === '42703' || message.includes('does not exist') || message.includes('schema cache')
   }
   const s = String(e)
-  return s.includes('does not exist') || s.includes('42703')
+  return s.includes('does not exist') || s.includes('42703') || s.includes('schema cache')
 }
 
 export async function listarOcorrencias(): Promise<Ocorrencia[]> {
@@ -308,8 +308,8 @@ export async function atualizarOcorrencia(
       .single()
     if (error && isColumnMissingError(error)) {
       // Colunas ausentes no Supabase — tenta sem elas
-      const { hora_inicio: _hi, hora_fim: _hf, horas_total: _ht, horas_sobreaviso: _hs, poligono_area_queimada: _paq, ...payloadBase } = payload as Record<string, unknown>
-      void _hi; void _hf; void _ht; void _hs; void _paq
+      const { hora_inicio: _hi, hora_fim: _hf, horas_total: _ht, horas_sobreaviso: _hs, poligono_area_queimada: _paq, descricoes_fotos: _df, ...payloadBase } = payload as Record<string, unknown>
+      void _hi; void _hf; void _ht; void _hs; void _paq; void _df
       const r2 = await supabase.from('ocorrencias').update(payloadBase).eq('id', id).select().single()
       data = r2.data
       error = r2.error

@@ -1074,37 +1074,6 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
         </div>
       )}
 
-      {/* ── Fins de semana e feriados do mês ─────────────────────── */}
-      <div className="bh-bloco bh-bloco-domfer">
-        <div className="bh-bloco-header">
-          <span className="bh-bloco-icone">☀️</span>
-          <span className="bh-bloco-titulo">Fins de Semana e Feriados</span>
-          <span className="bh-bloco-total">{fmtH(mes.fimSemana)}h</span>
-        </div>
-        {domferDoMes.length === 0 ? (
-          <p className="bh-card-vazio">Nenhuma hora em fim de semana/feriado em {MESES[viewMonth]}.</p>
-        ) : (
-          <div className="bh-domfer-lista">
-            {domferDoMes.map(([data, hInput]) => {
-              const [y, m, d] = data.split('-').map(Number)
-              const isSabado = ehSabadoComum(data, feriadosCustom)
-              const nomeDia = isSabado ? 'Sáb' : DIAS_SEMANA_NOMES[new Date(y, m - 1, d).getDay()]
-              const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
-              const percUsado = isSabado ? percSabado : percDomingoFeriado
-              return (
-                <div key={data} className="bh-domfer-row">
-                  <span className="bh-domfer-dia">{nomeDia}</span>
-                  <span className="bh-domfer-data">{String(d).padStart(2,'0')}/{String(m).padStart(2,'0')}/{y}</span>
-                  <span className="bh-domfer-input">{fmtH(hInput)}h</span>
-                  <span className="bh-domfer-mult">×{(1 + percUsado / 100).toFixed(1)}</span>
-                  <span className="bh-domfer-calc">= {fmtH(hInput * mult)}h</span>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
       {/* ── Ocorrências automáticas do mês ───────────────────────── */}
       <div className="bh-bloco bh-bloco-ocauto">
         <div className="bh-bloco-header">
