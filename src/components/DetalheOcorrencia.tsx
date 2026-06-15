@@ -9,7 +9,7 @@ import { exportarOcorrenciaExcel } from '../exportExcel'
 import { formatarCoordenadas, parseDateLocal, mensagemErroGps, adicionarMarcaDagua } from '../utils'
 import ModalSenha from './ModalSenha'
 import PoligonoAreaQueimada, { calcularAreaM2, formatarArea, type PontoPoligono } from './PoligonoAreaQueimada'
-import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras } from '../horasUtils'
+import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras, multiplicadorDia } from '../horasUtils'
 
 interface Props {
   ocorrencia: Ocorrencia
@@ -274,14 +274,17 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setSalvando(true)
     setErroEdit('')
     try {
-      const horasTotal = (eHoraInicio && eHoraFim) ? calcularHorasTotal(eHoraInicio, eHoraFim) : null
+      const mult = eDataOcorrencia ? multiplicadorDia(eDataOcorrencia) : 1
+      const horasTotalBruto = (eHoraInicio && eHoraFim) ? calcularHorasTotal(eHoraInicio, eHoraFim) : null
+      const horasTotal = horasTotalBruto != null ? Math.round(horasTotalBruto * mult * 100) / 100 : null
       const horasSobreaviso = (eHoraInicio && eHoraFim && eDataOcorrencia)
         ? calcularHorasSobreaviso(eDataOcorrencia, eHoraInicio, eHoraFim)
         : null
-      // Horas que entram no banco: somente período de sobreaviso (17h–7h), independente do dia
-      const horasBanco = (eHoraInicio && eHoraFim && eDataOcorrencia)
+      // Horas que entram no banco: aplicar multiplicador de dia (dom/feriado ×2, sáb ×1,5)
+      const horasBancoBruto = (eHoraInicio && eHoraFim && eDataOcorrencia)
         ? calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim)
         : null
+      const horasBanco = horasBancoBruto != null ? Math.round(horasBancoBruto * mult * 100) / 100 : null
 
       const dadosEditados = {
         tipo: tipoFinal,
@@ -888,14 +891,21 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                     </div>
                   </div>
                   {eHoraInicio && eHoraFim && (() => {
-                    const total = calcularHorasTotal(eHoraInicio, eHoraFim)
-                    const banco = calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim)
+                    const totalBruto = calcularHorasTotal(eHoraInicio, eHoraFim)
+                    const mult = eDataOcorrencia ? multiplicadorDia(eDataOcorrencia) : 1
+                    const total = Math.round(totalBruto * mult * 100) / 100
+                    const bancoBruto = calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim)
+                    const banco = Math.round(bancoBruto * mult * 100) / 100
+                    const labelMult = mult === 2 ? '×2 (dom/feriado)' : mult === 1.5 ? '×1,5 (sábado)' : ''
                     const labelBanco = banco > 0
-                      ? `🌙 Sobreaviso — ${formatarHoras(banco)} no banco (×1,5)`
+                      ? `🌙 Sobreaviso — ${formatarHoras(banco)} no banco${labelMult ? ` (${labelMult})` : ''}`
                       : null
                     return (
                       <div className="horario-resumo">
-                        <span className="horario-total">⏱ Total: <strong>{formatarHoras(total)}</strong></span>
+                        <span className="horario-total">
+                          ⏱ Total: <strong>{formatarHoras(total)}</strong>
+                          {mult > 1 && <span style={{ marginLeft: '0.4rem', fontSize: '0.8em', color: '#b45309' }}>({labelMult})</span>}
+                        </span>
                         {banco > 0 && labelBanco
                           ? <span className="horario-sobreaviso">{labelBanco}</span>
                           : <span className="horario-sem-sobreaviso">☀️ Sem horas no banco (horário comercial, seg–sex)</span>

@@ -121,6 +121,19 @@ export function calcularHorasSobreaviso(
   return Math.round(totalMin * 100 / 60) / 100
 }
 
+/**
+ * Retorna o multiplicador de horas conforme o dia da semana e feriados.
+ * - Domingo ou feriado (incluindo sábado que cai em feriado): × 2
+ * - Sábado comum (não feriado): × 1,5
+ * - Demais dias: × 1
+ */
+export function multiplicadorDia(dataStr: string, feriadosCustom: string[] = []): number {
+  if (!dataStr) return 1
+  if (ehDomingoOuFeriado(dataStr, feriadosCustom)) return 2
+  if (ehSabadoComumUtils(dataStr, feriadosCustom)) return 1.5
+  return 1
+}
+
 export function calcularHorasTotal(horaInicio: string, horaFim: string): number {
   if (!horaInicio || !horaFim) return 0
   const [hI, mI] = horaInicio.split(':').map(Number)
