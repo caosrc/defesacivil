@@ -51,5 +51,5 @@ build = ["npx", "vite", "build"]
 VITE_USE_SUPABASE = "false"
 VAPID_SUBJECT = "mailto:defesacivilob@gmail.com"
 VAPID_PUBLIC_KEY = "BM-gE-wibZiGkyOPTZVRfjL0cVY7pzBfDTIAHaSTZDOoiq03OiTaUYN8RfKHCfpyrkoML2EukgmbqwrT6HxBkBk"
+PORT = "5000"
 NODE_ENV = "development"
-PORT = "3001"
