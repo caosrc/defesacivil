@@ -54,11 +54,20 @@ function nomeRua(endereco: string | null | undefined): string {
   return texto.split(',')[0].trim() || texto
 }
 
+function nomeBairro(endereco: string | null | undefined): string {
+  const partes = String(endereco || '').split(',').map(p => p.trim())
+  return partes.slice(2).join(' ').trim()
+}
+
 export function relatorioFileName(ocorrencia: Ocorrencia): string {
   const numero = limparNomeArquivo(ocorrencia.id, 'numero')
   const rua = limparNomeArquivo(nomeRua(ocorrencia.endereco), 'Nome_da_Rua')
+  const bairro = limparNomeArquivo(nomeBairro(ocorrencia.endereco), '')
   const requerente = limparNomeArquivo(ocorrencia.proprietario, 'Nome_do_requerente')
-  return `RelVist_${numero}_${rua}_${requerente}.docx`
+  const partes: string[] = ['RelVist', numero, rua]
+  if (bairro) partes.push(bairro)
+  partes.push(requerente)
+  return partes.join('_') + '.docx'
 }
 
 interface ImagemDataUrl {
