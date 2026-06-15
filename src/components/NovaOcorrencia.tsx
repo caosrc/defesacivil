@@ -7,7 +7,7 @@ import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
 import { geocodificarEndereco } from '../offline'
 import { formatarCoordenadas, adicionarMarcaDagua, mensagemErroGps } from '../utils'
-import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras, sincronizarHorasEscala } from '../horasUtils'
+import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras } from '../horasUtils'
 import PoligonoAreaQueimada, { type PontoPoligono } from './PoligonoAreaQueimada'
 
 // Fix Leaflet default icon
@@ -386,17 +386,6 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       if (foiOffline && saveError && navigator.onLine) {
         setErro(`Erro ao salvar online: ${saveError}`)
         return
-      }
-
-      // Atualiza banco de horas para TODOS os agentes: sáb/dom/feriado (qualquer horário) ou seg-sex após 17h
-      if (!foiOffline && horasBanco && horasBanco > 0 && agentes.length > 0 && dataOcorrencia) {
-        sincronizarHorasEscala({
-          agentes,
-          dataStr: dataOcorrencia,
-          horasSobreaviso: horasBanco,
-          ocId: (resultado as any).id ?? 'novo',
-          natureza,
-        }).catch(() => {})
       }
 
       localStorage.removeItem(RASCUNHO_KEY)

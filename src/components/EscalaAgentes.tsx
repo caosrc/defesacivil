@@ -708,6 +708,30 @@ function ehHorarioNoturno(horaInicio: string | null): boolean {
   return h >= 17 || h < 7
 }
 
+function ehEntradaDeOcorrencia(justificativa: string): boolean {
+  const just = (justificativa ?? '').trim()
+  if (!just) return false
+  const partes = just.split('; ').map(p => p.trim()).filter(Boolean)
+  return partes.length > 0 && partes.every(p => p.startsWith('Oc.#'))
+}
+
+function filtrarHorasManuais(
+  horasTrabalhadasSobreaviso: Record<string, Record<string, number>>,
+  justificativasSobreaviso: Record<string, Record<string, string>>,
+): Record<string, Record<string, number>> {
+  const out: Record<string, Record<string, number>> = {}
+  for (const [agente, porData] of Object.entries(horasTrabalhadasSobreaviso)) {
+    for (const [data, horas] of Object.entries(porData)) {
+      const just = justificativasSobreaviso[agente]?.[data] ?? ''
+      if (!ehEntradaDeOcorrencia(just)) {
+        if (!out[agente]) out[agente] = {}
+        out[agente][data] = horas
+      }
+    }
+  }
+  return out
+}
+
 function computarHorasOcorrencias(
   agente: string,
   ocorrencias: Ocorrencia[],
@@ -825,13 +849,19 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
     return computarHorasOcorrencias(agente, ocorrencias, feriadosCustom, percDomingoFeriado, percSobreaviso, percSabado)
   }, [agente, ocorrencias, feriadosCustom, percDomingoFeriado, percSobreaviso, percSabado])
 
+  // Entradas manuais apenas (exclui as que vieram de sincronizarHorasEscala via ocorrências)
+  const horasAgenteManuais = useMemo(() => {
+    const filtrado = filtrarHorasManuais(horasTrabalhadasSobreaviso, justificativasSobreaviso)
+    return filtrado[agente] ?? {}
+  }, [horasTrabalhadasSobreaviso, justificativasSobreaviso, agente])
+
   // ── Helper: calcular buckets para um prefixo de mês (ou todos) ─
   function calcBuckets(pfxFrom: string, pfxTo: string) {
     const turnos = semanasDoAgente.filter(d => d >= pfxFrom && d < pfxTo && d < hoje).length
     const baseSb = turnos * HORAS_POR_DIA_SOBREAVISO
     let extSb = 0
     let extFS = 0
-    for (const [data, h] of Object.entries(horasAgente)) {
+    for (const [data, h] of Object.entries(horasAgenteManuais)) {
       if (data < pfxFrom || data >= pfxTo) continue
       const mult = multiplicadorDia(data, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom)
       if (ehFeriadoOuDomingo(data, feriadosCustom) || ehSabadoComum(data, feriadosCustom)) extFS += h * mult
@@ -871,10 +901,10 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
 
   // Itens filtrados para o mês
   const semanasDoMes = semanasDoAgente.filter(d => d >= mesPfx && d < prox)
-  const domferDoMes = Object.entries(horasAgente)
+  const domferDoMes = Object.entries(horasAgenteManuais)
     .filter(([data]) => data >= mesPfx && data < prox &&
       (ehFeriadoOuDomingo(data, feriadosCustom) || ehSabadoComum(data, feriadosCustom)) &&
-      (horasAgente[data] ?? 0) > 0)
+      (horasAgenteManuais[data] ?? 0) > 0)
     .sort(([a], [b]) => b.localeCompare(a))
   const itensOcMes = itensOcorrencias.filter(i => i.data >= mesPfx && i.data < prox)
     .slice().sort((a, b) => b.data.localeCompare(a.data))
@@ -1494,8 +1524,12 @@ function ModalDetalhesBanco({
     : []
   const horasTurnosMes = turnosMes.filter(([data]) => data < hoje).length * HORAS_POR_DIA_SOBREAVISO
 
-  const horasOcAgente = horasTrabalhadasSobreaviso[agente.nome] ?? {}
+  const horasOcAgenteBruto = horasTrabalhadasSobreaviso[agente.nome] ?? {}
   const justifOcAgente = justificativasSobreaviso[agente.nome] ?? {}
+  // Exclui entradas que vieram de sincronizarHorasEscala (padrão "Oc.#...")
+  const horasOcAgente = Object.fromEntries(
+    Object.entries(horasOcAgenteBruto).filter(([data]) => !ehEntradaDeOcorrencia(justifOcAgente[data] ?? ''))
+  )
   const ocsMes = Object.entries(horasOcAgente)
     .filter(([data]) => data.startsWith(mesPfx))
     .sort(([a], [b]) => a.localeCompare(b))
@@ -1894,9 +1928,15 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
     return map
   }, [ocorrencias, feriadosCustom, percDomingoFeriado, percSobreaviso, percSabado])
 
+  // horasTrabalhadasSobreaviso filtrado: exclui entradas que vieram de sincronizarHorasEscala
+  const htsFiltrado = useMemo(
+    () => filtrarHorasManuais(horasTrabalhadasSobreaviso, justificativasSobreaviso),
+    [horasTrabalhadasSobreaviso, justificativasSobreaviso],
+  )
+
   const lista = useMemo(() => {
     const sobreaviso = AGENTES_SOBREAVISO.map(ag => {
-      const calculadoBase = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
+      const calculadoBase = calcularBancoHoras(ag.nome, sobreavisoSemanal, htsFiltrado, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
       const horasAutoOc = (ocAutoMap[ag.nome] ?? []).reduce((acc, item) => acc + item.horasComMult, 0)
       const calculado = calculadoBase + horasAutoOc
       const ajuste = ajustesBanco[ag.nome] ?? 0
@@ -1908,7 +1948,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
       return { ...ag, total, calculado, ajuste, diasFolga, horasFolga, desobreaviso, temFolga, tipo: 'sobreaviso' as const }
     })
     const extras = AGENTES_HORAS_EXTRAS.map(ag => {
-      const calculadoOc = calcularBancoHoras(ag.nome, sobreavisoSemanal, horasTrabalhadasSobreaviso, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
+      const calculadoOc = calcularBancoHoras(ag.nome, sobreavisoSemanal, htsFiltrado, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, descontosFolgaBanco, folgas, hoje)
       const horasManuais = horasExtrasSimples[ag.nome] ?? {}
       const horasAutoOc = (ocAutoMap[ag.nome] ?? []).reduce((acc, item) => acc + item.horasComMult, 0)
       const calculado = calculadoOc + Object.values(horasManuais).reduce((acc, h) => acc + h, 0) + horasAutoOc
@@ -1919,7 +1959,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
       return { ...ag, total, calculado, ajuste, diasFolga, horasFolga, desobreaviso: false, temFolga: false, tipo: 'extras' as const }
     })
     return [...sobreaviso, ...extras].sort((a, b) => b.total - a.total)
-  }, [sobreavisoSemanal, horasTrabalhadasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, hoje, ocAutoMap])
+  }, [sobreavisoSemanal, htsFiltrado, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, ajustesBanco, hoje, ocAutoMap])
 
   const totalGeral = lista.reduce((s, ag) => s + ag.total, 0)
 

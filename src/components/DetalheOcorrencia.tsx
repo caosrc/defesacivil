@@ -9,7 +9,7 @@ import { exportarOcorrenciaExcel } from '../exportExcel'
 import { formatarCoordenadas, parseDateLocal, mensagemErroGps, adicionarMarcaDagua } from '../utils'
 import ModalSenha from './ModalSenha'
 import PoligonoAreaQueimada, { calcularAreaM2, formatarArea, type PontoPoligono } from './PoligonoAreaQueimada'
-import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras, sincronizarHorasEscala } from '../horasUtils'
+import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras } from '../horasUtils'
 
 interface Props {
   ocorrencia: Ocorrencia
@@ -325,23 +325,6 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         atualizado = { ...o, ...dadosEditados }
       } else {
         atualizado = await atualizarOcorrencia(o.id, dadosEditados)
-      }
-
-      // Sincroniza banco de horas para TODOS os agentes (sáb/dom/feriado qualquer hora; seg-sex após 17h)
-      // Usa sempre a data de criação (created_at) como chave no banco de horas,
-      // para que editar data_ocorrencia NÃO mova as horas para outro dia.
-      if (!o._offline) {
-        const dataParaBanco = o.created_at ? o.created_at.slice(0, 10) : (eDataOcorrencia || '')
-        sincronizarHorasEscala({
-          agentes: eAgentes,
-          dataStr: dataParaBanco,
-          horasSobreaviso: horasBanco ?? 0,
-          ocId: o.id,
-          natureza: eNatureza,
-          oldAgentes: Array.isArray(o.agentes) ? o.agentes : [],
-          oldDataStr: dataParaBanco,
-          oldHorasSobreaviso: o.horas_sobreaviso ? Number(o.horas_sobreaviso) : 0,
-        }).catch(() => {})
       }
 
       setO(atualizado)
