@@ -303,7 +303,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         hora_inicio: eHoraInicio || null,
         hora_fim: eHoraFim || null,
         horas_total: horasTotal,
-        horas_sobreaviso: horasSobreaviso,
+        horas_sobreaviso: horasBanco,
         fotos: eFotos,
         descricoes_fotos: eDescricoesFotos,
         lat: finalLat,

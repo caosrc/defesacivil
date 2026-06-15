@@ -361,7 +361,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       hora_inicio: horaInicio || null,
       hora_fim: horaFim || null,
       horas_total: horasTotal,
-      horas_sobreaviso: horasSobreaviso,
+      horas_sobreaviso: horasBanco,
       fotos,
       lat: finalLat,
       lng: finalLng,
