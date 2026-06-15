@@ -215,10 +215,10 @@ export async function enviarOcorrenciaServidor(
         console.warn('[api] Supabase insert: coluna ausente, tentando schema base.', error.message)
         const {
           hora_inicio: _hi, hora_fim: _hf, horas_total: _ht, horas_sobreaviso: _hs,
-          focos_incendio: _fi, poligono_area_queimada: _paq,
+          focos_incendio: _fi, poligono_area_queimada: _paq, descricoes_fotos: _df,
           ...payloadBase
         } = payload as Record<string, unknown>
-        void _hi; void _hf; void _ht; void _hs; void _fi; void _paq
+        void _hi; void _hf; void _ht; void _hs; void _fi; void _paq; void _df
         const r2 = await supabase.from('ocorrencias').insert(payloadBase).select().single()
         data = r2.data
         error = r2.error
