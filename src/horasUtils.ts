@@ -126,12 +126,41 @@ export function calcularHorasSobreaviso(
  * - Domingo ou feriado (incluindo sábado que cai em feriado): × 2
  * - Sábado comum (não feriado): × 1,5
  * - Demais dias: × 1
+ * Os feriados municipais marcados pelo Moisés (feriadosCustom) têm o mesmo peso que dom/feriado fixo (× 2).
  */
 export function multiplicadorDia(dataStr: string, feriadosCustom: string[] = []): number {
   if (!dataStr) return 1
   if (ehDomingoOuFeriado(dataStr, feriadosCustom)) return 2
   if (ehSabadoComumUtils(dataStr, feriadosCustom)) return 1.5
   return 1
+}
+
+/**
+ * Carrega a lista de feriados municipais/locais marcados pelo Moisés na escala.
+ * Tenta o localStorage primeiro (síncrono / rápido) e depois confirma com o servidor.
+ */
+export async function carregarFeriadosCustom(): Promise<string[]> {
+  // 1. localStorage — resposta imediata
+  try {
+    const raw = localStorage.getItem('escala-data-v3')
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed.feriadosCustom) && parsed.feriadosCustom.length > 0) {
+        return parsed.feriadosCustom as string[]
+      }
+    }
+  } catch { /* ignora */ }
+
+  // 2. Servidor — fonte de verdade (Moisés pode ter adicionado de outro dispositivo)
+  try {
+    const res = await fetch('/api/escala')
+    if (res.ok) {
+      const json = await res.json()
+      if (Array.isArray(json?.feriadosCustom)) return json.feriadosCustom as string[]
+    }
+  } catch { /* ignora */ }
+
+  return []
 }
 
 export function calcularHorasTotal(horaInicio: string, horaFim: string): number {

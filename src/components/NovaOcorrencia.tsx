@@ -7,7 +7,7 @@ import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
 import { geocodificarEndereco } from '../offline'
 import { formatarCoordenadas, adicionarMarcaDagua, mensagemErroGps } from '../utils'
-import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras, multiplicadorDia } from '../horasUtils'
+import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras, multiplicadorDia, carregarFeriadosCustom } from '../horasUtils'
 import PoligonoAreaQueimada, { type PontoPoligono } from './PoligonoAreaQueimada'
 
 // Fix Leaflet default icon
@@ -39,6 +39,10 @@ type FocoIncendio = { lat: number | null; lng: number | null; buscando: boolean 
 
 export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const hoje = new Date().toISOString().split('T')[0]
+  const [feriadosCustom, setFeriadosCustom] = useState<string[]>([])
+  useEffect(() => {
+    carregarFeriadosCustom().then(setFeriadosCustom).catch(() => {})
+  }, [])
   const [tipo, setTipo] = useState('')
   const [tipoOutro, setTipoOutro] = useState('')
   const [natureza, setNatureza] = useState('')
@@ -342,7 +346,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       ? focosIncendio.filter(f => f.lat != null && f.lng != null).map(f => ({ lat: f.lat!, lng: f.lng! }))
       : null
 
-    const mult = dataOcorrencia ? multiplicadorDia(dataOcorrencia) : 1
+    const mult = dataOcorrencia ? multiplicadorDia(dataOcorrencia, feriadosCustom) : 1
     const horasTotalBruto = (horaInicio && horaFim) ? calcularHorasTotal(horaInicio, horaFim) : null
     const horasTotal = horasTotalBruto != null ? Math.round(horasTotalBruto * mult * 100) / 100 : null
     const horasSobreaviso = (horaInicio && horaFim && dataOcorrencia)
@@ -584,7 +588,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
             </div>
             {horaInicio && horaFim && (() => {
               const totalBruto = calcularHorasTotal(horaInicio, horaFim)
-              const mult = dataOcorrencia ? multiplicadorDia(dataOcorrencia) : 1
+              const mult = dataOcorrencia ? multiplicadorDia(dataOcorrencia, feriadosCustom) : 1
               const total = Math.round(totalBruto * mult * 100) / 100
               const bancoBruto = calcularHorasOcorrenciaBanco(dataOcorrencia, horaInicio, horaFim)
               const banco = Math.round(bancoBruto * mult * 100) / 100

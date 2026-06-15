@@ -9,7 +9,7 @@ import { exportarOcorrenciaExcel } from '../exportExcel'
 import { formatarCoordenadas, parseDateLocal, mensagemErroGps, adicionarMarcaDagua } from '../utils'
 import ModalSenha from './ModalSenha'
 import PoligonoAreaQueimada, { calcularAreaM2, formatarArea, type PontoPoligono } from './PoligonoAreaQueimada'
-import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras, multiplicadorDia } from '../horasUtils'
+import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras, multiplicadorDia, carregarFeriadosCustom } from '../horasUtils'
 
 interface Props {
   ocorrencia: Ocorrencia
@@ -88,6 +88,11 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
       setFotosCarregadasDoServidor(true)
     }).catch(() => { setFotosCarregadasDoServidor(true) })
   }, [oc.id])
+
+  const [feriadosCustom, setFeriadosCustom] = useState<string[]>([])
+  useEffect(() => {
+    carregarFeriadosCustom().then(setFeriadosCustom).catch(() => {})
+  }, [])
 
   const [editando, setEditando] = useState(false)
   const [pedindoSenha, setPedindoSenha] = useState<'editar' | 'deletar' | null>(null)
@@ -274,7 +279,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setSalvando(true)
     setErroEdit('')
     try {
-      const mult = eDataOcorrencia ? multiplicadorDia(eDataOcorrencia) : 1
+      const mult = eDataOcorrencia ? multiplicadorDia(eDataOcorrencia, feriadosCustom) : 1
       const horasTotalBruto = (eHoraInicio && eHoraFim) ? calcularHorasTotal(eHoraInicio, eHoraFim) : null
       const horasTotal = horasTotalBruto != null ? Math.round(horasTotalBruto * mult * 100) / 100 : null
       const horasSobreaviso = (eHoraInicio && eHoraFim && eDataOcorrencia)
@@ -892,7 +897,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                   </div>
                   {eHoraInicio && eHoraFim && (() => {
                     const totalBruto = calcularHorasTotal(eHoraInicio, eHoraFim)
-                    const mult = eDataOcorrencia ? multiplicadorDia(eDataOcorrencia) : 1
+                    const mult = eDataOcorrencia ? multiplicadorDia(eDataOcorrencia, feriadosCustom) : 1
                     const total = Math.round(totalBruto * mult * 100) / 100
                     const bancoBruto = calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim)
                     const banco = Math.round(bancoBruto * mult * 100) / 100
