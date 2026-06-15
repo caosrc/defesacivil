@@ -582,14 +582,9 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
             {horaInicio && horaFim && (() => {
               const total = calcularHorasTotal(horaInicio, horaFim)
               const banco = calcularHorasOcorrenciaBanco(dataOcorrencia, horaInicio, horaFim)
-              const tipo = tipoDiaOcorrencia(dataOcorrencia, horaInicio)
-              const labelBanco = tipo === 'domingo_feriado'
-                ? `☀️🚨 Dom/Feriado — ${formatarHoras(banco)} no banco (×2)`
-                : tipo === 'sabado'
-                  ? `☀️🚨 Sábado — ${formatarHoras(banco)} no banco (×1,5)`
-                  : tipo === 'sobreaviso'
-                    ? `🌙 Sobreaviso — ${formatarHoras(banco)} no banco (×1,5)`
-                    : null
+              const labelBanco = banco > 0
+                ? `🌙 Sobreaviso — ${formatarHoras(banco)} no banco (×1,5)`
+                : null
               return (
                 <div className="horario-resumo">
                   <span className="horario-total">⏱ Total: <strong>{formatarHoras(total)}</strong></span>
@@ -600,7 +595,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
                 </div>
               )
             })()}
-            <div className="geo-dica">💡 Sáb/Dom/Feriado (qualquer hora) e seg–sex após 17h entram no banco de horas com multiplicador.</div>
+            <div className="geo-dica">💡 Horas no período de sobreaviso (17h–7h) entram no banco de horas com multiplicador.</div>
           </div>
 
           {/* 6 - Fotos */}

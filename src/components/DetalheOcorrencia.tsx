@@ -278,7 +278,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
       const horasSobreaviso = (eHoraInicio && eHoraFim && eDataOcorrencia)
         ? calcularHorasSobreaviso(eDataOcorrencia, eHoraInicio, eHoraFim)
         : null
-      // Horas que entram no banco: sáb/dom/feriado → todas; seg-sex → somente após 17h
+      // Horas que entram no banco: somente período de sobreaviso (17h–7h), independente do dia
       const horasBanco = (eHoraInicio && eHoraFim && eDataOcorrencia)
         ? calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim)
         : null
@@ -890,14 +890,9 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                   {eHoraInicio && eHoraFim && (() => {
                     const total = calcularHorasTotal(eHoraInicio, eHoraFim)
                     const banco = calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim)
-                    const tipo = tipoDiaOcorrencia(eDataOcorrencia, eHoraInicio)
-                    const labelBanco = tipo === 'domingo_feriado'
-                      ? `☀️🚨 Dom/Feriado — ${formatarHoras(banco)} no banco (×2)`
-                      : tipo === 'sabado'
-                        ? `☀️🚨 Sábado — ${formatarHoras(banco)} no banco (×1,5)`
-                        : tipo === 'sobreaviso'
-                          ? `🌙 Sobreaviso — ${formatarHoras(banco)} no banco (×1,5)`
-                          : null
+                    const labelBanco = banco > 0
+                      ? `🌙 Sobreaviso — ${formatarHoras(banco)} no banco (×1,5)`
+                      : null
                     return (
                       <div className="horario-resumo">
                         <span className="horario-total">⏱ Total: <strong>{formatarHoras(total)}</strong></span>

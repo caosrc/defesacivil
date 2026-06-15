@@ -45,11 +45,8 @@ function ehSabadoComumUtils(chave: string, feriadosCustom: string[] = []): boole
 /**
  * Calcula as horas que devem entrar no banco de horas de uma ocorrência.
  *
- * Regras:
- *  - Sábado (qualquer horário)        → total de horas trabalhadas (×1,5 aplicado depois)
- *  - Domingo / Feriado (qualquer h)   → total de horas trabalhadas (×2 aplicado depois)
- *  - Seg–Sex após 17h (sobreaviso)    → horas no período 17h–07h  (×1,5 aplicado depois)
- *  - Seg–Sex dentro do expediente     → 0 (sem banco de horas)
+ * Regra única: somente as horas dentro do período de sobreaviso (após 17h / antes das 7h)
+ * contam para o banco, independente do dia da semana ou feriado.
  */
 export function calcularHorasOcorrenciaBanco(
   dataStr: string,
@@ -58,22 +55,6 @@ export function calcularHorasOcorrenciaBanco(
   feriadosCustom: string[] = [],
 ): number {
   if (!dataStr || !horaInicio || !horaFim) return 0
-
-  const isDomFer = ehDomingoOuFeriado(dataStr, feriadosCustom)
-  const isSab = ehSabadoComumUtils(dataStr, feriadosCustom)
-
-  if (isDomFer || isSab) {
-    // Final de semana / feriado: todas as horas contam
-    const [hI, mI] = horaInicio.split(':').map(Number)
-    const [hF, mF] = horaFim.split(':').map(Number)
-    if (isNaN(hI) || isNaN(mI) || isNaN(hF) || isNaN(mF)) return 0
-    const inicioMin = hI * 60 + mI
-    const fimMin = hF * 60 + mF
-    const totalMin = fimMin >= inicioMin ? fimMin - inicioMin : 24 * 60 - inicioMin + fimMin
-    return Math.round(totalMin * 100 / 60) / 100
-  }
-
-  // Seg–Sex: somente horas do sobreaviso (após 17h / antes das 7h)
   return calcularHorasSobreaviso(dataStr, horaInicio, horaFim, feriadosCustom)
 }
 
