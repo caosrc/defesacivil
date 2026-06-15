@@ -108,7 +108,8 @@ function isColumnMissingError(e: unknown): boolean {
     const err = e as Record<string, unknown>
     const code = String(err.code ?? '')
     const message = String(err.message ?? '')
-    return code === '42703' || message.includes('does not exist') || message.includes('schema cache')
+    // PGRST204 = coluna não encontrada no schema cache do PostgREST
+    return code === '42703' || code === 'PGRST204' || message.includes('does not exist') || message.includes('schema cache') || message.includes('column')
   }
   const s = String(e)
   return s.includes('does not exist') || s.includes('42703') || s.includes('schema cache')

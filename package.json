@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node server/index.js & vite",
+    "dev": "node server/index.js & ./node_modules/.bin/vite",
     "server": "node server/index.js",
     "start": "npm run build && node server/index.js",
     "build": "vite build",
