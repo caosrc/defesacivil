@@ -139,7 +139,7 @@ interface EscalaData {
   horasExtrasSimples: Record<string, Record<string, number>>   // agente → { data: horas } — sem multiplicador
   justificativasExtrasSimples: Record<string, Record<string, string>>  // agente → { data: justificativa }
   ajustesBanco: Record<string, number>                         // agente → horas ajuste manual do Moisés (+/-)
-  ajustesBancoLogs?: Record<string, Array<{data: string, delta: number}>>  // histórico de ajustes por agente
+  ajustesBancoLogs?: Record<string, Array<{data: string, delta: number, justificativa?: string}>>  // histórico de ajustes por agente
 }
 
 // ── Storage ───────────────────────────────────────────────────────
@@ -1445,7 +1445,7 @@ interface ModalDetalhesBancoProps {
   folgas: Record<string, string[]>
   descontosFolgaBanco: Record<string, Record<string, number>>
   ajusteBanco: number
-  ajustesBancoLogs?: Array<{data: string, delta: number}>
+  ajustesBancoLogs?: Array<{data: string, delta: number, justificativa?: string}>
   percDomingoFeriado: number
   percSobreaviso: number
   percSabado: number
@@ -1848,9 +1848,16 @@ function ModalDetalhesBanco({
                   .sort((a, b) => b.data.localeCompare(a.data))
                   .map((entrada, i) => (
                     <div key={i} className="bh-ajuste-historico-item">
-                      <span className="bh-ajuste-historico-data">
-                        {fmtDataLonga(entrada.data)}
-                      </span>
+                      <div className="bh-ajuste-historico-esq">
+                        <span className="bh-ajuste-historico-data">
+                          {fmtDataLonga(entrada.data)}
+                        </span>
+                        {entrada.justificativa && (
+                          <span className="bh-ajuste-historico-justif">
+                            {entrada.justificativa}
+                          </span>
+                        )}
+                      </div>
                       <span
                         className="bh-ajuste-historico-val"
                         style={entrada.delta >= 0 ? { color: '#16a34a' } : { color: '#dc2626' }}
@@ -1882,8 +1889,8 @@ interface BancoHorasMoisesProps {
   horasExtrasSimples: Record<string, Record<string, number>>
   justificativasExtrasSimples: Record<string, Record<string, string>>
   ajustesBanco: Record<string, number>
-  ajustesBancoLogs?: Record<string, Array<{data: string, delta: number}>>
-  onAjusteChange: (agente: string, ajuste: number) => void
+  ajustesBancoLogs?: Record<string, Array<{data: string, delta: number, justificativa?: string}>>
+  onAjusteChange: (agente: string, delta: number, justificativa?: string) => void
   podeEditar: boolean
   hoje?: string
   ocorrencias?: Ocorrencia[]
@@ -1893,6 +1900,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
   const hoje = hojeprop ?? hojeStr()
   const [editando, setEditando] = useState<string | null>(null)
   const [valorTemp, setValorTemp] = useState<string>('')
+  const [justificativaTemp, setJustificativaTemp] = useState<string>('')
   const [detalheAgente, setDetalheAgente] = useState<string | null>(null)
 
   // Mapa de itens de ocorrências automáticas por agente
@@ -1942,22 +1950,23 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
 
   function abrirEdicao(ag: { nome: string; total: number }) {
     setEditando(ag.nome)
-    setValorTemp(String(ag.total % 1 === 0 ? ag.total : ag.total.toFixed(2)))
+    setValorTemp('0')
+    setJustificativaTemp('')
   }
 
-  function salvarEdicao(ag: { nome: string; calculado: number }) {
-    const novoTotal = parseFloat(valorTemp.replace(',', '.'))
-    if (!Number.isFinite(novoTotal)) {
+  function salvarEdicao(ag: { nome: string; ajuste: number }) {
+    const delta = parseFloat(valorTemp.replace(',', '.'))
+    if (!Number.isFinite(delta) || delta === 0) {
       setEditando(null)
       return
     }
-    const novoAjuste = +(novoTotal - ag.calculado).toFixed(2)
-    onAjusteChange(ag.nome, novoAjuste)
+    onAjusteChange(ag.nome, delta, justificativaTemp.trim() || undefined)
     setEditando(null)
   }
 
-  function zerarAjuste(nome: string) {
-    onAjusteChange(nome, 0)
+  function zerarAjuste(ag: { nome: string; ajuste: number }) {
+    if (ag.ajuste === 0) { setEditando(null); return }
+    onAjusteChange(ag.nome, -ag.ajuste, 'Zeragem manual')
     setEditando(null)
   }
 
@@ -2009,6 +2018,9 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
       {editando && (() => {
         const ag = lista.find(a => a.nome === editando)
         if (!ag) return null
+        const deltaNum = parseFloat(valorTemp.replace(',', '.'))
+        const deltaValido = Number.isFinite(deltaNum) ? deltaNum : 0
+        const totalPreview = +(ag.calculado + ag.ajuste + deltaValido).toFixed(2)
         return (
           <div className="escala-modal-overlay" onClick={() => setEditando(null)}>
             <div className="escala-modal bh-edit-modal" onClick={e => e.stopPropagation()}>
@@ -2025,16 +2037,30 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
                   <span>Calculado pela escala</span>
                   <strong>{ag.calculado % 1 === 0 ? ag.calculado : ag.calculado.toFixed(2)}h</strong>
                 </div>
-                <div className="bh-edit-info-linha">
+                {ag.ajuste !== 0 && (
+                  <div className="bh-edit-info-linha">
+                    <span>Ajustes manuais anteriores</span>
+                    <strong className={ag.ajuste > 0 ? 'positivo' : 'negativo'}>
+                      {ag.ajuste > 0 ? '+' : ''}{ag.ajuste % 1 === 0 ? ag.ajuste : ag.ajuste.toFixed(2)}h
+                    </strong>
+                  </div>
+                )}
+                <div className="bh-edit-info-linha bh-edit-info-linha--destaque">
                   <span>Ajuste manual atual</span>
-                  <strong className={ag.ajuste > 0 ? 'positivo' : ag.ajuste < 0 ? 'negativo' : ''}>
-                    {ag.ajuste > 0 ? '+' : ''}{ag.ajuste % 1 === 0 ? ag.ajuste : ag.ajuste.toFixed(2)}h
+                  <strong className={deltaValido > 0 ? 'positivo' : deltaValido < 0 ? 'negativo' : ''}>
+                    {deltaValido > 0 ? '+' : ''}{deltaValido % 1 === 0 ? deltaValido : deltaValido.toFixed(2)}h
+                  </strong>
+                </div>
+                <div className="bh-edit-info-linha bh-edit-info-linha--total">
+                  <span>Total</span>
+                  <strong className={totalPreview < 0 ? 'negativo' : 'positivo'}>
+                    {totalPreview > 0 ? '+' : ''}{totalPreview % 1 === 0 ? totalPreview : totalPreview.toFixed(2)}h
                   </strong>
                 </div>
               </div>
 
               <label className="bh-edit-label">
-                Total final do banco (em horas)
+                Ajuste manual atual (horas a somar ou subtrair)
                 <input
                   type="number"
                   step="0.5"
@@ -2044,20 +2070,37 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
                   onChange={e => setValorTemp(e.target.value)}
                   autoFocus
                   onFocus={e => e.target.select()}
+                  placeholder="ex: +4 ou -2"
                 />
               </label>
 
-              <p className="bh-edit-dica">
-                Digite o total final que esse agente deve ter no banco. O sistema vai calcular o ajuste necessário ({ag.calculado.toFixed(1)}h calculado + ajuste).
-              </p>
+              <label className="bh-edit-label bh-edit-label--justif">
+                Justificativa (opcional)
+                <textarea
+                  className="bh-edit-justif"
+                  value={justificativaTemp}
+                  onChange={e => setJustificativaTemp(e.target.value)}
+                  placeholder="Ex: Horas extras do plantão 10/06..."
+                  rows={2}
+                  maxLength={300}
+                />
+              </label>
 
               <div className="bh-edit-acoes">
-                <button className="bh-edit-zerar" onClick={() => zerarAjuste(ag.nome)}>
-                  Zerar ajuste manual
-                </button>
+                {ag.ajuste !== 0 && (
+                  <button className="bh-edit-zerar" onClick={() => zerarAjuste(ag)}>
+                    Zerar ajuste
+                  </button>
+                )}
                 <div className="bh-edit-acoes-direita">
                   <button className="bh-edit-cancelar" onClick={() => setEditando(null)}>Cancelar</button>
-                  <button className="bh-edit-salvar" onClick={() => salvarEdicao(ag)}>Salvar</button>
+                  <button
+                    className="bh-edit-salvar"
+                    onClick={() => salvarEdicao(ag)}
+                    disabled={!Number.isFinite(deltaNum) || deltaNum === 0}
+                  >
+                    Salvar
+                  </button>
                 </div>
               </div>
             </div>
@@ -3418,27 +3461,20 @@ export default function EscalaAgentes({ ocorrencias = [] }: EscalaAgentesProps) 
     salvarDados(novos)
   }
 
-  async function atualizarAjusteBanco(agente: string, ajuste: number) {
+  async function atualizarAjusteBanco(agente: string, delta: number, justificativa?: string) {
     const novosAjustes = { ...(dados.ajustesBanco ?? {}) }
     const ajusteAnterior = novosAjustes[agente] ?? 0
-    const delta = +(ajuste - ajusteAnterior).toFixed(2)
-    if (ajuste === 0) {
+    const novoTotal = +(ajusteAnterior + delta).toFixed(2)
+    if (novoTotal === 0) {
       delete novosAjustes[agente]
     } else {
-      novosAjustes[agente] = ajuste
+      novosAjustes[agente] = novoTotal
     }
-    // Registra no histórico se houve mudança real
+    // Registra no histórico
     const novosLogs = { ...(dados.ajustesBancoLogs ?? {}) }
-    if (delta !== 0) {
-      const logsAgente = [...(novosLogs[agente] ?? []), { data: hojeStr(), delta }]
-      novosLogs[agente] = logsAgente
-    } else if (ajuste === 0) {
-      // Zerar ajuste: registra entrada zerada para manter rastreabilidade
-      if (ajusteAnterior !== 0) {
-        const logsAgente = [...(novosLogs[agente] ?? []), { data: hojeStr(), delta: -ajusteAnterior }]
-        novosLogs[agente] = logsAgente
-      }
-    }
+    const entrada: { data: string; delta: number; justificativa?: string } = { data: hojeStr(), delta: +delta.toFixed(2) }
+    if (justificativa) entrada.justificativa = justificativa
+    novosLogs[agente] = [...(novosLogs[agente] ?? []), entrada]
     const novos = { ...dados, ajustesBanco: novosAjustes, ajustesBancoLogs: novosLogs }
     setDados(novos)
     const resultado = await salvarDadosAsync(novos)
