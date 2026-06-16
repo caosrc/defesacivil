@@ -902,6 +902,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                           ? <span className="horario-sobreaviso">🌙 Hora extra — {formatarHoras(bancoBruto)} no banco</span>
                           : <span className="horario-sem-sobreaviso">☀️ Sem horas no banco (horário comercial, seg–sex)</span>
                         }
+                        {bancoBruto > 0 && <div className="geo-dica" style={{marginTop:'0.3rem'}}>Dom/feriado: ×2 · Seg–Sáb 17h–7h: ×1,5 · Risco alto: ×2</div>}
                       </div>
                     )
                   })()}

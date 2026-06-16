@@ -753,9 +753,9 @@ function computarHorasOcorrencias(
     if (horas <= 0) continue
 
     const data = oc.data_ocorrencia
-    // Ferido (risco alto) → ×2 (percDomFer); demais → ×1,5 (percSobreaviso)
+    // Domingo/feriado OU ferido (risco alto) → ×2 (percDomFer); demais → ×1,5 (percSobreaviso)
     const ehFerido = oc.nivel_risco === 'alto'
-    const multiplicador = ehFerido
+    const multiplicador = (ehDomFer || ehFerido)
       ? 1 + percDomFer / 100
       : 1 + percSobreaviso / 100
 
@@ -1609,7 +1609,7 @@ function ModalDetalhesBanco({
             {categNoturno > 0 && (
               <div className="bh-resumo-categ-item">
                 <span className="bh-resumo-categ-icone">🌙</span>
-                <span className="bh-resumo-categ-nome">Ocorrências (hora extra) ×{(1 + percSobreaviso / 100).toFixed(1)}</span>
+                <span className="bh-resumo-categ-nome">Ocorrências (hora extra) ×1,5/×2</span>
                 <span className="bh-resumo-categ-valor positivo">+{fmtH(categNoturno)}h</span>
               </div>
             )}

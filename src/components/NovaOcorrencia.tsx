@@ -596,7 +596,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
                 </div>
               )
             })()}
-            <div className="geo-dica">💡 Dom/feriado: todas as horas ×1,5 · Seg–Sáb 17h–7h ×1,5 · Risco alto: ×2</div>
+            <div className="geo-dica">💡 Dom/feriado: todas as horas ×2 · Seg–Sáb 17h–7h ×1,5 · Risco alto: ×2</div>
           </div>
 
           {/* 6 - Fotos */}
