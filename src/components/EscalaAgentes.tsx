@@ -1453,6 +1453,7 @@ interface ModalDetalhesBancoProps {
   hoje: string
   onFechar: () => void
   onEditar?: () => void
+  onRemoverAjuste?: (index: number) => void
   ocorrenciasItens?: HoraOcorrenciaItem[]
 }
 
@@ -1462,13 +1463,14 @@ function ModalDetalhesBanco({
   horasExtrasSimples, justificativasExtrasSimples,
   folgas, descontosFolgaBanco, ajusteBanco, ajustesBancoLogs = [],
   percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom,
-  hoje, onFechar, onEditar, ocorrenciasItens = [],
+  hoje, onFechar, onEditar, onRemoverAjuste, ocorrenciasItens = [],
 }: ModalDetalhesBancoProps) {
   const hojeAno = Number(hoje.slice(0, 4))
   const hojeMes = Number(hoje.slice(5, 7)) - 1
   const [viewYear, setViewYear] = useState(hojeAno)
   const [viewMonth, setViewMonth] = useState(hojeMes)
   const [ajusteExpandido, setAjusteExpandido] = useState(false)
+  const [confirmandoRemocaoIdx, setConfirmandoRemocaoIdx] = useState<number | null>(null)
 
   const mesPfx = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}`
 
@@ -1844,10 +1846,11 @@ function ModalDetalhesBanco({
             </div>
             {ajusteExpandido && ajustesBancoLogs.length > 0 && (
               <div className="bh-ajuste-historico">
-                {[...ajustesBancoLogs]
-                  .sort((a, b) => b.data.localeCompare(a.data))
-                  .map((entrada, i) => (
-                    <div key={i} className="bh-ajuste-historico-item">
+                {ajustesBancoLogs
+                  .map((entrada, originalIdx) => ({ entrada, originalIdx }))
+                  .sort((a, b) => b.entrada.data.localeCompare(a.entrada.data))
+                  .map(({ entrada, originalIdx }) => (
+                    <div key={originalIdx} className="bh-ajuste-historico-item">
                       <div className="bh-ajuste-historico-esq">
                         <span className="bh-ajuste-historico-data">
                           {fmtDataLonga(entrada.data)}
@@ -1858,12 +1861,24 @@ function ModalDetalhesBanco({
                           </span>
                         )}
                       </div>
-                      <span
-                        className="bh-ajuste-historico-val"
-                        style={entrada.delta >= 0 ? { color: '#16a34a' } : { color: '#dc2626' }}
-                      >
-                        {entrada.delta > 0 ? '+' : ''}{fmtH(entrada.delta)}h
-                      </span>
+                      <div className="bh-ajuste-historico-dir">
+                        <span
+                          className="bh-ajuste-historico-val"
+                          style={entrada.delta >= 0 ? { color: '#16a34a' } : { color: '#dc2626' }}
+                        >
+                          {entrada.delta > 0 ? '+' : ''}{fmtH(entrada.delta)}h
+                        </span>
+                        {onRemoverAjuste && (
+                          <button
+                            type="button"
+                            className="bh-ajuste-lixeira"
+                            title="Apagar este ajuste"
+                            onClick={() => setConfirmandoRemocaoIdx(originalIdx)}
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
               </div>
@@ -1871,6 +1886,16 @@ function ModalDetalhesBanco({
           </div>
         )}
       </div>
+      {confirmandoRemocaoIdx !== null && (
+        <ModalSenha
+          titulo="Confirmar exclusão de ajuste"
+          onConfirmar={() => {
+            onRemoverAjuste?.(confirmandoRemocaoIdx)
+            setConfirmandoRemocaoIdx(null)
+          }}
+          onCancelar={() => setConfirmandoRemocaoIdx(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1891,12 +1916,13 @@ interface BancoHorasMoisesProps {
   ajustesBanco: Record<string, number>
   ajustesBancoLogs?: Record<string, Array<{data: string, delta: number, justificativa?: string}>>
   onAjusteChange: (agente: string, delta: number, justificativa?: string) => void
+  onRemoverAjuste?: (agente: string, index: number) => void
   podeEditar: boolean
   hoje?: string
   ocorrencias?: Ocorrencia[]
 }
 
-function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, justificativasExtrasSimples, ajustesBanco, ajustesBancoLogs = {}, onAjusteChange, podeEditar, hoje: hojeprop, ocorrencias = [] }: BancoHorasMoisesProps) {
+function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, justificativasExtrasSimples, ajustesBanco, ajustesBancoLogs = {}, onAjusteChange, onRemoverAjuste, podeEditar, hoje: hojeprop, ocorrencias = [] }: BancoHorasMoisesProps) {
   const hoje = hojeprop ?? hojeStr()
   const [editando, setEditando] = useState<string | null>(null)
   const [valorTemp, setValorTemp] = useState<string>('')
@@ -2131,6 +2157,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
             hoje={hoje}
             onFechar={() => setDetalheAgente(null)}
             onEditar={podeEditar ? () => { setDetalheAgente(null); abrirEdicao(ag) } : undefined}
+            onRemoverAjuste={podeEditar && onRemoverAjuste ? (idx) => onRemoverAjuste(ag.nome, idx) : undefined}
             ocorrenciasItens={ocAutoMap[ag.nome] ?? []}
           />
         )
@@ -3461,6 +3488,27 @@ export default function EscalaAgentes({ ocorrencias = [] }: EscalaAgentesProps) 
     salvarDados(novos)
   }
 
+  async function removerAjusteBanco(agente: string, index: number) {
+    const logsAgente = [...(dados.ajustesBancoLogs?.[agente] ?? [])]
+    if (index < 0 || index >= logsAgente.length) return
+    logsAgente.splice(index, 1)
+    // Recalcula o total acumulado
+    const novoTotal = +logsAgente.reduce((acc, e) => acc + e.delta, 0).toFixed(2)
+    const novosAjustes = { ...(dados.ajustesBanco ?? {}) }
+    if (novoTotal === 0) {
+      delete novosAjustes[agente]
+    } else {
+      novosAjustes[agente] = novoTotal
+    }
+    const novosLogs = { ...(dados.ajustesBancoLogs ?? {}), [agente]: logsAgente }
+    const novos = { ...dados, ajustesBanco: novosAjustes, ajustesBancoLogs: novosLogs }
+    setDados(novos)
+    const resultado = await salvarDadosAsync(novos)
+    if (!resultado.ok) {
+      alert(`⚠️ Remoção salva localmente, mas falhou ao enviar ao servidor: ${resultado.mensagem ?? 'erro desconhecido'}. Tente novamente.`)
+    }
+  }
+
   async function atualizarAjusteBanco(agente: string, delta: number, justificativa?: string) {
     const novosAjustes = { ...(dados.ajustesBanco ?? {}) }
     const ajusteAnterior = novosAjustes[agente] ?? 0
@@ -3734,6 +3782,7 @@ export default function EscalaAgentes({ ocorrencias = [] }: EscalaAgentesProps) 
           ajustesBanco={dados.ajustesBanco ?? {}}
           ajustesBancoLogs={dados.ajustesBancoLogs ?? {}}
           onAjusteChange={atualizarAjusteBanco}
+          onRemoverAjuste={removerAjusteBanco}
           podeEditar={editando}
           hoje={hoje}
           ocorrencias={ocorrencias}
