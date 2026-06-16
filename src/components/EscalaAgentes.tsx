@@ -735,8 +735,8 @@ function filtrarHorasManuais(
 function computarHorasOcorrencias(
   agente: string,
   ocorrencias: Ocorrencia[],
-  _feriadosCustom: string[],
-  _percDomFer: number,
+  feriadosCustom: string[],
+  percDomFer: number,
   percSobreaviso: number,
   _percSabado: number,
 ): { total: number; itens: HoraOcorrenciaItem[] } {
@@ -744,11 +744,20 @@ function computarHorasOcorrencias(
   for (const oc of ocorrencias) {
     if (!oc.data_ocorrencia) continue
     if (!oc.agentes.includes(agente)) continue
-    const horas = oc.horas_sobreaviso ?? 0
+
+    const ehDomFer = ehFeriadoOuDomingo(oc.data_ocorrencia, feriadosCustom)
+    // Domingo/feriado: todas as horas contam; seg–sáb: somente sobreaviso (17h–7h)
+    const horas = ehDomFer
+      ? (oc.horas_total ?? oc.horas_sobreaviso ?? 0)
+      : (oc.horas_sobreaviso ?? 0)
     if (horas <= 0) continue
 
     const data = oc.data_ocorrencia
-    const multiplicador = 1 + percSobreaviso / 100
+    // Ferido (risco alto) → ×2 (percDomFer); demais → ×1,5 (percSobreaviso)
+    const ehFerido = oc.nivel_risco === 'alto'
+    const multiplicador = ehFerido
+      ? 1 + percDomFer / 100
+      : 1 + percSobreaviso / 100
 
     itens.push({
       ocorrenciaId: oc.id,
@@ -1072,7 +1081,7 @@ function BancoHorasAgente({ agente, sobreavisoSemanal, horasTrabalhadasSobreavis
         ) : (
           <div className="bh-domfer-lista">
             {itensOcMes.map(item => {
-              const motivoTag = `×${item.multiplicador.toFixed(1)} sobreaviso (17h–7h)`
+              const motivoTag = `×${item.multiplicador.toFixed(1)} hora extra`
               return (
                 <div key={`oc-${item.ocorrenciaId}`} className="bh-domfer-row bh-oc-auto-row">
                   <div className="bh-oc-auto-info">
@@ -1600,7 +1609,7 @@ function ModalDetalhesBanco({
             {categNoturno > 0 && (
               <div className="bh-resumo-categ-item">
                 <span className="bh-resumo-categ-icone">🌙</span>
-                <span className="bh-resumo-categ-nome">Ocorrências noturnas (17h–7h) ×{(1 + percSobreaviso / 100).toFixed(1)}</span>
+                <span className="bh-resumo-categ-nome">Ocorrências (hora extra) ×{(1 + percSobreaviso / 100).toFixed(1)}</span>
                 <span className="bh-resumo-categ-valor positivo">+{fmtH(categNoturno)}h</span>
               </div>
             )}
@@ -1717,7 +1726,7 @@ function ModalDetalhesBanco({
               </div>
               <div className="bh-detalhe-lista">
                 {ocAutoMes.map(item => {
-                  const motivoTag = `×${item.multiplicador.toFixed(1)} sobreaviso (17h–7h)`
+                  const motivoTag = `×${item.multiplicador.toFixed(1)} hora extra`
                   return (
                     <div key={`ocauto-${item.ocorrenciaId}`} className="bh-detalhe-item bh-detalhe-item--oc">
                       <div className="bh-detalhe-item-esq">
@@ -3082,7 +3091,7 @@ async function exportarEscalaMensalExcel(dados: EscalaData, ano: number, mes: nu
 
     // Ocorrências automáticas
     for (const item of itensOc.sort((a, b) => a.data.localeCompare(b.data))) {
-      const motivoTag = 'Sobreaviso 17h–7h'
+      const motivoTag = 'Hora extra'
       const detalhe = [item.natureza, item.endereco].filter(Boolean).join(' — ')
       linhasAg.push([wsBH, '', 'Ocorrência automática', fmtD(item.data), detalhe, item.horasBruto, `×${item.multiplicador.toFixed(1)} (${motivoTag})`, item.horasComMult])
       totalAg += item.horasComMult

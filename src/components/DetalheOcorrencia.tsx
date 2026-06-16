@@ -9,7 +9,7 @@ import { exportarOcorrenciaExcel } from '../exportExcel'
 import { formatarCoordenadas, parseDateLocal, mensagemErroGps, adicionarMarcaDagua } from '../utils'
 import ModalSenha from './ModalSenha'
 import PoligonoAreaQueimada, { calcularAreaM2, formatarArea, type PontoPoligono } from './PoligonoAreaQueimada'
-import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras, multiplicadorDia, carregarFeriadosCustom } from '../horasUtils'
+import { calcularHorasTotal, calcularHorasOcorrenciaBanco, formatarHoras, carregarFeriadosCustom } from '../horasUtils'
 
 interface Props {
   ocorrencia: Ocorrencia
@@ -279,17 +279,12 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setSalvando(true)
     setErroEdit('')
     try {
-      const mult = eDataOcorrencia ? multiplicadorDia(eDataOcorrencia, feriadosCustom) : 1
       const horasTotalBruto = (eHoraInicio && eHoraFim) ? calcularHorasTotal(eHoraInicio, eHoraFim) : null
-      const horasTotal = horasTotalBruto != null ? Math.round(horasTotalBruto * mult * 100) / 100 : null
-      const horasSobreaviso = (eHoraInicio && eHoraFim && eDataOcorrencia)
-        ? calcularHorasSobreaviso(eDataOcorrencia, eHoraInicio, eHoraFim)
+      const horasTotal = horasTotalBruto  // horas brutas, sem multiplicador
+      // Horas que entram no banco: dom/feriado = todas as horas; seg–sáb = sobreaviso 17h–7h (sem mult)
+      const horasBanco = (eHoraInicio && eHoraFim && eDataOcorrencia)
+        ? calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim, feriadosCustom)
         : null
-      // Horas que entram no banco: aplicar multiplicador de dia (dom/feriado ×2, sáb ×1,5)
-      const horasBancoBruto = (eHoraInicio && eHoraFim && eDataOcorrencia)
-        ? calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim)
-        : null
-      const horasBanco = horasBancoBruto != null ? Math.round(horasBancoBruto * mult * 100) / 100 : null
 
       const dadosEditados = {
         tipo: tipoFinal,
@@ -897,22 +892,14 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                   </div>
                   {eHoraInicio && eHoraFim && (() => {
                     const totalBruto = calcularHorasTotal(eHoraInicio, eHoraFim)
-                    const mult = eDataOcorrencia ? multiplicadorDia(eDataOcorrencia, feriadosCustom) : 1
-                    const total = Math.round(totalBruto * mult * 100) / 100
-                    const bancoBruto = calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim)
-                    const banco = Math.round(bancoBruto * mult * 100) / 100
-                    const labelMult = mult === 2 ? '×2 (dom/feriado)' : mult === 1.5 ? '×1,5 (sábado)' : ''
-                    const labelBanco = banco > 0
-                      ? `🌙 Sobreaviso — ${formatarHoras(banco)} no banco${labelMult ? ` (${labelMult})` : ''}`
-                      : null
+                    const bancoBruto = calcularHorasOcorrenciaBanco(eDataOcorrencia, eHoraInicio, eHoraFim, feriadosCustom)
                     return (
                       <div className="horario-resumo">
                         <span className="horario-total">
-                          ⏱ Total: <strong>{formatarHoras(total)}</strong>
-                          {mult > 1 && <span style={{ marginLeft: '0.4rem', fontSize: '0.8em', color: '#b45309' }}>({labelMult})</span>}
+                          ⏱ Total: <strong>{formatarHoras(totalBruto)}</strong>
                         </span>
-                        {banco > 0 && labelBanco
-                          ? <span className="horario-sobreaviso">{labelBanco}</span>
+                        {bancoBruto > 0
+                          ? <span className="horario-sobreaviso">🌙 Hora extra — {formatarHoras(bancoBruto)} no banco</span>
                           : <span className="horario-sem-sobreaviso">☀️ Sem horas no banco (horário comercial, seg–sex)</span>
                         }
                       </div>

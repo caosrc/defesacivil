@@ -45,8 +45,10 @@ function ehSabadoComumUtils(chave: string, feriadosCustom: string[] = []): boole
 /**
  * Calcula as horas que devem entrar no banco de horas de uma ocorrência.
  *
- * Regra única: somente as horas dentro do período de sobreaviso (após 17h / antes das 7h)
- * contam para o banco, independente do dia da semana ou feriado.
+ * Regra:
+ * - Domingo ou feriado: TODAS as horas da ocorrência contam (×1,5 aplicado na Escala).
+ * - Demais dias (seg–sáb): somente as horas dentro do sobreaviso (17h–7h) contam.
+ * Nenhum multiplicador é aplicado aqui — apenas a quantidade de horas qualificadas.
  */
 export function calcularHorasOcorrenciaBanco(
   dataStr: string,
@@ -55,6 +57,9 @@ export function calcularHorasOcorrenciaBanco(
   feriadosCustom: string[] = [],
 ): number {
   if (!dataStr || !horaInicio || !horaFim) return 0
+  if (ehDomingoOuFeriado(dataStr, feriadosCustom)) {
+    return calcularHorasTotal(horaInicio, horaFim)
+  }
   return calcularHorasSobreaviso(dataStr, horaInicio, horaFim, feriadosCustom)
 }
 

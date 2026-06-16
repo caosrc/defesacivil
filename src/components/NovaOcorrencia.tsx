@@ -7,7 +7,7 @@ import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
 import { geocodificarEndereco } from '../offline'
 import { formatarCoordenadas, adicionarMarcaDagua, mensagemErroGps } from '../utils'
-import { calcularHorasTotal, calcularHorasSobreaviso, calcularHorasOcorrenciaBanco, tipoDiaOcorrencia, formatarHoras, multiplicadorDia, carregarFeriadosCustom } from '../horasUtils'
+import { calcularHorasTotal, calcularHorasOcorrenciaBanco, formatarHoras, carregarFeriadosCustom } from '../horasUtils'
 import PoligonoAreaQueimada, { type PontoPoligono } from './PoligonoAreaQueimada'
 
 // Fix Leaflet default icon
@@ -346,17 +346,12 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       ? focosIncendio.filter(f => f.lat != null && f.lng != null).map(f => ({ lat: f.lat!, lng: f.lng! }))
       : null
 
-    const mult = dataOcorrencia ? multiplicadorDia(dataOcorrencia, feriadosCustom) : 1
     const horasTotalBruto = (horaInicio && horaFim) ? calcularHorasTotal(horaInicio, horaFim) : null
-    const horasTotal = horasTotalBruto != null ? Math.round(horasTotalBruto * mult * 100) / 100 : null
-    const horasSobreaviso = (horaInicio && horaFim && dataOcorrencia)
-      ? calcularHorasSobreaviso(dataOcorrencia, horaInicio, horaFim)
+    const horasTotal = horasTotalBruto  // horas brutas, sem multiplicador
+    // Horas que entram no banco: dom/feriado = todas as horas; seg–sáb = sobreaviso 17h–7h (sem mult)
+    const horasBanco = (horaInicio && horaFim && dataOcorrencia)
+      ? calcularHorasOcorrenciaBanco(dataOcorrencia, horaInicio, horaFim, feriadosCustom)
       : null
-    // Horas que entram no banco: aplicar multiplicador de dia (dom/feriado ×2, sáb ×1,5)
-    const horasBancoBruto = (horaInicio && horaFim && dataOcorrencia)
-      ? calcularHorasOcorrenciaBanco(dataOcorrencia, horaInicio, horaFim)
-      : null
-    const horasBanco = horasBancoBruto != null ? Math.round(horasBancoBruto * mult * 100) / 100 : null
 
     const payload = {
       tipo: tipoFinal,
@@ -588,28 +583,20 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
             </div>
             {horaInicio && horaFim && (() => {
               const totalBruto = calcularHorasTotal(horaInicio, horaFim)
-              const mult = dataOcorrencia ? multiplicadorDia(dataOcorrencia, feriadosCustom) : 1
-              const total = Math.round(totalBruto * mult * 100) / 100
-              const bancoBruto = calcularHorasOcorrenciaBanco(dataOcorrencia, horaInicio, horaFim)
-              const banco = Math.round(bancoBruto * mult * 100) / 100
-              const labelMult = mult === 2 ? '×2 (dom/feriado)' : mult === 1.5 ? '×1,5 (sábado)' : ''
-              const labelBanco = banco > 0
-                ? `🌙 Sobreaviso — ${formatarHoras(banco)} no banco${labelMult ? ` (${labelMult})` : ''}`
-                : null
+              const bancoBruto = calcularHorasOcorrenciaBanco(dataOcorrencia, horaInicio, horaFim, feriadosCustom)
               return (
                 <div className="horario-resumo">
                   <span className="horario-total">
-                    ⏱ Total: <strong>{formatarHoras(total)}</strong>
-                    {mult > 1 && <span style={{ marginLeft: '0.4rem', fontSize: '0.8em', color: '#b45309' }}>({labelMult})</span>}
+                    ⏱ Total: <strong>{formatarHoras(totalBruto)}</strong>
                   </span>
-                  {banco > 0 && labelBanco
-                    ? <span className="horario-sobreaviso">{labelBanco}</span>
+                  {bancoBruto > 0
+                    ? <span className="horario-sobreaviso">🌙 Hora extra — {formatarHoras(bancoBruto)} no banco</span>
                     : <span className="horario-sem-sobreaviso">☀️ Sem horas no banco (horário comercial, seg–sex)</span>
                   }
                 </div>
               )
             })()}
-            <div className="geo-dica">💡 Dom/feriado ×2 · Sábado ×1,5 · Sáb em feriado ×2</div>
+            <div className="geo-dica">💡 Dom/feriado: todas as horas ×1,5 · Seg–Sáb 17h–7h ×1,5 · Risco alto: ×2</div>
           </div>
 
           {/* 6 - Fotos */}
