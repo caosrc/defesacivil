@@ -139,6 +139,7 @@ interface EscalaData {
   horasExtrasSimples: Record<string, Record<string, number>>   // agente → { data: horas } — sem multiplicador
   justificativasExtrasSimples: Record<string, Record<string, string>>  // agente → { data: justificativa }
   ajustesBanco: Record<string, number>                         // agente → horas ajuste manual do Moisés (+/-)
+  ajustesBancoLogs?: Record<string, Array<{data: string, delta: number}>>  // histórico de ajustes por agente
 }
 
 // ── Storage ───────────────────────────────────────────────────────
@@ -177,6 +178,7 @@ function carregarDados(): EscalaData {
         horasExtrasSimples: p.horasExtrasSimples ?? {},
         justificativasExtrasSimples: p.justificativasExtrasSimples ?? {},
         ajustesBanco: p.ajustesBanco ?? {},
+        ajustesBancoLogs: p.ajustesBancoLogs ?? {},
       }
     }
     // Migra v2
@@ -204,7 +206,7 @@ function carregarDados(): EscalaData {
       }
     }
   } catch { /* */ }
-  return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, folgas: {}, ferias: [], afastamentos: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {}, justificativasSobreaviso: {}, feriadosCustom: [], percDomingoFeriado: 100, percSobreaviso: 50, percSabado: 50, descontosFolgaBanco: {}, horasExtrasSimples: {}, justificativasExtrasSimples: {}, ajustesBanco: {} }
+  return { adm: {}, sobreaviso: {}, sobreavisoSemanal: {}, folgas: {}, ferias: [], afastamentos: [], horasSobreaviso: {}, horasTrabalhadasSobreaviso: {}, justificativasSobreaviso: {}, feriadosCustom: [], percDomingoFeriado: 100, percSobreaviso: 50, percSabado: 50, descontosFolgaBanco: {}, horasExtrasSimples: {}, justificativasExtrasSimples: {}, ajustesBanco: {}, ajustesBancoLogs: {} }
 }
 
 // Marca o instante da última edição local — usado para evitar que o snapshot remoto
@@ -358,6 +360,7 @@ function parseEscalaRow(p: Partial<EscalaData> & Record<string, unknown>): Escal
     horasExtrasSimples: (p.horasExtrasSimples as EscalaData['horasExtrasSimples']) ?? {},
     justificativasExtrasSimples: (p.justificativasExtrasSimples as EscalaData['justificativasExtrasSimples']) ?? {},
     ajustesBanco: (p.ajustesBanco as EscalaData['ajustesBanco']) ?? {},
+    ajustesBancoLogs: (p.ajustesBancoLogs as EscalaData['ajustesBancoLogs']) ?? {},
   }
 }
 
@@ -1442,6 +1445,7 @@ interface ModalDetalhesBancoProps {
   folgas: Record<string, string[]>
   descontosFolgaBanco: Record<string, Record<string, number>>
   ajusteBanco: number
+  ajustesBancoLogs?: Array<{data: string, delta: number}>
   percDomingoFeriado: number
   percSobreaviso: number
   percSabado: number
@@ -1456,7 +1460,7 @@ function ModalDetalhesBanco({
   agente, isExtras,
   sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso,
   horasExtrasSimples, justificativasExtrasSimples,
-  folgas, descontosFolgaBanco, ajusteBanco,
+  folgas, descontosFolgaBanco, ajusteBanco, ajustesBancoLogs = [],
   percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom,
   hoje, onFechar, onEditar, ocorrenciasItens = [],
 }: ModalDetalhesBancoProps) {
@@ -1464,6 +1468,7 @@ function ModalDetalhesBanco({
   const hojeMes = Number(hoje.slice(5, 7)) - 1
   const [viewYear, setViewYear] = useState(hojeAno)
   const [viewMonth, setViewMonth] = useState(hojeMes)
+  const [ajusteExpandido, setAjusteExpandido] = useState(false)
 
   const mesPfx = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}`
 
@@ -1818,11 +1823,44 @@ function ModalDetalhesBanco({
         </div>
 
         {ajusteBanco !== 0 && (
-          <div className="bh-detalhe-ajuste">
-            <span>⚖️ Ajuste manual do coordenador (total geral)</span>
-            <span style={ajusteBanco >= 0 ? { color: '#16a34a' } : { color: '#dc2626' }}>
-              {ajusteBanco > 0 ? '+' : ''}{fmtH(ajusteBanco)}h
-            </span>
+          <div className="bh-detalhe-ajuste-wrap">
+            <div className="bh-detalhe-ajuste">
+              <span>⚖️ Ajuste manual do coordenador (total geral)</span>
+              <div className="bh-detalhe-ajuste-direita">
+                <span style={ajusteBanco >= 0 ? { color: '#16a34a' } : { color: '#dc2626' }}>
+                  {ajusteBanco > 0 ? '+' : ''}{fmtH(ajusteBanco)}h
+                </span>
+                {ajustesBancoLogs.length > 0 && (
+                  <button
+                    type="button"
+                    className={`bh-ajuste-toggle${ajusteExpandido ? ' bh-ajuste-toggle--aberto' : ''}`}
+                    onClick={() => setAjusteExpandido(v => !v)}
+                    title={ajusteExpandido ? 'Ocultar histórico' : 'Ver histórico de ajustes'}
+                  >
+                    ▾
+                  </button>
+                )}
+              </div>
+            </div>
+            {ajusteExpandido && ajustesBancoLogs.length > 0 && (
+              <div className="bh-ajuste-historico">
+                {[...ajustesBancoLogs]
+                  .sort((a, b) => b.data.localeCompare(a.data))
+                  .map((entrada, i) => (
+                    <div key={i} className="bh-ajuste-historico-item">
+                      <span className="bh-ajuste-historico-data">
+                        {fmtDataLonga(entrada.data)}
+                      </span>
+                      <span
+                        className="bh-ajuste-historico-val"
+                        style={entrada.delta >= 0 ? { color: '#16a34a' } : { color: '#dc2626' }}
+                      >
+                        {entrada.delta > 0 ? '+' : ''}{fmtH(entrada.delta)}h
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1844,13 +1882,14 @@ interface BancoHorasMoisesProps {
   horasExtrasSimples: Record<string, Record<string, number>>
   justificativasExtrasSimples: Record<string, Record<string, string>>
   ajustesBanco: Record<string, number>
+  ajustesBancoLogs?: Record<string, Array<{data: string, delta: number}>>
   onAjusteChange: (agente: string, ajuste: number) => void
   podeEditar: boolean
   hoje?: string
   ocorrencias?: Ocorrencia[]
 }
 
-function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, justificativasExtrasSimples, ajustesBanco, onAjusteChange, podeEditar, hoje: hojeprop, ocorrencias = [] }: BancoHorasMoisesProps) {
+function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justificativasSobreaviso, descontosFolgaBanco, folgas, percDomingoFeriado, percSobreaviso, percSabado, feriadosCustom, horasExtrasSimples, justificativasExtrasSimples, ajustesBanco, ajustesBancoLogs = {}, onAjusteChange, podeEditar, hoje: hojeprop, ocorrencias = [] }: BancoHorasMoisesProps) {
   const hoje = hojeprop ?? hojeStr()
   const [editando, setEditando] = useState<string | null>(null)
   const [valorTemp, setValorTemp] = useState<string>('')
@@ -2041,6 +2080,7 @@ function BancoHorasMoises({ sobreavisoSemanal, horasTrabalhadasSobreaviso, justi
             folgas={folgas}
             descontosFolgaBanco={descontosFolgaBanco}
             ajusteBanco={ag.ajuste}
+            ajustesBancoLogs={ajustesBancoLogs[ag.nome] ?? []}
             percDomingoFeriado={percDomingoFeriado}
             percSobreaviso={percSobreaviso}
             percSabado={percSabado}
@@ -3380,12 +3420,26 @@ export default function EscalaAgentes({ ocorrencias = [] }: EscalaAgentesProps) 
 
   async function atualizarAjusteBanco(agente: string, ajuste: number) {
     const novosAjustes = { ...(dados.ajustesBanco ?? {}) }
+    const ajusteAnterior = novosAjustes[agente] ?? 0
+    const delta = +(ajuste - ajusteAnterior).toFixed(2)
     if (ajuste === 0) {
       delete novosAjustes[agente]
     } else {
       novosAjustes[agente] = ajuste
     }
-    const novos = { ...dados, ajustesBanco: novosAjustes }
+    // Registra no histórico se houve mudança real
+    const novosLogs = { ...(dados.ajustesBancoLogs ?? {}) }
+    if (delta !== 0) {
+      const logsAgente = [...(novosLogs[agente] ?? []), { data: hojeStr(), delta }]
+      novosLogs[agente] = logsAgente
+    } else if (ajuste === 0) {
+      // Zerar ajuste: registra entrada zerada para manter rastreabilidade
+      if (ajusteAnterior !== 0) {
+        const logsAgente = [...(novosLogs[agente] ?? []), { data: hojeStr(), delta: -ajusteAnterior }]
+        novosLogs[agente] = logsAgente
+      }
+    }
+    const novos = { ...dados, ajustesBanco: novosAjustes, ajustesBancoLogs: novosLogs }
     setDados(novos)
     const resultado = await salvarDadosAsync(novos)
     if (!resultado.ok) {
@@ -3642,6 +3696,7 @@ export default function EscalaAgentes({ ocorrencias = [] }: EscalaAgentesProps) 
           horasExtrasSimples={dados.horasExtrasSimples}
           justificativasExtrasSimples={dados.justificativasExtrasSimples ?? {}}
           ajustesBanco={dados.ajustesBanco ?? {}}
+          ajustesBancoLogs={dados.ajustesBancoLogs ?? {}}
           onAjusteChange={atualizarAjusteBanco}
           podeEditar={editando}
           hoje={hoje}
