@@ -1889,6 +1889,7 @@ function ModalDetalhesBanco({
       {confirmandoRemocaoIdx !== null && (
         <ModalSenha
           titulo="Confirmar exclusão de ajuste"
+          senhaCorreta={getSenhaAgente('Moisés') ?? '301067'}
           onConfirmar={() => {
             onRemoverAjuste?.(confirmandoRemocaoIdx)
             setConfirmandoRemocaoIdx(null)
