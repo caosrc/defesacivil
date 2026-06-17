@@ -2030,6 +2030,9 @@ function FormularioPlano({
       agentesDefesaCivil,
       criadoPor: planoEditando?.criadoPor ?? agente,
       criadoEm: planoEditando?.criadoEm ?? new Date().toISOString(),
+      confirmacoes: planoEditando?.confirmacoes ?? [],
+      fotosEvento: planoEditando?.fotosEvento ?? [],
+      conclusao: planoEditando?.conclusao ?? '',
     }
     onSalvar(plano)
   }
