@@ -3041,6 +3041,89 @@ function DetalheP({
         <input ref={fileInputCameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
           onChange={e => { capturarFotoComGPS(e.target.files) }} />
 
+        {/* ── Barra de foto de campo — proeminente, no topo ── */}
+        <div style={{
+          background: emProntidao && estadoGps.status === 'ativo'
+            ? 'linear-gradient(135deg,#0f2d5e,#1a4b8c)'
+            : 'linear-gradient(135deg,#1e293b,#334155)',
+          borderRadius: 14,
+          padding: '0.7rem 0.9rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.55rem',
+          boxShadow: emProntidao && estadoGps.status === 'ativo'
+            ? '0 0 0 2px #1a4b8c, 0 4px 16px rgba(26,75,140,0.35)'
+            : '0 2px 8px rgba(0,0,0,0.18)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span style={{ fontSize: '1rem' }}>📸</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: '0.82rem', color: 'white', lineHeight: 1.2 }}>
+                Registrar foto no campo
+              </div>
+              {emProntidao && estadoGps.posicao ? (
+                <div style={{ fontSize: '0.65rem', color: '#93c5fd', fontFamily: 'monospace', marginTop: 1 }}>
+                  📍 GPS: {estadoGps.posicao.lat.toFixed(5)}, {estadoGps.posicao.lng.toFixed(5)}
+                  {estadoGps.posicao.precisao > 0 && estadoGps.posicao.precisao < 500 && (
+                    <span style={{ opacity: 0.75, marginLeft: 4 }}>±{Math.round(estadoGps.posicao.precisao)}m</span>
+                  )}
+                  <span style={{ marginLeft: 6, color: '#86efac', fontWeight: 700 }}>· localização será marcada no mapa</span>
+                </div>
+              ) : (
+                <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: 1 }}>
+                  {emProntidao ? '⏳ Aguardando GPS para marcar localização...' : '📵 Entre em prontidão para marcar a localização no mapa'}
+                </div>
+              )}
+            </div>
+            {(planoLocal.fotosEvento ?? []).length > 0 && (
+              <span style={{ background: 'rgba(255,255,255,0.15)', color: 'white', borderRadius: 20, padding: '0.15rem 0.6rem', fontSize: '0.72rem', fontWeight: 800, whiteSpace: 'nowrap' }}>
+                {(planoLocal.fotosEvento ?? []).length} foto{(planoLocal.fotosEvento ?? []).length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={() => fileInputCameraRef.current?.click()}
+              disabled={carregandoFotos}
+              title="Tirar foto com GPS"
+              style={{
+                flex: 1,
+                background: carregandoFotos ? 'rgba(255,255,255,0.1)' : (emProntidao && estadoGps.status === 'ativo' ? 'linear-gradient(90deg,#2563eb,#1d4ed8)' : 'rgba(255,255,255,0.15)'),
+                color: 'white',
+                border: emProntidao && estadoGps.status === 'ativo' ? 'none' : '1.5px solid rgba(255,255,255,0.3)',
+                borderRadius: 12,
+                padding: '0.55rem 0.75rem',
+                fontSize: '0.88rem',
+                fontWeight: 800,
+                cursor: carregandoFotos ? 'wait' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
+                boxShadow: emProntidao && estadoGps.status === 'ativo' ? '0 2px 8px rgba(37,99,235,0.5)' : 'none',
+              }}
+            >
+              {carregandoFotos ? '⏳ Salvando...' : '📷 Tirar foto'}
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={carregandoFotos}
+              title="Carregar foto da galeria"
+              style={{
+                flex: 1,
+                background: 'rgba(255,255,255,0.1)',
+                color: 'rgba(255,255,255,0.85)',
+                border: '1.5px solid rgba(255,255,255,0.25)',
+                borderRadius: 12,
+                padding: '0.55rem 0.75rem',
+                fontSize: '0.88rem',
+                fontWeight: 700,
+                cursor: carregandoFotos ? 'wait' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem',
+              }}
+            >
+              🖼️ Galeria
+            </button>
+          </div>
+        </div>
+
         {/* ── Órgãos + Agentes + Materiais + Mapa + Fotos (integrado) ── */}
         <div className="plan-detalhe-card" style={{ overflow: 'visible' }}>
           <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#123b73,#1a6bbf)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -3057,35 +3140,6 @@ function DetalheP({
                   📶{pendentesRef.current.length}
                 </span>
               )}
-              <button
-                onClick={() => fileInputCameraRef.current?.click()}
-                disabled={carregandoFotos}
-                title="Tirar foto com GPS"
-                style={{
-                  background: carregandoFotos ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.18)',
-                  color: 'white', border: '1.5px solid rgba(255,255,255,0.5)', borderRadius: 20,
-                  padding: '0.28rem 0.75rem', fontSize: '0.78rem', fontWeight: 700,
-                  cursor: carregandoFotos ? 'wait' : 'pointer',
-                  display: 'flex', alignItems: 'center', gap: '0.3rem',
-                  backdropFilter: 'blur(4px)',
-                }}
-              >
-                {carregandoFotos ? '⏳' : '📷'} Câmera
-              </button>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={carregandoFotos}
-                title="Carregar foto da galeria"
-                style={{
-                  background: 'rgba(255,255,255,0.12)',
-                  color: 'white', border: '1.5px solid rgba(255,255,255,0.35)', borderRadius: 20,
-                  padding: '0.28rem 0.75rem', fontSize: '0.78rem', fontWeight: 700,
-                  cursor: carregandoFotos ? 'wait' : 'pointer',
-                  display: 'flex', alignItems: 'center', gap: '0.3rem',
-                }}
-              >
-                🖼️ Galeria
-              </button>
             </div>
           </div>
           <MapaDetalhe
@@ -3113,7 +3167,7 @@ function DetalheP({
 
             {(planoLocal.fotosEvento ?? []).length === 0 ? (
               <div style={{ fontSize: '0.8rem', color: '#9ca3af', textAlign: 'center', padding: '1rem 0', background: '#f8fafc', borderRadius: 10 }}>
-                Nenhuma foto registrada. Toque em <strong>📷 Câmera</strong> para tirar uma foto com localização GPS, ou <strong>🖼️ Galeria</strong> para carregar da galeria.
+                Nenhuma foto registrada. Use os botões <strong>📷 Tirar foto</strong> ou <strong>🖼️ Galeria</strong> acima para registrar fotos com localização GPS.
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.45rem' }}>
