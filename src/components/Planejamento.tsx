@@ -7,6 +7,7 @@ import { AGENTES } from '../types'
 import { wsOn, wsSend } from '../wsClient'
 import { ativarGps, desativarGps, subscribeGps, getEstadoGps, getDispositivoIdGlobal, getNomeAgenteGlobal } from '../gpsService'
 import { supabase, supabaseDisponivel } from '../supabaseClient'
+import { saveFotoCampoPendente, getFotosCampoPendentes, removeFotoCampoPendente, clearFotosCampoPendentesPlano } from '../offline'
 
 const ORGAOS_EMPENHO: { categoria: string; emoji: string; orgaos: { emoji: string; nome: string }[] }[] = [
   { categoria: 'Segurança Pública', emoji: '🚔', orgaos: [
@@ -167,6 +168,8 @@ interface FotoGeolocada {
   lng: number | null
   agente: string
   timestamp: number
+  status?: 'salvo' | 'pendente'
+  _localId?: number
 }
 
 interface Plano {
@@ -2531,7 +2534,28 @@ function DetalheP({
   const fileInputCameraRef = useRef<HTMLInputElement>(null)
   const meuNomeAgente = getNomeAgenteGlobal()
 
-  // Detecção de conexão — salva pendentes ao reconectar
+  // Ao montar o componente: carrega fotos pendentes do IndexedDB e mescla com as do servidor
+  useEffect(() => {
+    getFotosCampoPendentes(plano.id).then(pendentes => {
+      if (pendentes.length === 0) return
+      const idsExistentes = new Set(
+        (plano.fotosEvento ?? [])
+          .filter((f): f is FotoGeolocada => typeof f === 'object' && f !== null && 'id' in f)
+          .map(f => f.id)
+      )
+      const extras: FotoGeolocada[] = pendentes
+        .filter(p => !idsExistentes.has((p.foto as FotoGeolocada).id))
+        .map(p => ({ ...(p.foto as FotoGeolocada), status: 'pendente' as const, _localId: p.localId }))
+      if (extras.length === 0) return
+      const merged = [...(plano.fotosEvento ?? []), ...extras]
+      fotosRef.current = merged
+      setPlanoLocal(prev => ({ ...prev, fotosEvento: merged }))
+    }).catch(() => {})
+  // Executa só na montagem — plano.id é estável
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plano.id])
+
+  // Detecção de conexão — salva pendentes ao reconectar e sincroniza fotos de campo
   useEffect(() => {
     const handleOnline = async () => {
       setIsOnline(true)
@@ -2540,11 +2564,14 @@ function DetalheP({
       for (const fn of queue) {
         try { await fn() } catch { /* silencioso */ }
       }
+      // Sincroniza fotos de campo que ficaram pendentes no IndexedDB
+      sincronizarFotosPendentes()
     }
     const handleOffline = () => setIsOnline(false)
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
     return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Supabase Realtime — atualiza em tempo real quando OUTRO agente edita essa operação.
@@ -2626,9 +2653,40 @@ function DetalheP({
     }
   }
 
+  // Remove campos internos (status, _localId) antes de persistir no servidor
+  function prepararParaSalvar(fotos: (string | FotoGeolocada)[]): (string | FotoGeolocada)[] {
+    return fotos.map(f => {
+      if (typeof f !== 'object' || f === null) return f
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { status: _s, _localId: _l, ...limpo } = f
+      return limpo
+    })
+  }
+
+  // Sincroniza fotos pendentes do IndexedDB com o Supabase ao reconectar
+  async function sincronizarFotosPendentes() {
+    try {
+      const pendentes = await getFotosCampoPendentes(planoLocal.id)
+      if (pendentes.length === 0) return
+      // Salva o array completo com todas as fotos (incluindo as pendentes) sem campos internos
+      const fotasLimpas = prepararParaSalvar(fotosRef.current)
+      await persistirFotos(fotasLimpas)
+      // Sincronização bem-sucedida: remove do IndexedDB e atualiza status na UI
+      await clearFotosCampoPendentesPlano(planoLocal.id)
+      const fotasSalvas = fotosRef.current.map(f =>
+        typeof f === 'object' && f !== null ? { ...f, status: 'salvo' as const, _localId: undefined } : f
+      )
+      fotosRef.current = fotasSalvas
+      setPlanoLocal(prev => ({ ...prev, fotosEvento: fotasSalvas }))
+      onAtualizar({ ...planoLocal, fotosEvento: prepararParaSalvar(fotasSalvas) })
+    } catch {
+      // Permanece no IndexedDB — próxima reconexão tenta de novo
+    }
+  }
+
   // Comprime uma foto base64 para no máximo maxW pixels de largura antes de salvar no banco.
-  // Evita falha no Supabase PostgREST por payload > 10 MB (fotos de câmera chegam a 4-8 MB cada).
-  async function comprimirFotoEvento(dataUrl: string, maxW = 1280, qualidade = 0.72): Promise<string> {
+  // Padrão: 800px / 70% qualidade → ~80-150 KB por foto (leve para Supabase e rápido no campo).
+  async function comprimirFotoEvento(dataUrl: string, maxW = 800, qualidade = 0.70): Promise<string> {
     if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl
     return new Promise(resolve => {
       const img = new Image()
@@ -2653,29 +2711,41 @@ function DetalheP({
     if (!files || files.length === 0) return
     setCarregandoFotos(true)
     try {
-      const novas: string[] = []
+      const novas: FotoGeolocada[] = []
       for (const file of Array.from(files)) {
         const b64 = await new Promise<string>((resolve) => {
           const reader = new FileReader()
           reader.onload = (e) => resolve(e.target?.result as string)
           reader.readAsDataURL(file)
         })
-        novas.push(await comprimirFotoEvento(b64))
+        const fotoComprimida = await comprimirFotoEvento(b64)
+        const thumb = await criarThumbnail(fotoComprimida, 120)
+        const novaFoto: FotoGeolocada = {
+          id: gerarId(), foto: fotoComprimida, thumb, lat: null, lng: null,
+          agente: meuNomeAgente || 'Agente', timestamp: Date.now(), status: 'pendente',
+        }
+        // Salva no IndexedDB imediatamente (funciona offline)
+        const localId = await saveFotoCampoPendente(planoLocal.id, novaFoto)
+        novas.push({ ...novaFoto, _localId: Number(localId) })
       }
-      // Usa fotosRef.current (sempre atualizado) em vez de planoLocal.fotosEvento (pode estar stale)
       const todasFotos: (string | FotoGeolocada)[] = [...fotosRef.current, ...novas]
-      fotosRef.current = todasFotos  // Atualiza ref IMEDIATAMENTE (síncrono — sem race condition)
-      // 1) Salva no servidor PRIMEIRO (antes de qualquer broadcast)
-      const salvar = () => persistirFotos(todasFotos)
-      if (!navigator.onLine) {
-        pendentesRef.current.push(salvar)
-      } else {
-        try { await salvar() } catch { pendentesRef.current.push(salvar) }
+      fotosRef.current = todasFotos
+      setPlanoLocal(prev => ({ ...prev, fotosEvento: todasFotos }))
+      onAtualizar({ ...planoLocal, fotosEvento: prepararParaSalvar(todasFotos) })
+      // Tenta salvar no servidor em background (se online)
+      if (navigator.onLine) {
+        try {
+          await persistirFotos(prepararParaSalvar(todasFotos))
+          // Sucesso: remove do IndexedDB e marca como salvo na UI
+          for (const f of novas) { if (f._localId) await removeFotoCampoPendente(f._localId) }
+          const fotasSalvas = fotosRef.current.map(f =>
+            typeof f === 'object' && f !== null && novas.some(n => n.id === f.id)
+              ? { ...f, status: 'salvo' as const, _localId: undefined } : f
+          )
+          fotosRef.current = fotasSalvas
+          setPlanoLocal(prev => ({ ...prev, fotosEvento: fotasSalvas }))
+        } catch { /* Permanece pendente no IndexedDB */ }
       }
-      // 2) Atualiza estado local e pai depois do save
-      const atualizado = { ...planoLocal, fotosEvento: todasFotos }
-      setPlanoLocal(atualizado)
-      onAtualizar(atualizado)
     } finally {
       setCarregandoFotos(false)
     }
@@ -2702,28 +2772,38 @@ function DetalheP({
           reader.onload = (e) => resolve(e.target?.result as string)
           reader.readAsDataURL(file)
         })
-        // Comprime a foto completa (evita payload > 10 MB no Supabase) e gera thumb
+        // Comprime: 800px / 70% qualidade → ~80-150 KB. Gera thumb para galeria.
         const fotoComprimida = await comprimirFotoEvento(b64)
         const thumb = await criarThumbnail(fotoComprimida, 120)
-        novas.push({
+        const novaFoto: FotoGeolocada = {
           id: gerarId(), foto: fotoComprimida, thumb, lat, lng,
-          agente: meuNomeAgente || 'Agente', timestamp: Date.now(),
-        })
+          agente: meuNomeAgente || 'Agente', timestamp: Date.now(), status: 'pendente',
+        }
+        // 1) Salva no IndexedDB IMEDIATAMENTE — garante que a foto não se perde se offline ou app fechar
+        const localId = await saveFotoCampoPendente(planoLocal.id, novaFoto)
+        novas.push({ ...novaFoto, _localId: Number(localId) })
       }
-      // Usa fotosRef.current (sempre atualizado) em vez de planoLocal.fotosEvento (pode estar stale)
+
+      // 2) Atualiza fotosRef e UI imediatamente (exibe badge "Pendente")
       const todasFotos: (string | FotoGeolocada)[] = [...fotosRef.current, ...novas]
-      fotosRef.current = todasFotos  // Atualiza ref IMEDIATAMENTE (síncrono — sem race condition)
-      // 1) Salva no servidor PRIMEIRO — BD atualizado antes de qualquer broadcast
-      const salvar = () => persistirFotos(todasFotos)
-      if (!navigator.onLine) {
-        pendentesRef.current.push(salvar)
-      } else {
-        try { await salvar() } catch { pendentesRef.current.push(salvar) }
+      fotosRef.current = todasFotos
+      setPlanoLocal(prev => ({ ...prev, fotosEvento: todasFotos }))
+      onAtualizar({ ...planoLocal, fotosEvento: prepararParaSalvar(todasFotos) })
+
+      // 3) Tenta salvar no Supabase em background (se online)
+      if (navigator.onLine) {
+        try {
+          await persistirFotos(prepararParaSalvar(todasFotos))
+          // Sucesso: remove do IndexedDB e atualiza badge para "Salvo"
+          for (const f of novas) { if (f._localId) await removeFotoCampoPendente(f._localId) }
+          const fotasSalvas = fotosRef.current.map(f =>
+            typeof f === 'object' && f !== null && novas.some(n => n.id === (f as FotoGeolocada).id)
+              ? { ...f, status: 'salvo' as const, _localId: undefined } : f
+          )
+          fotosRef.current = fotasSalvas
+          setPlanoLocal(prev => ({ ...prev, fotosEvento: fotasSalvas }))
+        } catch { /* IndexedDB garante sync posterior ao reconectar */ }
       }
-      // 2) Atualiza estado local e pai após save confirmado
-      const atualizado = { ...planoLocal, fotosEvento: todasFotos }
-      setPlanoLocal(atualizado)
-      onAtualizar(atualizado)
     } finally {
       setCarregandoFotos(false)
       if (fileInputCameraRef.current) fileInputCameraRef.current.value = ''
@@ -2731,19 +2811,22 @@ function DetalheP({
   }
 
   async function removerFotoEvento(idx: number) {
+    const fotoRemovida = fotosRef.current[idx]
     const todasFotos = fotosRef.current.filter((_, i) => i !== idx)
-    fotosRef.current = todasFotos  // Atualiza ref imediatamente
-    // 1) Salva no servidor PRIMEIRO via PUT (substitui array completo)
-    const salvar = () => persistirFotos(todasFotos)
-    if (!navigator.onLine) {
-      pendentesRef.current.push(salvar)
-    } else {
-      try { await salvar() } catch { pendentesRef.current.push(salvar) }
+    fotosRef.current = todasFotos
+    // Se a foto estava só no IndexedDB (pendente), remove de lá também
+    if (typeof fotoRemovida === 'object' && fotoRemovida._localId) {
+      removeFotoCampoPendente(fotoRemovida._localId).catch(() => {})
     }
-    // 2) Atualiza estado local e pai após save
+    const todasLimpas = prepararParaSalvar(todasFotos)
+    if (!navigator.onLine) {
+      pendentesRef.current.push(() => persistirFotos(todasLimpas))
+    } else {
+      try { await persistirFotos(todasLimpas) } catch { pendentesRef.current.push(() => persistirFotos(todasLimpas)) }
+    }
     const atualizado = { ...planoLocal, fotosEvento: todasFotos }
     setPlanoLocal(atualizado)
-    onAtualizar(atualizado)
+    onAtualizar({ ...atualizado, fotosEvento: todasLimpas })
   }
 
   // ── Prontidão ───────────────────────────────────────────────────────────
@@ -3217,8 +3300,13 @@ function DetalheP({
                   const temGps = typeof fotoItem !== 'string' && fotoItem.lat != null
                   const agente = typeof fotoItem !== 'string' ? fotoItem.agente : undefined
                   const ts = typeof fotoItem !== 'string' ? fotoItem.timestamp : undefined
+                  const statusFoto = typeof fotoItem !== 'string' ? fotoItem.status : undefined
+                  const ePendente = statusFoto === 'pendente'
                   return (
-                    <div key={idx} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '1', background: '#f1f5f9', boxShadow: '0 1px 4px rgba(0,0,0,0.12)' }}>
+                    <div key={idx} style={{
+                      position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '1',
+                      background: '#f1f5f9', boxShadow: ePendente ? '0 0 0 2px #f59e0b' : '0 1px 4px rgba(0,0,0,0.12)',
+                    }}>
                       <img
                         src={src}
                         alt={`Foto ${idx + 1}`}
@@ -3231,9 +3319,23 @@ function DetalheP({
                         background: 'rgba(0,0,0,0.55)', color: 'white',
                         borderRadius: 4, padding: '1px 5px', fontSize: '0.6rem', fontWeight: 800,
                       }}>{idx + 1}</div>
+                      {/* Badge de status de sync */}
+                      {ePendente ? (
+                        <div style={{
+                          position: 'absolute', top: 2, left: 22,
+                          background: 'rgba(217,119,6,0.92)', color: 'white',
+                          borderRadius: 4, padding: '1px 4px', fontSize: '0.55rem', fontWeight: 800,
+                        }} title="Aguardando conexão para salvar no servidor">📶</div>
+                      ) : statusFoto === 'salvo' ? (
+                        <div style={{
+                          position: 'absolute', top: 2, left: 22,
+                          background: 'rgba(22,163,74,0.88)', color: 'white',
+                          borderRadius: 4, padding: '1px 4px', fontSize: '0.55rem', fontWeight: 800,
+                        }} title="Foto salva no servidor">✓</div>
+                      ) : null}
                       {temGps && (
                         <div style={{
-                          position: 'absolute', bottom: 2, left: 2,
+                          position: 'absolute', bottom: ePendente || (agente || ts) ? 18 : 2, left: 2,
                           background: 'rgba(26,75,140,0.88)', color: 'white',
                           borderRadius: 4, padding: '1px 4px', fontSize: '0.58rem', fontWeight: 700,
                         }}>📍GPS</div>

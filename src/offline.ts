@@ -2,9 +2,10 @@
 // Guarda ocorrências pendentes quando offline e sincroniza quando voltar online
 
 const DB_NAME = 'defesacivil-db'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const PENDING_STORE = 'pending'
 const CACHE_STORE = 'ocorrencias-cache'
+const FOTOS_CAMPO_STORE = 'fotos-campo-pendentes'
 
 let _db: IDBDatabase | null = null
 
@@ -21,6 +22,11 @@ function getDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(CACHE_STORE)) {
         db.createObjectStore(CACHE_STORE, { keyPath: 'id' })
+      }
+      // v2: store dedicado para fotos de campo pendentes de sync com Supabase
+      if (!db.objectStoreNames.contains(FOTOS_CAMPO_STORE)) {
+        const fotoStore = db.createObjectStore(FOTOS_CAMPO_STORE, { keyPath: 'localId', autoIncrement: true })
+        fotoStore.createIndex('planoId', 'planoId', { unique: false })
       }
     }
   })
@@ -143,6 +149,71 @@ export function getCachedOcorrencias(): Promise<any[]> {
 
 export function addToCache(item: object & { id: number }): Promise<IDBValidKey> {
   return run(CACHE_STORE, 'readwrite', (s) => s.put(item))
+}
+
+// ------------------------------------------------------------------
+// Fotos de campo pendentes de sync com Supabase (IndexedDB v2)
+// Garante que fotos tiradas offline não sejam perdidas.
+// ------------------------------------------------------------------
+
+export interface FotoCampoPendente {
+  localId?: number
+  planoId: string
+  foto: object
+  savedAt: string
+}
+
+/** Salva uma foto geolocada no IndexedDB para sync posterior. Retorna o localId gerado. */
+export function saveFotoCampoPendente(planoId: string, foto: object): Promise<number> {
+  return run(FOTOS_CAMPO_STORE, 'readwrite', (s) =>
+    s.add({ planoId, foto, savedAt: new Date().toISOString() } as FotoCampoPendente)
+  ) as Promise<number>
+}
+
+/** Busca todas as fotos pendentes de um planejamento específico. */
+export function getFotosCampoPendentes(planoId: string): Promise<FotoCampoPendente[]> {
+  return getDB().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(FOTOS_CAMPO_STORE, 'readonly')
+        const idx = tx.objectStore(FOTOS_CAMPO_STORE).index('planoId')
+        const req = idx.getAll(planoId)
+        req.onsuccess = () => resolve(req.result as FotoCampoPendente[])
+        req.onerror = () => reject(req.error)
+      })
+  )
+}
+
+/** Remove uma foto pendente pelo localId (após sync bem-sucedido). */
+export function removeFotoCampoPendente(localId: number): Promise<void> {
+  return getDB().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(FOTOS_CAMPO_STORE, 'readwrite')
+        tx.objectStore(FOTOS_CAMPO_STORE).delete(localId)
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+      })
+  )
+}
+
+/** Remove TODAS as fotos pendentes de um planejamento (após sync bem-sucedido). */
+export function clearFotosCampoPendentesPlano(planoId: string): Promise<void> {
+  return getDB().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(FOTOS_CAMPO_STORE, 'readwrite')
+        const idx = tx.objectStore(FOTOS_CAMPO_STORE).index('planoId')
+        const req = idx.getAllKeys(planoId)
+        req.onsuccess = () => {
+          const keys = req.result
+          keys.forEach((k) => tx.objectStore(FOTOS_CAMPO_STORE).delete(k))
+          tx.oncomplete = () => resolve()
+        }
+        req.onerror = () => reject(req.error)
+        tx.onerror = () => reject(tx.error)
+      })
+  )
 }
 
 // ------------------------------------------------------------------
