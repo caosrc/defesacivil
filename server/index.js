@@ -1071,7 +1071,23 @@ app.post('/api/planejamentos/:id/confirmar', async (req, res) => {
   }
 })
 
-// ── Fotos do evento ───────────────────────────────────────────────────────
+// ── Fotos do evento — PUT substitui tudo atomicamente ────────────────────
+app.put('/api/planejamentos/:id/fotos', async (req, res) => {
+  try {
+    const { fotos } = req.body
+    const { id } = req.params
+    const result = await query('SELECT id FROM planejamentos WHERE id = $1', [id])
+    if (!result.rows[0]) return res.status(404).json({ error: 'Planejamento não encontrado' })
+    const arr = Array.isArray(fotos) ? fotos : []
+    await query('UPDATE planejamentos SET fotos_evento = $1 WHERE id = $2', [JSON.stringify(arr), id])
+    broadcastParaTodos({ tipo: 'planejamentos_atualizados' })
+    res.json({ success: true, fotos: arr })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ── POST legado — mantido por compatibilidade (append) ────────────────────
 app.post('/api/planejamentos/:id/fotos', async (req, res) => {
   try {
     const { fotos } = req.body

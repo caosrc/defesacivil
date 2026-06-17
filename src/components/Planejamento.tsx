@@ -2594,18 +2594,19 @@ function DetalheP({
     }
   }
 
-  // Salva array de fotos no servidor (Supabase ou Express)
-  async function persistirFotos(todasFotos: (string | FotoGeolocada)[], novasParaExpress?: (string | FotoGeolocada)[]) {
+  // Salva array COMPLETO de fotos no servidor via PUT (idempotente — substitui tudo)
+  async function persistirFotos(todasFotos: (string | FotoGeolocada)[]) {
     if (supabaseDisponivel) {
       const { error } = await supabase.from('planejamentos')
         .update({ fotos_evento: todasFotos }).eq('id', planoLocal.id)
       if (error) throw new Error(error.message)
     } else {
-      await fetch(`/api/planejamentos/${planoLocal.id}/fotos`, {
-        method: 'POST',
+      const resp = await fetch(`/api/planejamentos/${planoLocal.id}/fotos`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fotos: novasParaExpress ?? todasFotos }),
+        body: JSON.stringify({ fotos: todasFotos }),
       })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     }
   }
 
@@ -2622,18 +2623,18 @@ function DetalheP({
         })
         novas.push(b64)
       }
-      // Atualiza local imediatamente (otimista)
       const todasFotos: (string | FotoGeolocada)[] = [...(planoLocal.fotosEvento ?? []), ...novas]
-      const atualizado = { ...planoLocal, fotosEvento: todasFotos }
-      setPlanoLocal(atualizado)
-      onAtualizar(atualizado)
-
-      const salvar = () => persistirFotos(todasFotos, novas)
+      // 1) Salva no servidor PRIMEIRO (antes de qualquer broadcast)
+      const salvar = () => persistirFotos(todasFotos)
       if (!navigator.onLine) {
         pendentesRef.current.push(salvar)
       } else {
         try { await salvar() } catch { pendentesRef.current.push(salvar) }
       }
+      // 2) Atualiza estado local e pai depois do save (sem race condition)
+      const atualizado = { ...planoLocal, fotosEvento: todasFotos }
+      setPlanoLocal(atualizado)
+      onAtualizar(atualizado)
     } finally {
       setCarregandoFotos(false)
     }
@@ -2666,18 +2667,18 @@ function DetalheP({
           agente: meuNomeAgente || 'Agente', timestamp: Date.now(),
         })
       }
-      // Atualiza local imediatamente (otimista)
       const todasFotos: (string | FotoGeolocada)[] = [...(planoLocal.fotosEvento ?? []), ...novas]
-      const atualizado = { ...planoLocal, fotosEvento: todasFotos }
-      setPlanoLocal(atualizado)
-      onAtualizar(atualizado)
-
-      const salvar = () => persistirFotos(todasFotos, novas)
+      // 1) Salva no servidor PRIMEIRO — BD atualizado antes de qualquer broadcast
+      const salvar = () => persistirFotos(todasFotos)
       if (!navigator.onLine) {
         pendentesRef.current.push(salvar)
       } else {
         try { await salvar() } catch { pendentesRef.current.push(salvar) }
       }
+      // 2) Atualiza estado local e pai após save confirmado
+      const atualizado = { ...planoLocal, fotosEvento: todasFotos }
+      setPlanoLocal(atualizado)
+      onAtualizar(atualizado)
     } finally {
       setCarregandoFotos(false)
       if (fileInputCameraRef.current) fileInputCameraRef.current.value = ''
@@ -2685,24 +2686,18 @@ function DetalheP({
   }
 
   async function removerFotoEvento(idx: number) {
-    // Atualiza local imediatamente (otimista)
     const todasFotos = (planoLocal.fotosEvento ?? []).filter((_, i) => i !== idx)
-    const atualizado = { ...planoLocal, fotosEvento: todasFotos }
-    setPlanoLocal(atualizado)
-    onAtualizar(atualizado)
-
-    const salvar = async () => {
-      if (supabaseDisponivel) {
-        await supabase.from('planejamentos').update({ fotos_evento: todasFotos }).eq('id', planoLocal.id)
-      } else {
-        await fetch(`/api/planejamentos/${planoLocal.id}/fotos/${idx}`, { method: 'DELETE' })
-      }
-    }
+    // 1) Salva no servidor PRIMEIRO via PUT (substitui array completo)
+    const salvar = () => persistirFotos(todasFotos)
     if (!navigator.onLine) {
       pendentesRef.current.push(salvar)
     } else {
       try { await salvar() } catch { pendentesRef.current.push(salvar) }
     }
+    // 2) Atualiza estado local e pai após save
+    const atualizado = { ...planoLocal, fotosEvento: todasFotos }
+    setPlanoLocal(atualizado)
+    onAtualizar(atualizado)
   }
 
   // ── Prontidão ───────────────────────────────────────────────────────────
