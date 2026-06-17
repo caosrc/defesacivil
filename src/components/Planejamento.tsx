@@ -435,6 +435,9 @@ const PRE_LISTAS: { nome: string; emoji: string; itens: { emoji: string; label: 
 ]
 
 const OURO_BRANCO_CENTER: [number, number] = [-20.5195, -43.6983]
+// Coordenada padrão para fotos sem GPS: 20° 30' 54,72" S  43° 41' 27,64" W
+const LAT_FOTO_PADRAO = -(20 + 30 / 60 + 54.72 / 3600)  // -20.51520
+const LNG_FOTO_PADRAO = -(43 + 41 / 60 + 27.64 / 3600)  // -43.69101
 
 // ── Persistência ────────────────────────────────────────────────────────
 function carregarPlanos(): Plano[] {
@@ -2812,7 +2815,7 @@ function DetalheP({
         const fotoComprimida = await comprimirFotoEvento(b64)
         const thumb = await criarThumbnail(fotoComprimida, 120)
         const novaFoto: FotoGeolocada = {
-          id: gerarId(), foto: fotoComprimida, thumb, lat: null, lng: null,
+          id: gerarId(), foto: fotoComprimida, thumb, lat: LAT_FOTO_PADRAO, lng: LNG_FOTO_PADRAO,
           agente: meuNomeAgente || 'Agente', timestamp: Date.now(), status: 'pendente',
         }
         // Salva no IndexedDB imediatamente (funciona offline)
@@ -2854,7 +2857,12 @@ function DetalheP({
         )
         lat = pos.coords.latitude
         lng = pos.coords.longitude
-      } catch { /* GPS indisponível — salva sem localização */ }
+      } catch { /* GPS indisponível — usa coordenada padrão de Ouro Branco */ }
+      // Se não obteve GPS, posiciona no centro de Ouro Branco para poder editar depois
+      if (lat === null || lng === null) {
+        lat = LAT_FOTO_PADRAO
+        lng = LNG_FOTO_PADRAO
+      }
 
       const novas: FotoGeolocada[] = []
       for (const file of Array.from(files)) {
