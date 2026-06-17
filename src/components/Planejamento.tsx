@@ -251,7 +251,7 @@ function sbParaPlano(row: Record<string, unknown>): Plano {
     criadoPor: (row.criado_por as string) ?? '',
     criadoEm: (row.criado_em as string) ?? new Date().toISOString(),
     confirmacoes: (row.confirmacoes_agentes as ConfirmacaoAgente[]) ?? [],
-    fotosEvento: (row.fotos_evento as string[]) ?? [],
+    fotosEvento: (row.fotos_evento as (string | FotoGeolocada)[]) ?? [],
   }
 }
 
@@ -2506,9 +2506,47 @@ function DetalheP({
   const [salvandoConf, setSalvandoConf] = useState(false)
   const [carregandoFotos, setCarregandoFotos] = useState(false)
   const [exportandoExcel, setExportandoExcel] = useState(false)
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [salvandoAuto, setSalvandoAuto] = useState(false)
+  const pendentesRef = useRef<(() => Promise<void>)[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const fileInputCameraRef = useRef<HTMLInputElement>(null)
   const meuNomeAgente = getNomeAgenteGlobal()
+
+  // Detecção de conexão — salva pendentes ao reconectar
+  useEffect(() => {
+    const handleOnline = async () => {
+      setIsOnline(true)
+      const queue = [...pendentesRef.current]
+      pendentesRef.current = []
+      for (const fn of queue) {
+        try { await fn() } catch { /* silencioso */ }
+      }
+    }
+    const handleOffline = () => setIsOnline(false)
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline) }
+  }, [])
+
+  // Supabase Realtime — atualiza em tempo real quando outro agente edita essa operação
+  useEffect(() => {
+    if (!supabaseDisponivel) return
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const channel = (supabase.channel(`plan-rt-${planoLocal.id}`) as any)
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'planejamentos', filter: `id=eq.${planoLocal.id}` },
+        (payload: { new: Record<string, unknown> }) => {
+          if (!payload.new) return
+          const atualizado = sbParaPlano(payload.new)
+          setPlanoLocal(atualizado)
+          onAtualizar(atualizado)
+        }
+      )
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planoLocal.id])
 
   // Sincroniza confirmações em tempo real quando outro agente confirma (via WS → parent → prop)
   const numConfirmados = (plano.confirmacoes ?? []).filter(c => c.confirmado).length
@@ -2541,6 +2579,21 @@ function DetalheP({
     }
   }
 
+  // Salva array de fotos no servidor (Supabase ou Express)
+  async function persistirFotos(todasFotos: (string | FotoGeolocada)[], novasParaExpress?: (string | FotoGeolocada)[]) {
+    if (supabaseDisponivel) {
+      const { error } = await supabase.from('planejamentos')
+        .update({ fotos_evento: todasFotos }).eq('id', planoLocal.id)
+      if (error) throw new Error(error.message)
+    } else {
+      await fetch(`/api/planejamentos/${planoLocal.id}/fotos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fotos: novasParaExpress ?? todasFotos }),
+      })
+    }
+  }
+
   async function adicionarFotosEvento(files: FileList | null) {
     if (!files || files.length === 0) return
     setCarregandoFotos(true)
@@ -2554,16 +2607,17 @@ function DetalheP({
         })
         novas.push(b64)
       }
-      const res = await fetch(`/api/planejamentos/${planoLocal.id}/fotos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fotos: novas }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const atualizado = { ...planoLocal, fotosEvento: data.fotos }
-        setPlanoLocal(atualizado)
-        onAtualizar(atualizado)
+      // Atualiza local imediatamente (otimista)
+      const todasFotos: (string | FotoGeolocada)[] = [...(planoLocal.fotosEvento ?? []), ...novas]
+      const atualizado = { ...planoLocal, fotosEvento: todasFotos }
+      setPlanoLocal(atualizado)
+      onAtualizar(atualizado)
+
+      const salvar = () => persistirFotos(todasFotos, novas)
+      if (!navigator.onLine) {
+        pendentesRef.current.push(salvar)
+      } else {
+        try { await salvar() } catch { pendentesRef.current.push(salvar) }
       }
     } finally {
       setCarregandoFotos(false)
@@ -2593,25 +2647,21 @@ function DetalheP({
         })
         const thumb = await criarThumbnail(b64, 120)
         novas.push({
-          id: gerarId(),
-          foto: b64,
-          thumb,
-          lat,
-          lng,
-          agente: meuNomeAgente || 'Agente',
-          timestamp: Date.now(),
+          id: gerarId(), foto: b64, thumb, lat, lng,
+          agente: meuNomeAgente || 'Agente', timestamp: Date.now(),
         })
       }
-      const res = await fetch(`/api/planejamentos/${planoLocal.id}/fotos`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fotos: novas }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const atualizado = { ...planoLocal, fotosEvento: data.fotos }
-        setPlanoLocal(atualizado)
-        onAtualizar(atualizado)
+      // Atualiza local imediatamente (otimista)
+      const todasFotos: (string | FotoGeolocada)[] = [...(planoLocal.fotosEvento ?? []), ...novas]
+      const atualizado = { ...planoLocal, fotosEvento: todasFotos }
+      setPlanoLocal(atualizado)
+      onAtualizar(atualizado)
+
+      const salvar = () => persistirFotos(todasFotos, novas)
+      if (!navigator.onLine) {
+        pendentesRef.current.push(salvar)
+      } else {
+        try { await salvar() } catch { pendentesRef.current.push(salvar) }
       }
     } finally {
       setCarregandoFotos(false)
@@ -2620,15 +2670,24 @@ function DetalheP({
   }
 
   async function removerFotoEvento(idx: number) {
-    try {
-      const res = await fetch(`/api/planejamentos/${planoLocal.id}/fotos/${idx}`, { method: 'DELETE' })
-      if (res.ok) {
-        const data = await res.json()
-        const atualizado = { ...planoLocal, fotosEvento: data.fotos }
-        setPlanoLocal(atualizado)
-        onAtualizar(atualizado)
+    // Atualiza local imediatamente (otimista)
+    const todasFotos = (planoLocal.fotosEvento ?? []).filter((_, i) => i !== idx)
+    const atualizado = { ...planoLocal, fotosEvento: todasFotos }
+    setPlanoLocal(atualizado)
+    onAtualizar(atualizado)
+
+    const salvar = async () => {
+      if (supabaseDisponivel) {
+        await supabase.from('planejamentos').update({ fotos_evento: todasFotos }).eq('id', planoLocal.id)
+      } else {
+        await fetch(`/api/planejamentos/${planoLocal.id}/fotos/${idx}`, { method: 'DELETE' })
       }
-    } catch { /* silencioso */ }
+    }
+    if (!navigator.onLine) {
+      pendentesRef.current.push(salvar)
+    } else {
+      try { await salvar() } catch { pendentesRef.current.push(salvar) }
+    }
   }
 
   // ── Prontidão ───────────────────────────────────────────────────────────
@@ -2961,105 +3020,11 @@ function DetalheP({
           </div>
         )}
 
-        {/* ── Fotos do evento ── */}
-        <div className="plan-detalhe-card">
-          <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#78350f,#b45309)', color: 'white', border: 'none' }}>
-            📸 Fotos do Evento
-            <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
-              {(planoLocal.fotosEvento ?? []).length} foto(s)
-            </span>
-          </div>
-          <div style={{ padding: '0.5rem 0.75rem' }}>
-            {/* Input galeria (múltiplas) */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              style={{ display: 'none' }}
-              onChange={e => { adicionarFotosEvento(e.target.files); if (fileInputRef.current) fileInputRef.current.value = '' }}
-            />
-            {/* Input câmera (captura direta) */}
-            <input
-              ref={fileInputCameraRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              style={{ display: 'none' }}
-              onChange={e => { capturarFotoComGPS(e.target.files) }}
-            />
-
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
-              <button
-                onClick={() => fileInputCameraRef.current?.click()}
-                disabled={carregandoFotos}
-                style={{
-                  background: carregandoFotos ? '#e5e7eb' : 'linear-gradient(135deg,#065f46,#059669)',
-                  color: 'white', border: 'none', borderRadius: 20,
-                  padding: '0.38rem 1rem', fontSize: '0.8rem', fontWeight: 700,
-                  cursor: carregandoFotos ? 'wait' : 'pointer',
-                  display: 'flex', alignItems: 'center', gap: '0.4rem',
-                }}
-              >
-                {carregandoFotos ? '⏳' : '📷'} Câmera + GPS
-              </button>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={carregandoFotos}
-                style={{
-                  background: carregandoFotos ? '#e5e7eb' : '#1a4b8c',
-                  color: 'white', border: 'none', borderRadius: 20,
-                  padding: '0.38rem 1rem', fontSize: '0.8rem', fontWeight: 700,
-                  cursor: carregandoFotos ? 'wait' : 'pointer',
-                  display: 'flex', alignItems: 'center', gap: '0.4rem',
-                }}
-              >
-                🖼️ Galeria
-              </button>
-            </div>
-
-            {(planoLocal.fotosEvento ?? []).length === 0
-              ? <div style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', padding: '0.5rem 0' }}>Nenhuma foto registrada ainda</div>
-              : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '0.4rem' }}>
-                  {(planoLocal.fotosEvento ?? []).map((fotoItem, idx) => {
-                    const src = typeof fotoItem === 'string' ? fotoItem : fotoItem.foto
-                    const temGps = typeof fotoItem !== 'string' && fotoItem.lat != null
-                    return (
-                      <div key={idx} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '1', background: '#f1f5f9' }}>
-                        <img
-                          src={src}
-                          alt={`Foto ${idx + 1}`}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                          loading="lazy"
-                        />
-                        {temGps && (
-                          <div style={{
-                            position: 'absolute', bottom: 2, left: 2,
-                            background: 'rgba(26,75,140,0.85)', color: 'white',
-                            borderRadius: 4, padding: '1px 4px', fontSize: '0.58rem', fontWeight: 700,
-                          }}>📍</div>
-                        )}
-                        <button
-                          onClick={() => removerFotoEvento(idx)}
-                          style={{
-                            position: 'absolute', top: 2, right: 2,
-                            background: 'rgba(220,38,38,0.85)', color: 'white',
-                            border: 'none', borderRadius: '50%', width: 22, height: 22,
-                            fontSize: '0.65rem', fontWeight: 900, cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            lineHeight: 1,
-                          }}
-                          title="Remover foto"
-                        >✕</button>
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            }
-          </div>
-        </div>
+        {/* Inputs ocultos de câmera e galeria */}
+        <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+          onChange={e => { adicionarFotosEvento(e.target.files); if (fileInputRef.current) fileInputRef.current.value = '' }} />
+        <input ref={fileInputCameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+          onChange={e => { capturarFotoComGPS(e.target.files) }} />
 
         {/* ── Órgãos + Agentes + Materiais + Mapa (integrado) ── */}
         <div className="plan-detalhe-card" style={{ overflow: 'visible' }}>
@@ -3081,6 +3046,128 @@ function DetalheP({
               (f): f is FotoGeolocada => typeof f === 'object' && f !== null && 'foto' in f && f.lat != null
             )}
           />
+        </div>
+
+        {/* ── Fotos de Campo ── */}
+        <div className="plan-detalhe-card">
+          <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#78350f,#b45309)', color: 'white', border: 'none' }}>
+            📸 Fotos de Campo
+            <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
+              {(planoLocal.fotosEvento ?? []).length} foto(s)
+              {salvandoAuto && <span style={{ marginLeft: '0.4rem', opacity: 0.8 }}>⟳ salvando...</span>}
+              {!isOnline && pendentesRef.current.length > 0 && (
+                <span style={{ marginLeft: '0.4rem', background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '1px 6px', fontSize: '0.65rem' }}>
+                  📶 {pendentesRef.current.length} pendente(s)
+                </span>
+              )}
+            </span>
+          </div>
+          <div style={{ padding: '0.6rem 0.75rem' }}>
+            {/* Botões de captura */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => fileInputCameraRef.current?.click()}
+                disabled={carregandoFotos}
+                style={{
+                  background: carregandoFotos ? '#e5e7eb' : 'linear-gradient(135deg,#065f46,#059669)',
+                  color: 'white', border: 'none', borderRadius: 20,
+                  padding: '0.42rem 1.1rem', fontSize: '0.84rem', fontWeight: 700,
+                  cursor: carregandoFotos ? 'wait' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '0.4rem',
+                }}
+              >
+                {carregandoFotos ? '⏳' : '📷'} Câmera + GPS
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={carregandoFotos}
+                style={{
+                  background: carregandoFotos ? '#e5e7eb' : '#1a4b8c',
+                  color: 'white', border: 'none', borderRadius: 20,
+                  padding: '0.42rem 1.1rem', fontSize: '0.84rem', fontWeight: 700,
+                  cursor: carregandoFotos ? 'wait' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '0.4rem',
+                }}
+              >
+                🖼️ Galeria
+              </button>
+              {!isOnline && (
+                <span style={{
+                  display: 'flex', alignItems: 'center', gap: '0.3rem',
+                  background: '#fef3c7', color: '#92400e', borderRadius: 20,
+                  padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 700,
+                }}>
+                  📵 Offline — salvo localmente
+                </span>
+              )}
+            </div>
+
+            {/* Grade de fotos — 4 por linha */}
+            {(planoLocal.fotosEvento ?? []).length === 0 ? (
+              <div style={{ fontSize: '0.82rem', color: '#9ca3af', textAlign: 'center', padding: '1rem 0' }}>
+                Nenhuma foto registrada ainda. Use 📷 Câmera + GPS para registrar com localização.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.45rem' }}>
+                {(planoLocal.fotosEvento ?? []).map((fotoItem, idx) => {
+                  const src = typeof fotoItem === 'string' ? fotoItem : fotoItem.foto
+                  const temGps = typeof fotoItem !== 'string' && fotoItem.lat != null
+                  const agente = typeof fotoItem !== 'string' ? fotoItem.agente : undefined
+                  const ts = typeof fotoItem !== 'string' ? fotoItem.timestamp : undefined
+                  return (
+                    <div key={idx} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '1', background: '#f1f5f9', boxShadow: '0 1px 4px rgba(0,0,0,0.12)' }}>
+                      <img
+                        src={src}
+                        alt={`Foto ${idx + 1}`}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        loading="lazy"
+                        onClick={() => window.open(src, '_blank')}
+                      />
+                      {/* Número da foto */}
+                      <div style={{
+                        position: 'absolute', top: 2, left: 2,
+                        background: 'rgba(0,0,0,0.55)', color: 'white',
+                        borderRadius: 4, padding: '1px 5px', fontSize: '0.6rem', fontWeight: 800,
+                      }}>{idx + 1}</div>
+                      {/* Badge GPS */}
+                      {temGps && (
+                        <div style={{
+                          position: 'absolute', bottom: 2, left: 2,
+                          background: 'rgba(26,75,140,0.88)', color: 'white',
+                          borderRadius: 4, padding: '1px 4px', fontSize: '0.58rem', fontWeight: 700,
+                        }}>📍GPS</div>
+                      )}
+                      {/* Agente + hora */}
+                      {(agente || ts) && (
+                        <div style={{
+                          position: 'absolute', bottom: 0, left: 0, right: 0,
+                          background: 'linear-gradient(transparent,rgba(0,0,0,0.65))',
+                          padding: '6px 4px 3px',
+                          display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                        }}>
+                          {agente && <span style={{ color: 'white', fontSize: '0.52rem', fontWeight: 700, lineHeight: 1.2, textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>{agente}</span>}
+                          {ts && <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.48rem', lineHeight: 1.2 }}>{new Date(ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>}
+                        </div>
+                      )}
+                      {/* Botão remover */}
+                      <button
+                        onClick={() => removerFotoEvento(idx)}
+                        style={{
+                          position: 'absolute', top: 2, right: 2,
+                          background: 'rgba(220,38,38,0.85)', color: 'white',
+                          border: 'none', borderRadius: '50%', width: 20, height: 20,
+                          fontSize: '0.6rem', fontWeight: 900, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          lineHeight: 1,
+                        }}
+                        title="Remover foto"
+                      >✕</button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Observações */}

@@ -48,10 +48,12 @@ build = ["npx", "vite", "build"]
 [userenv]
 
 [userenv.shared]
-VITE_USE_SUPABASE = "false"
+VITE_USE_SUPABASE = "true"
 VAPID_SUBJECT = "mailto:defesacivilob@gmail.com"
 VAPID_PUBLIC_KEY = "BM-gE-wibZiGkyOPTZVRfjL0cVY7pzBfDTIAHaSTZDOoiq03OiTaUYN8RfKHCfpyrkoML2EukgmbqwrT6HxBkBk"
 NODE_ENV = "development"
+VITE_SUPABASE_URL = "https://sjdpsplbcrlkekdfnnlj.supabase.co"
+VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNqZHBzcGxiY3Jsa2VrZGZubmxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5ODExOTcsImV4cCI6MjA5MjU1NzE5N30.Y5-_Z6Yg99i0hHQBZjTMxBFo0TONMCiicHnjkyj_AH8"
 
 [userenv.development]
 PORT = "3001"
