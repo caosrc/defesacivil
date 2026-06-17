@@ -159,6 +159,16 @@ interface ConfirmacaoAgente {
   confirmedAt?: string
 }
 
+interface FotoGeolocada {
+  id: string
+  foto: string
+  thumb?: string
+  lat: number | null
+  lng: number | null
+  agente: string
+  timestamp: number
+}
+
 interface Plano {
   id: string
   tipo: TipoPlano
@@ -183,7 +193,7 @@ interface Plano {
   criadoPor: string
   criadoEm: string
   confirmacoes?: ConfirmacaoAgente[]
-  fotosEvento?: string[]
+  fotosEvento?: (string | FotoGeolocada)[]
 }
 
 // ── Conversão GMS (Graus, Minutos, Segundos) ─────────────────────────────
@@ -567,6 +577,50 @@ function criarIconeCone(): L.DivIcon {
   })
 }
 
+function criarIconeFoto(thumb: string): L.DivIcon {
+  return L.divIcon({
+    className: '',
+    html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5))">
+      <div style="width:54px;height:54px;border-radius:8px;overflow:hidden;border:3px solid #1a4b8c;background:#e2e8f0">
+        <img src="${thumb}" style="width:100%;height:100%;object-fit:cover"/>
+      </div>
+      <div style="width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-top:14px solid #1a4b8c;margin-top:-1px"></div>
+    </div>`,
+    iconSize: [54, 70],
+    iconAnchor: [27, 70],
+    popupAnchor: [0, -74],
+  })
+}
+
+async function criarThumbnail(b64: string, maxDim = 120): Promise<string> {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.onload = () => {
+      const ratio = Math.min(maxDim / img.width, maxDim / img.height, 1)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(img.width * ratio)
+      canvas.height = Math.round(img.height * ratio)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { resolve(b64); return }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      resolve(canvas.toDataURL('image/jpeg', 0.75))
+    }
+    img.onerror = () => resolve(b64)
+    img.src = b64
+  })
+}
+
+function FlyToGpsOnKey({ posicao, flyKey }: { posicao: { lat: number; lng: number } | null; flyKey: number }) {
+  const map = useMap()
+  const prevKey = useRef(-1)
+  useEffect(() => {
+    if (!posicao || flyKey === prevKey.current) return
+    prevKey.current = flyKey
+    map.flyTo([posicao.lat, posicao.lng], Math.max(map.getZoom(), 16), { duration: 1.2 })
+  }, [flyKey, posicao, map])
+  return null
+}
+
 function MapInvalidateSize({ trigger }: { trigger?: unknown }) {
   const map = useMap()
   useEffect(() => {
@@ -748,17 +802,47 @@ function MapaDetalhe({
   onRemoverItem,
   posicaoPropria,
   nomeProprio,
+  fotosGeolocadas,
 }: {
   plano: Plano
   onAdicionarItem: (item: ItemMapa) => void
   onRemoverItem: (id: string) => void
   posicaoPropria?: { lat: number; lng: number; precisao: number } | null
   nomeProprio?: string
+  fotosGeolocadas?: FotoGeolocada[]
 }) {
   const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
   const [secaoAberta, setSecaoAberta] = useState<'orgaos'|'agentes'|'materiais'|'icones'|null>('icones')
   const [camadaMapa, setCamadaMapa] = useState<'padrao' | 'satelite'>('padrao')
+  const [gpsLocalAtivo, setGpsLocalAtivo] = useState(false)
+  const [posGpsLocal, setPosGpsLocal] = useState<{ lat: number; lng: number; precisao: number } | null>(null)
+  const [gpsFlyKey, setGpsFlyKey] = useState(0)
+  const watchIdLocalRef = useRef<number | null>(null)
   const centro: [number, number] = plano.lat && plano.lng ? [plano.lat, plano.lng] : OURO_BRANCO_CENTER
+
+  useEffect(() => {
+    return () => {
+      if (watchIdLocalRef.current !== null) navigator.geolocation.clearWatch(watchIdLocalRef.current)
+    }
+  }, [])
+
+  function handleGpsLocalBtn() {
+    if (!navigator.geolocation) { alert('GPS não disponível neste dispositivo'); return }
+    if (gpsLocalAtivo) {
+      setGpsFlyKey(k => k + 1)
+      return
+    }
+    setGpsLocalAtivo(true)
+    if (watchIdLocalRef.current !== null) navigator.geolocation.clearWatch(watchIdLocalRef.current)
+    watchIdLocalRef.current = navigator.geolocation.watchPosition(
+      pos => {
+        setPosGpsLocal({ lat: pos.coords.latitude, lng: pos.coords.longitude, precisao: pos.coords.accuracy })
+        setGpsFlyKey(k => k + 1)
+      },
+      err => { console.warn('[GPS mapa]', err); setGpsLocalAtivo(false) },
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    )
+  }
 
   // ── Prontidão: rastreia quem está de prontidão + posições GPS ──────────
   const [agProntidao, setAgProntidao] = useState<Map<string, string>>(new Map()) // id → nome
@@ -1030,6 +1114,26 @@ function MapaDetalhe({
             onClick={() => setCamadaMapa('satelite')}
           >🛰️ Satélite</button>
         </div>
+        {/* Botão GPS — posição real */}
+        <button
+          onClick={handleGpsLocalBtn}
+          title={gpsLocalAtivo ? 'Centralizar na minha localização' : 'Ativar GPS e ir para minha localização'}
+          style={{
+            position: 'absolute', bottom: 16, right: 16, zIndex: 800,
+            background: gpsLocalAtivo ? (posGpsLocal ? 'linear-gradient(135deg,#1a4b8c,#2563eb)' : 'linear-gradient(135deg,#d97706,#f59e0b)') : 'linear-gradient(135deg,#374151,#4b5563)',
+            color: 'white', border: 'none', borderRadius: 12,
+            padding: '0.5rem 0.85rem', fontWeight: 800, fontSize: '0.78rem',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
+            boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+          }}
+        >
+          {gpsLocalAtivo
+            ? posGpsLocal
+              ? <>📡 <span>GPS ativo · toque para centralizar</span></>
+              : <>⏳ <span>Obtendo GPS…</span></>
+            : <>📡 <span>Ativar minha localização</span></>
+          }
+        </button>
 
       <div className="plan-mapa-container" style={{ borderRadius: 12, overflow: 'hidden' }}>
       <MapContainer
@@ -1059,6 +1163,7 @@ function MapaDetalhe({
         )}
         <MapClickHandler ativo={!!itemSelecionado} onClique={handleCliqueMapa} />
         <FlyToMe posicao={posicaoPropria} ativo={!!posicaoPropria} />
+        <FlyToGpsOnKey posicao={posGpsLocal} flyKey={gpsFlyKey} />
         {plano.lat && plano.lng && (
           <Marker position={[plano.lat, plano.lng]} icon={criarIconePrincipal()}>
             <Popup><strong>{plano.nome}</strong><br />📍 Local principal</Popup>
@@ -1139,6 +1244,49 @@ function MapaDetalhe({
             )}
           </Marker>
         )}
+
+        {/* Marcador GPS local (botão de localização independente de prontidão) */}
+        {gpsLocalAtivo && posGpsLocal && !posicaoPropria && (
+          <>
+            <Marker position={[posGpsLocal.lat, posGpsLocal.lng]} icon={criarIconeEu(nomeProprio || 'Você')}>
+              <Popup>
+                <div style={{ textAlign: 'center', minWidth: 120 }}>
+                  <div style={{ fontSize: '1.2rem' }}>📡</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem' }}>{nomeProprio || 'Você'}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#1a4b8c', fontWeight: 600, marginTop: 2 }}>📍 Localização real (GPS ativo)</div>
+                  {posGpsLocal.precisao > 0 && posGpsLocal.precisao < 500 && (
+                    <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: 1 }}>±{Math.round(posGpsLocal.precisao)}m</div>
+                  )}
+                  <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginTop: 2, fontFamily: 'monospace' }}>
+                    {posGpsLocal.lat.toFixed(5)}, {posGpsLocal.lng.toFixed(5)}
+                  </div>
+                </div>
+              </Popup>
+            </Marker>
+            {posGpsLocal.precisao > 0 && posGpsLocal.precisao < 300 && (
+              <Circle center={[posGpsLocal.lat, posGpsLocal.lng]} radius={posGpsLocal.precisao}
+                pathOptions={{ color: '#2563eb', fillColor: '#2563eb', fillOpacity: 0.12, weight: 1.5 }} />
+            )}
+          </>
+        )}
+
+        {/* Marcadores de fotos geolocadas */}
+        {(fotosGeolocadas ?? []).filter(f => f.lat != null && f.lng != null).map(f => (
+          <Marker key={f.id} position={[f.lat!, f.lng!]} icon={criarIconeFoto(f.thumb || f.foto)}>
+            <Popup>
+              <div style={{ textAlign: 'center', minWidth: 150 }}>
+                <img src={f.foto} alt="foto" style={{ width: 130, height: 130, objectFit: 'cover', borderRadius: 8, marginBottom: 6, display: 'block', margin: '0 auto 6px' }} />
+                <div style={{ fontSize: '0.72rem', color: '#1a4b8c', fontWeight: 700, fontFamily: 'monospace' }}>
+                  📍 {f.lat!.toFixed(5)}, {f.lng!.toFixed(5)}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#374151', marginTop: 2 }}>🧑‍🚒 {f.agente}</div>
+                <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginTop: 1 }}>
+                  {new Date(f.timestamp).toLocaleString('pt-BR')}
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
       </MapContainer>
 
       {(agProntidao.size > 0 || posicoesPront.size > 0) && (
@@ -1503,6 +1651,47 @@ function exportarPDF(plano: Plano) {
     ? `${plano.lat.toFixed(5)}, ${plano.lng.toFixed(5)}`
     : plano.local || '—'
 
+  const todasFotos = (plano.fotosEvento ?? []).map(f => ({
+    src: typeof f === 'string' ? f : f.foto,
+    lat: typeof f !== 'string' ? f.lat : null,
+    lng: typeof f !== 'string' ? f.lng : null,
+    agente: typeof f !== 'string' ? f.agente : null,
+    timestamp: typeof f !== 'string' ? f.timestamp : null,
+  }))
+
+  const fotosPaginasHtml = todasFotos.length === 0 ? '' : (() => {
+    const paginas: string[] = []
+    for (let i = 0; i < todasFotos.length; i += 4) {
+      const lote = todasFotos.slice(i, i + 4)
+      const numPag = Math.floor(i / 4) + 3
+      paginas.push(`
+        <div style="page-break-before:always;padding:20px 24px">
+          <div style="border-bottom:3px solid #1a4b8c;padding-bottom:10px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div style="font-size:16px;font-weight:800;color:#1a4b8c">📸 Fotos do Evento — Página ${numPag}</div>
+              <div style="font-size:11px;color:#6b7280">${plano.nome} — Defesa Civil Ouro Branco</div>
+            </div>
+            <div style="font-size:10px;color:#9ca3af">Fotos ${i + 1}–${Math.min(i + 4, todasFotos.length)} de ${todasFotos.length}</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
+            ${lote.map((f, fi) => `
+              <div style="background:#f8fafc;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;break-inside:avoid">
+                <img src="${f.src}" style="width:100%;height:200px;object-fit:cover;display:block"/>
+                <div style="padding:8px 10px;font-size:10px;color:#374151">
+                  <div style="font-weight:700;margin-bottom:3px;font-size:11px">Foto ${i + fi + 1}</div>
+                  ${f.agente ? `<div style="margin-bottom:1px">🧑‍🚒 ${f.agente}</div>` : ''}
+                  ${f.lat != null && f.lng != null ? `<div style="color:#1a4b8c;margin-bottom:1px">📍 ${(f.lat as number).toFixed(5)}, ${(f.lng as number).toFixed(5)}</div>` : '<div style="color:#9ca3af">📍 Sem localização GPS</div>'}
+                  ${f.timestamp ? `<div style="color:#9ca3af">${new Date(f.timestamp as number).toLocaleString('pt-BR')}</div>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `)
+    }
+    return paginas.join('')
+  })()
+
   const html = `<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="UTF-8">
 <title>${plano.nome} — Defesa Civil Ouro Branco</title>
@@ -1639,6 +1828,8 @@ ${(plano.lat && plano.lng) || plano.itensMapa.length > 0 || (plano.pontosExtras 
 <\/script>
 </div>
 ` : `<script>setTimeout(function(){window.print();},1800)<\/script>`}
+
+${fotosPaginasHtml}
 
 </body></html>`
 
@@ -2316,6 +2507,7 @@ function DetalheP({
   const [carregandoFotos, setCarregandoFotos] = useState(false)
   const [exportandoExcel, setExportandoExcel] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const fileInputCameraRef = useRef<HTMLInputElement>(null)
   const meuNomeAgente = getNomeAgenteGlobal()
 
   // Sincroniza confirmações em tempo real quando outro agente confirma (via WS → parent → prop)
@@ -2375,6 +2567,55 @@ function DetalheP({
       }
     } finally {
       setCarregandoFotos(false)
+    }
+  }
+
+  async function capturarFotoComGPS(files: FileList | null) {
+    if (!files || files.length === 0) return
+    setCarregandoFotos(true)
+    try {
+      let lat: number | null = null
+      let lng: number | null = null
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 6000 })
+        )
+        lat = pos.coords.latitude
+        lng = pos.coords.longitude
+      } catch { /* GPS indisponível — salva sem localização */ }
+
+      const novas: FotoGeolocada[] = []
+      for (const file of Array.from(files)) {
+        const b64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = (e) => resolve(e.target?.result as string)
+          reader.readAsDataURL(file)
+        })
+        const thumb = await criarThumbnail(b64, 120)
+        novas.push({
+          id: gerarId(),
+          foto: b64,
+          thumb,
+          lat,
+          lng,
+          agente: meuNomeAgente || 'Agente',
+          timestamp: Date.now(),
+        })
+      }
+      const res = await fetch(`/api/planejamentos/${planoLocal.id}/fotos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fotos: novas }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const atualizado = { ...planoLocal, fotosEvento: data.fotos }
+        setPlanoLocal(atualizado)
+        onAtualizar(atualizado)
+      }
+    } finally {
+      setCarregandoFotos(false)
+      if (fileInputCameraRef.current) fileInputCameraRef.current.value = ''
     }
   }
 
@@ -2729,53 +2970,91 @@ function DetalheP({
             </span>
           </div>
           <div style={{ padding: '0.5rem 0.75rem' }}>
+            {/* Input galeria (múltiplas) */}
             <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
               multiple
               style={{ display: 'none' }}
-              onChange={e => adicionarFotosEvento(e.target.files)}
+              onChange={e => { adicionarFotosEvento(e.target.files); if (fileInputRef.current) fileInputRef.current.value = '' }}
             />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={carregandoFotos}
-              style={{
-                background: carregandoFotos ? '#e5e7eb' : '#1a4b8c', color: 'white',
-                border: 'none', borderRadius: 20, padding: '0.35rem 1rem',
-                fontSize: '0.8rem', fontWeight: 700, cursor: carregandoFotos ? 'wait' : 'pointer',
-                display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem',
-              }}
-            >
-              {carregandoFotos ? '⏳ Enviando...' : '📷 Adicionar fotos'}
-            </button>
+            {/* Input câmera (captura direta) */}
+            <input
+              ref={fileInputCameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: 'none' }}
+              onChange={e => { capturarFotoComGPS(e.target.files) }}
+            />
+
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => fileInputCameraRef.current?.click()}
+                disabled={carregandoFotos}
+                style={{
+                  background: carregandoFotos ? '#e5e7eb' : 'linear-gradient(135deg,#065f46,#059669)',
+                  color: 'white', border: 'none', borderRadius: 20,
+                  padding: '0.38rem 1rem', fontSize: '0.8rem', fontWeight: 700,
+                  cursor: carregandoFotos ? 'wait' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '0.4rem',
+                }}
+              >
+                {carregandoFotos ? '⏳' : '📷'} Câmera + GPS
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={carregandoFotos}
+                style={{
+                  background: carregandoFotos ? '#e5e7eb' : '#1a4b8c',
+                  color: 'white', border: 'none', borderRadius: 20,
+                  padding: '0.38rem 1rem', fontSize: '0.8rem', fontWeight: 700,
+                  cursor: carregandoFotos ? 'wait' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '0.4rem',
+                }}
+              >
+                🖼️ Galeria
+              </button>
+            </div>
 
             {(planoLocal.fotosEvento ?? []).length === 0
               ? <div style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', padding: '0.5rem 0' }}>Nenhuma foto registrada ainda</div>
               : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '0.4rem' }}>
-                  {(planoLocal.fotosEvento ?? []).map((foto, idx) => (
-                    <div key={idx} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '1', background: '#f1f5f9' }}>
-                      <img
-                        src={foto}
-                        alt={`Foto ${idx + 1}`}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                        loading="lazy"
-                      />
-                      <button
-                        onClick={() => removerFotoEvento(idx)}
-                        style={{
-                          position: 'absolute', top: 2, right: 2,
-                          background: 'rgba(220,38,38,0.85)', color: 'white',
-                          border: 'none', borderRadius: '50%', width: 22, height: 22,
-                          fontSize: '0.65rem', fontWeight: 900, cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          lineHeight: 1,
-                        }}
-                        title="Remover foto"
-                      >✕</button>
-                    </div>
-                  ))}
+                  {(planoLocal.fotosEvento ?? []).map((fotoItem, idx) => {
+                    const src = typeof fotoItem === 'string' ? fotoItem : fotoItem.foto
+                    const temGps = typeof fotoItem !== 'string' && fotoItem.lat != null
+                    return (
+                      <div key={idx} style={{ position: 'relative', borderRadius: 8, overflow: 'hidden', aspectRatio: '1', background: '#f1f5f9' }}>
+                        <img
+                          src={src}
+                          alt={`Foto ${idx + 1}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          loading="lazy"
+                        />
+                        {temGps && (
+                          <div style={{
+                            position: 'absolute', bottom: 2, left: 2,
+                            background: 'rgba(26,75,140,0.85)', color: 'white',
+                            borderRadius: 4, padding: '1px 4px', fontSize: '0.58rem', fontWeight: 700,
+                          }}>📍</div>
+                        )}
+                        <button
+                          onClick={() => removerFotoEvento(idx)}
+                          style={{
+                            position: 'absolute', top: 2, right: 2,
+                            background: 'rgba(220,38,38,0.85)', color: 'white',
+                            border: 'none', borderRadius: '50%', width: 22, height: 22,
+                            fontSize: '0.65rem', fontWeight: 900, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            lineHeight: 1,
+                          }}
+                          title="Remover foto"
+                        >✕</button>
+                      </div>
+                    )
+                  })}
                 </div>
               )
             }
@@ -2798,6 +3077,9 @@ function DetalheP({
             onRemoverItem={removerItem}
             posicaoPropria={emProntidao && estadoGps.posicao ? estadoGps.posicao : null}
             nomeProprio={getNomeAgenteGlobal()}
+            fotosGeolocadas={(planoLocal.fotosEvento ?? []).filter(
+              (f): f is FotoGeolocada => typeof f === 'object' && f !== null && 'foto' in f && f.lat != null
+            )}
           />
         </div>
 
