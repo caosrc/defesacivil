@@ -2524,6 +2524,9 @@ function DetalheP({
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [salvandoAuto, setSalvandoAuto] = useState(false)
   const pendentesRef = useRef<(() => Promise<void>)[]>([])
+  // fotosRef mantém o array atualizado de forma SÍNCRONA para evitar race condition
+  // quando várias fotos são tiradas rapidamente (planoLocal.fotosEvento fica stale no closure React)
+  const fotosRef = useRef<(string | FotoGeolocada)[]>(plano.fotosEvento ?? [])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const fileInputCameraRef = useRef<HTMLInputElement>(null)
   const meuNomeAgente = getNomeAgenteGlobal()
@@ -2544,7 +2547,12 @@ function DetalheP({
     return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline) }
   }, [])
 
-  // Supabase Realtime — atualiza em tempo real quando outro agente edita essa operação
+  // Supabase Realtime — atualiza em tempo real quando OUTRO agente edita essa operação.
+  // Não sobrescreve fotos_evento se o agente local está ativamente capturando fotos
+  // (carregandoFotos=true), pois isso causaria perda de fotos recém-tiradas.
+  const carregandoFotosRef = useRef(false)
+  useEffect(() => { carregandoFotosRef.current = carregandoFotos }, [carregandoFotos])
+
   useEffect(() => {
     if (!supabaseDisponivel) return
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -2554,8 +2562,16 @@ function DetalheP({
         (payload: { new: Record<string, unknown> }) => {
           if (!payload.new) return
           const atualizado = sbParaPlano(payload.new)
-          setPlanoLocal(atualizado)
-          onAtualizar(atualizado)
+          // Se estamos capturando fotos, preserva as fotos locais (em fotosRef) e só atualiza o resto
+          if (carregandoFotosRef.current) {
+            setPlanoLocal(prev => ({ ...atualizado, fotosEvento: fotosRef.current.length > 0 ? fotosRef.current : prev.fotosEvento }))
+            onAtualizar({ ...atualizado, fotosEvento: fotosRef.current.length > 0 ? fotosRef.current : atualizado.fotosEvento ?? [] })
+          } else {
+            // Atualiza fotosRef com o que veio do banco (de outro agente)
+            fotosRef.current = atualizado.fotosEvento ?? []
+            setPlanoLocal(atualizado)
+            onAtualizar(atualizado)
+          }
         }
       )
       .subscribe()
@@ -2610,6 +2626,29 @@ function DetalheP({
     }
   }
 
+  // Comprime uma foto base64 para no máximo maxW pixels de largura antes de salvar no banco.
+  // Evita falha no Supabase PostgREST por payload > 10 MB (fotos de câmera chegam a 4-8 MB cada).
+  async function comprimirFotoEvento(dataUrl: string, maxW = 1280, qualidade = 0.72): Promise<string> {
+    if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl
+    return new Promise(resolve => {
+      const img = new Image()
+      img.onload = () => {
+        let { width, height } = img
+        if (width > maxW) { height = Math.round(height * maxW / width); width = maxW }
+        try {
+          const canvas = document.createElement('canvas')
+          canvas.width = width; canvas.height = height
+          const ctx = canvas.getContext('2d')
+          if (!ctx) { resolve(dataUrl); return }
+          ctx.drawImage(img, 0, 0, width, height)
+          resolve(canvas.toDataURL('image/jpeg', qualidade))
+        } catch { resolve(dataUrl) }
+      }
+      img.onerror = () => resolve(dataUrl)
+      img.src = dataUrl
+    })
+  }
+
   async function adicionarFotosEvento(files: FileList | null) {
     if (!files || files.length === 0) return
     setCarregandoFotos(true)
@@ -2621,9 +2660,11 @@ function DetalheP({
           reader.onload = (e) => resolve(e.target?.result as string)
           reader.readAsDataURL(file)
         })
-        novas.push(b64)
+        novas.push(await comprimirFotoEvento(b64))
       }
-      const todasFotos: (string | FotoGeolocada)[] = [...(planoLocal.fotosEvento ?? []), ...novas]
+      // Usa fotosRef.current (sempre atualizado) em vez de planoLocal.fotosEvento (pode estar stale)
+      const todasFotos: (string | FotoGeolocada)[] = [...fotosRef.current, ...novas]
+      fotosRef.current = todasFotos  // Atualiza ref IMEDIATAMENTE (síncrono — sem race condition)
       // 1) Salva no servidor PRIMEIRO (antes de qualquer broadcast)
       const salvar = () => persistirFotos(todasFotos)
       if (!navigator.onLine) {
@@ -2631,7 +2672,7 @@ function DetalheP({
       } else {
         try { await salvar() } catch { pendentesRef.current.push(salvar) }
       }
-      // 2) Atualiza estado local e pai depois do save (sem race condition)
+      // 2) Atualiza estado local e pai depois do save
       const atualizado = { ...planoLocal, fotosEvento: todasFotos }
       setPlanoLocal(atualizado)
       onAtualizar(atualizado)
@@ -2661,13 +2702,17 @@ function DetalheP({
           reader.onload = (e) => resolve(e.target?.result as string)
           reader.readAsDataURL(file)
         })
-        const thumb = await criarThumbnail(b64, 120)
+        // Comprime a foto completa (evita payload > 10 MB no Supabase) e gera thumb
+        const fotoComprimida = await comprimirFotoEvento(b64)
+        const thumb = await criarThumbnail(fotoComprimida, 120)
         novas.push({
-          id: gerarId(), foto: b64, thumb, lat, lng,
+          id: gerarId(), foto: fotoComprimida, thumb, lat, lng,
           agente: meuNomeAgente || 'Agente', timestamp: Date.now(),
         })
       }
-      const todasFotos: (string | FotoGeolocada)[] = [...(planoLocal.fotosEvento ?? []), ...novas]
+      // Usa fotosRef.current (sempre atualizado) em vez de planoLocal.fotosEvento (pode estar stale)
+      const todasFotos: (string | FotoGeolocada)[] = [...fotosRef.current, ...novas]
+      fotosRef.current = todasFotos  // Atualiza ref IMEDIATAMENTE (síncrono — sem race condition)
       // 1) Salva no servidor PRIMEIRO — BD atualizado antes de qualquer broadcast
       const salvar = () => persistirFotos(todasFotos)
       if (!navigator.onLine) {
@@ -2686,7 +2731,8 @@ function DetalheP({
   }
 
   async function removerFotoEvento(idx: number) {
-    const todasFotos = (planoLocal.fotosEvento ?? []).filter((_, i) => i !== idx)
+    const todasFotos = fotosRef.current.filter((_, i) => i !== idx)
+    fotosRef.current = todasFotos  // Atualiza ref imediatamente
     // 1) Salva no servidor PRIMEIRO via PUT (substitui array completo)
     const salvar = () => persistirFotos(todasFotos)
     if (!navigator.onLine) {
