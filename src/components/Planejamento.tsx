@@ -276,6 +276,14 @@ const STATUS_CONFIG: Record<StatusPlano, { label: string; emoji: string; classe:
   cancelado: { label: 'Cancelado',  emoji: '❌', classe: 'cancelado' },
 }
 
+// Título da seção de fotos no PDF/Excel — varia conforme o tipo do planejamento
+const LABEL_FOTOS_TIPO: Record<TipoPlano, string> = {
+  evento:     'Fotos do Evento',
+  operacao:   'Fotos da Operação',
+  simulado:   'Fotos do Simulado',
+  emergencia: 'Fotos do Emergencial',
+}
+
 const ITENS_POSICIONAR = [
   { tipo: 'tenda',       emoji: '⛺', label: 'Tenda' },
   { tipo: 'barraca',     emoji: '🏕️', label: 'Barraca' },
@@ -820,6 +828,15 @@ function MapaPickerModal({
 }
 
 // ── Mapa do detalhe (com itens posicionáveis) ───────────────────────────
+// Rastreia a posição atual do mapa e chama o callback quando muda
+function MapViewTracker({ onChange }: { onChange: (center: [number, number], zoom: number) => void }) {
+  const map = useMapEvents({
+    moveend: () => { const c = map.getCenter(); onChange([c.lat, c.lng], map.getZoom()) },
+    zoomend: () => { const c = map.getCenter(); onChange([c.lat, c.lng], map.getZoom()) },
+  })
+  return null
+}
+
 function MapaDetalhe({
   plano,
   onAdicionarItem,
@@ -828,6 +845,7 @@ function MapaDetalhe({
   nomeProprio,
   fotosGeolocadas,
   onEditarFotoCoords,
+  onViewChange,
 }: {
   plano: Plano
   onAdicionarItem: (item: ItemMapa) => void
@@ -836,6 +854,7 @@ function MapaDetalhe({
   nomeProprio?: string
   fotosGeolocadas?: FotoGeolocada[]
   onEditarFotoCoords?: (foto: FotoGeolocada) => void
+  onViewChange?: (center: [number, number], zoom: number) => void
 }) {
   const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
   const [secaoAberta, setSecaoAberta] = useState<'orgaos'|'agentes'|'materiais'|'icones'|null>('icones')
@@ -1216,6 +1235,7 @@ function MapaDetalhe({
           </Marker>
         ))}
         <MapInvalidateSize trigger={itemSelecionado} />
+        {onViewChange && <MapViewTracker onChange={onViewChange} />}
         {plano.itensMapa.map(item => (
           <Marker
             key={item.id}
@@ -1656,7 +1676,7 @@ function OrgaosPanel({ selecionados, onChange }: { selecionados: string[]; onCha
 }
 
 // ── Exportação PDF ──────────────────────────────────────────────────────
-function exportarPDF(plano: Plano) {
+function exportarPDF(plano: Plano, mapCenter?: [number, number], mapZoom?: number) {
   const cfg = TIPOS_CONFIG[plano.tipo]
   const sc = STATUS_CONFIG[plano.status]
   const rc = RISCO_CONFIG[plano.risco]
@@ -1715,7 +1735,7 @@ function exportarPDF(plano: Plano) {
         <div style="page-break-before:always;padding:20px 24px">
           <div style="border-bottom:3px solid #1a4b8c;padding-bottom:10px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between">
             <div>
-              <div style="font-size:16px;font-weight:800;color:#1a4b8c">📸 Fotos do Evento — Página ${numPag}</div>
+              <div style="font-size:16px;font-weight:800;color:#1a4b8c">📸 ${LABEL_FOTOS_TIPO[plano.tipo]} — Página ${numPag}</div>
               <div style="font-size:11px;color:#6b7280">${plano.nome} — Defesa Civil Ouro Branco</div>
             </div>
             <div style="font-size:10px;color:#9ca3af">Fotos ${i + 1}–${Math.min(i + 4, todasFotos.length)} de ${todasFotos.length}</div>
@@ -1880,10 +1900,13 @@ ${(plano.lat && plano.lng) || plano.itensMapa.length > 0 || (plano.pontosExtras 
   bounds.push([${foto.lat},${foto.lng}]);
       `
     }).join('')}
-  if(bounds.length > 0) {
+  ${mapCenter && mapZoom != null
+    ? `map.setView([${mapCenter[0]},${mapCenter[1]}], ${mapZoom});`
+    : `if(bounds.length > 0) {
     if(bounds.length === 1) { map.setView(bounds[0], 15); }
     else { map.fitBounds(bounds, {padding:[50,50]}); }
-  } else { map.setView([-20.5195,-43.6983], 13); }
+  } else { map.setView([-20.5195,-43.6983], 13); }`
+  }
   var _printed = false;
   function _doPrint() { if(_printed) return; _printed=true; setTimeout(function(){ window.print(); }, 600); }
   map.on('load', _doPrint);
@@ -2522,7 +2545,7 @@ async function exportarEventoExcel(plano: Plano) {
   const fotos = plano.fotosEvento ?? []
   if (fotos.length > 0) {
     ws.addRow([''])
-    const rSec3 = ws.addRow([`📸 FOTOS DO EVENTO (${fotos.length})`, ''])
+    const rSec3 = ws.addRow([`📸 ${(LABEL_FOTOS_TIPO[plano.tipo] ?? 'Fotos').toUpperCase()} (${fotos.length})`, ''])
     ws.mergeCells(`A${rSec3.number}:B${rSec3.number}`)
     Object.assign(rSec3.getCell(1), estiloSecao)
     ws.addRow([''])
@@ -2583,6 +2606,9 @@ function DetalheP({
   const fotosRef = useRef<(string | FotoGeolocada)[]>(plano.fotosEvento ?? [])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const fileInputCameraRef = useRef<HTMLInputElement>(null)
+  // Viewport atual do mapa — atualizado pelo MapViewTracker quando o usuário move/dá zoom
+  const mapCenterRef = useRef<[number, number] | undefined>(undefined)
+  const mapZoomRef = useRef<number | undefined>(undefined)
   const meuNomeAgente = getNomeAgenteGlobal()
 
   // Ao montar o componente: carrega fotos pendentes do IndexedDB e mescla com as do servidor
@@ -3044,7 +3070,7 @@ function DetalheP({
         <div className="plan-detalhe-acoes">
           <button
             className="plan-detalhe-btn-acao"
-            onClick={() => exportarPDF(planoLocal)}
+            onClick={() => exportarPDF(planoLocal, mapCenterRef.current, mapZoomRef.current)}
             title="Exportar PDF"
             style={{ fontSize: '1rem' }}
           >📄</button>
@@ -3361,6 +3387,7 @@ function DetalheP({
               (f): f is FotoGeolocada => typeof f === 'object' && f !== null && 'foto' in f && f.lat != null
             )}
             onEditarFotoCoords={abrirEditarFoto}
+            onViewChange={(center, zoom) => { mapCenterRef.current = center; mapZoomRef.current = zoom }}
           />
 
           {/* ── Galeria de fotos abaixo do mapa ── */}
