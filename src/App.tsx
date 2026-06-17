@@ -12,6 +12,7 @@ import { registrarPushSeNecessario, pedirPermissaoEInscrever, getStatusNotificac
 import AgentesOnline from './components/AgentesOnline'
 import BotaoSos from './components/BotaoSos'
 import BannerNotifSos from './components/BannerNotifSos'
+import BannerConvocacao from './components/BannerConvocacao'
 import { cacheOcorrencias, getCachedOcorrencias, getPending, removePending, countPending, clearAllPending } from './offline'
 
 interface EquipamentoCampoMapa {
@@ -744,6 +745,8 @@ export default function App() {
           }}
         />
       )}
+
+      {logado && <BannerConvocacao />}
 
       {aba === 'lista' && (
         <div className="resumo-strip">

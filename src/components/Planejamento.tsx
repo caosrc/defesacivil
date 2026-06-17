@@ -2684,8 +2684,10 @@ function DetalheP({
                       fontWeight: (eEu || conf?.confirmado) ? 700 : 400,
                       color: conf?.confirmado ? '#059669' : '#1f2937',
                     }}>{ag}{eEu ? ' (você)' : ''}</span>
-                    {conf?.confirmado
-                      ? <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, background: '#d1fae5', borderRadius: 10, padding: '0.1rem 0.5rem' }}>✅ Confirmado</span>
+                    {conf
+                      ? conf.confirmado
+                        ? <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 700, background: '#d1fae5', borderRadius: 10, padding: '0.1rem 0.5rem' }}>✅ Confirmado</span>
+                        : <span style={{ fontSize: '0.72rem', color: '#dc2626', fontWeight: 700, background: '#fee2e2', borderRadius: 10, padding: '0.1rem 0.5rem' }}>❌ Recusou</span>
                       : <span style={{ fontSize: '0.72rem', color: '#b45309', fontWeight: 600, background: '#fef9c3', borderRadius: 10, padding: '0.1rem 0.5rem' }}>⏳ Aguardando</span>
                     }
                   </div>

@@ -1052,11 +1052,13 @@ app.post('/api/planejamentos/:id/confirmar', async (req, res) => {
     else confirmacoes.push(entrada)
     await query('UPDATE planejamentos SET confirmacoes_agentes = $1 WHERE id = $2', [JSON.stringify(confirmacoes), id])
     broadcastParaTodos({ tipo: 'planejamentos_atualizados' })
-    if (confirmado && criador) {
+    if (criador) {
       const planoNome = result.rows[0].nome || 'Planejamento'
       const payload = JSON.stringify({
-        title: '✅ Presença confirmada',
-        body: `${agente} confirmou presença em: ${planoNome}`,
+        title: confirmado ? '✅ Presença confirmada' : '❌ Presença recusada',
+        body: confirmado
+          ? `${agente} confirmou presença em: ${planoNome}`
+          : `${agente} não poderá comparecer em: ${planoNome}`,
         tag: `confirmacao-${id}-${agente.replace(/\s+/g, '-')}`,
         tipo: 'confirmacao',
         url: '/',
