@@ -1054,9 +1054,24 @@ function MapaDetalhe({
                     {(plano.agentesDefesaCivil ?? []).map(ag => {
                       const key = `agente:${ag}`
                       const ativo = itemSelecionado === key
+                      const conf = (plano.confirmacoes ?? []).find(c => c.agente === ag || c.agente.split(' ')[0] === ag.split(' ')[0])
+                      const confirmado = conf?.confirmado === true
+                      const recusou = conf !== undefined && conf.confirmado === false
                       return (
-                        <button key={ag} onClick={() => setItemSelecionado(ativo ? null : key)} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: ativo ? '#059669' : '#dcfce7', color: ativo ? 'white' : '#166534', border: ativo ? '1.5px solid #059669' : '1.5px solid #bbf7d0', borderRadius: 20, padding: '0.22rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', boxShadow: ativo ? '0 0 0 2px #6ee7b7' : 'none' }}>
-                          <span style={{ fontSize: '0.88rem' }}>🧑‍🚒</span>{ag}{ativo && <span style={{ fontSize: '0.6rem' }}>📍</span>}
+                        <button key={ag} onClick={() => setItemSelecionado(ativo ? null : key)} style={{
+                          display: 'flex', alignItems: 'center', gap: '0.25rem',
+                          background: ativo ? '#059669' : confirmado ? '#d1fae5' : recusou ? '#fee2e2' : '#dcfce7',
+                          color: ativo ? 'white' : confirmado ? '#065f46' : recusou ? '#991b1b' : '#166534',
+                          border: ativo ? '1.5px solid #059669' : confirmado ? '1.5px solid #6ee7b7' : recusou ? '1.5px solid #fca5a5' : '1.5px solid #bbf7d0',
+                          borderRadius: 20, padding: '0.22rem 0.6rem', fontSize: '0.75rem', fontWeight: 700,
+                          cursor: 'pointer', boxShadow: ativo ? '0 0 0 2px #6ee7b7' : 'none',
+                        }}>
+                          <span style={{ fontSize: '0.88rem' }}>🧑‍🚒</span>
+                          {ag}
+                          {confirmado && <span style={{ fontSize: '0.7rem' }}>✅</span>}
+                          {recusou && <span style={{ fontSize: '0.7rem' }}>❌</span>}
+                          {!conf && <span style={{ fontSize: '0.62rem', opacity: 0.6 }}>⏳</span>}
+                          {ativo && <span style={{ fontSize: '0.6rem' }}>📍</span>}
                         </button>
                       )
                     })}
