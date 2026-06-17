@@ -3026,15 +3026,52 @@ function DetalheP({
         <input ref={fileInputCameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
           onChange={e => { capturarFotoComGPS(e.target.files) }} />
 
-        {/* ── Órgãos + Agentes + Materiais + Mapa (integrado) ── */}
+        {/* ── Órgãos + Agentes + Materiais + Mapa + Fotos (integrado) ── */}
         <div className="plan-detalhe-card" style={{ overflow: 'visible' }}>
-          <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#123b73,#1a6bbf)', color: 'white', border: 'none' }}>
-            🗺️ Equipe, Recursos e Mapa
+          <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#123b73,#1a6bbf)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span>🗺️ Equipe, Recursos e Mapa</span>
             {planoLocal.itensMapa.length > 0 && (
-              <span style={{ marginLeft: 'auto', fontWeight: 600, fontSize: '0.72rem', color: 'rgba(255,255,255,0.85)' }}>
-                {planoLocal.itensMapa.length} {planoLocal.itensMapa.length === 1 ? 'item' : 'itens'} no mapa
+              <span style={{ fontWeight: 600, fontSize: '0.72rem', color: 'rgba(255,255,255,0.85)' }}>
+                · {planoLocal.itensMapa.length} {planoLocal.itensMapa.length === 1 ? 'item' : 'itens'}
               </span>
             )}
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+              {salvandoAuto && <span style={{ fontSize: '0.62rem', opacity: 0.8 }}>⟳</span>}
+              {!isOnline && pendentesRef.current.length > 0 && (
+                <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '1px 6px', fontSize: '0.62rem', fontWeight: 700 }}>
+                  📶{pendentesRef.current.length}
+                </span>
+              )}
+              <button
+                onClick={() => fileInputCameraRef.current?.click()}
+                disabled={carregandoFotos}
+                title="Tirar foto com GPS"
+                style={{
+                  background: carregandoFotos ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.18)',
+                  color: 'white', border: '1.5px solid rgba(255,255,255,0.5)', borderRadius: 20,
+                  padding: '0.28rem 0.75rem', fontSize: '0.78rem', fontWeight: 700,
+                  cursor: carregandoFotos ? 'wait' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '0.3rem',
+                  backdropFilter: 'blur(4px)',
+                }}
+              >
+                {carregandoFotos ? '⏳' : '📷'} Câmera
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={carregandoFotos}
+                title="Carregar foto da galeria"
+                style={{
+                  background: 'rgba(255,255,255,0.12)',
+                  color: 'white', border: '1.5px solid rgba(255,255,255,0.35)', borderRadius: 20,
+                  padding: '0.28rem 0.75rem', fontSize: '0.78rem', fontWeight: 700,
+                  cursor: carregandoFotos ? 'wait' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: '0.3rem',
+                }}
+              >
+                🖼️ Galeria
+              </button>
+            </div>
           </div>
           <MapaDetalhe
             plano={planoLocal}
@@ -3046,66 +3083,22 @@ function DetalheP({
               (f): f is FotoGeolocada => typeof f === 'object' && f !== null && 'foto' in f && f.lat != null
             )}
           />
-        </div>
 
-        {/* ── Fotos de Campo ── */}
-        <div className="plan-detalhe-card">
-          <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#78350f,#b45309)', color: 'white', border: 'none' }}>
-            📸 Fotos de Campo
-            <span style={{ marginLeft: 'auto', fontSize: '0.72rem', fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>
-              {(planoLocal.fotosEvento ?? []).length} foto(s)
-              {salvandoAuto && <span style={{ marginLeft: '0.4rem', opacity: 0.8 }}>⟳ salvando...</span>}
-              {!isOnline && pendentesRef.current.length > 0 && (
-                <span style={{ marginLeft: '0.4rem', background: '#fef3c7', color: '#92400e', borderRadius: 8, padding: '1px 6px', fontSize: '0.65rem' }}>
-                  📶 {pendentesRef.current.length} pendente(s)
-                </span>
-              )}
-            </span>
-          </div>
-          <div style={{ padding: '0.6rem 0.75rem' }}>
-            {/* Botões de captura */}
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-              <button
-                onClick={() => fileInputCameraRef.current?.click()}
-                disabled={carregandoFotos}
-                style={{
-                  background: carregandoFotos ? '#e5e7eb' : 'linear-gradient(135deg,#065f46,#059669)',
-                  color: 'white', border: 'none', borderRadius: 20,
-                  padding: '0.42rem 1.1rem', fontSize: '0.84rem', fontWeight: 700,
-                  cursor: carregandoFotos ? 'wait' : 'pointer',
-                  display: 'flex', alignItems: 'center', gap: '0.4rem',
-                }}
-              >
-                {carregandoFotos ? '⏳' : '📷'} Câmera + GPS
-              </button>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={carregandoFotos}
-                style={{
-                  background: carregandoFotos ? '#e5e7eb' : '#1a4b8c',
-                  color: 'white', border: 'none', borderRadius: 20,
-                  padding: '0.42rem 1.1rem', fontSize: '0.84rem', fontWeight: 700,
-                  cursor: carregandoFotos ? 'wait' : 'pointer',
-                  display: 'flex', alignItems: 'center', gap: '0.4rem',
-                }}
-              >
-                🖼️ Galeria
-              </button>
+          {/* ── Galeria de fotos abaixo do mapa ── */}
+          <div style={{ padding: '0.6rem 0.75rem', borderTop: '1.5px solid #e5e7eb' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#1a3a6b' }}>📸 Fotos registradas no campo</span>
+              <span style={{ background: '#dbeafe', color: '#1e3a8a', borderRadius: 10, padding: '1px 8px', fontSize: '0.68rem', fontWeight: 700 }}>
+                {(planoLocal.fotosEvento ?? []).length}
+              </span>
               {!isOnline && (
-                <span style={{
-                  display: 'flex', alignItems: 'center', gap: '0.3rem',
-                  background: '#fef3c7', color: '#92400e', borderRadius: 20,
-                  padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 700,
-                }}>
-                  📵 Offline — salvo localmente
-                </span>
+                <span style={{ fontSize: '0.68rem', color: '#b45309', fontWeight: 600 }}>📵 Offline</span>
               )}
             </div>
 
-            {/* Grade de fotos — 4 por linha */}
             {(planoLocal.fotosEvento ?? []).length === 0 ? (
-              <div style={{ fontSize: '0.82rem', color: '#9ca3af', textAlign: 'center', padding: '1rem 0' }}>
-                Nenhuma foto registrada ainda. Use 📷 Câmera + GPS para registrar com localização.
+              <div style={{ fontSize: '0.8rem', color: '#9ca3af', textAlign: 'center', padding: '1rem 0', background: '#f8fafc', borderRadius: 10 }}>
+                Nenhuma foto registrada. Toque em <strong>📷 Câmera</strong> para tirar uma foto com localização GPS, ou <strong>🖼️ Galeria</strong> para carregar da galeria.
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.45rem' }}>
@@ -3119,17 +3112,15 @@ function DetalheP({
                       <img
                         src={src}
                         alt={`Foto ${idx + 1}`}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'zoom-in' }}
                         loading="lazy"
                         onClick={() => window.open(src, '_blank')}
                       />
-                      {/* Número da foto */}
                       <div style={{
                         position: 'absolute', top: 2, left: 2,
                         background: 'rgba(0,0,0,0.55)', color: 'white',
                         borderRadius: 4, padding: '1px 5px', fontSize: '0.6rem', fontWeight: 800,
                       }}>{idx + 1}</div>
-                      {/* Badge GPS */}
                       {temGps && (
                         <div style={{
                           position: 'absolute', bottom: 2, left: 2,
@@ -3137,7 +3128,6 @@ function DetalheP({
                           borderRadius: 4, padding: '1px 4px', fontSize: '0.58rem', fontWeight: 700,
                         }}>📍GPS</div>
                       )}
-                      {/* Agente + hora */}
                       {(agente || ts) && (
                         <div style={{
                           position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -3149,7 +3139,6 @@ function DetalheP({
                           {ts && <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.48rem', lineHeight: 1.2 }}>{new Date(ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>}
                         </div>
                       )}
-                      {/* Botão remover */}
                       <button
                         onClick={() => removerFotoEvento(idx)}
                         style={{
