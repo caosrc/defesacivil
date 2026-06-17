@@ -6,7 +6,7 @@ import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES, get
 import { deletarOcorrencia, atualizarOcorrencia, buscarOcorrenciaCompleta } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
-import { formatarCoordenadas, parseDateLocal, mensagemErroGps, adicionarMarcaDagua } from '../utils'
+import { formatarCoordenadas, parseDateLocal, mensagemErroGps, adicionarMarcaDagua, salvarFotoNoDispositivo } from '../utils'
 import ModalSenha from './ModalSenha'
 import PoligonoAreaQueimada, { calcularAreaM2, formatarArea, type PontoPoligono } from './PoligonoAreaQueimada'
 import { calcularHorasTotal, calcularHorasOcorrenciaBanco, formatarHoras, carregarFeriadosCustom } from '../horasUtils'
@@ -221,6 +221,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
           if (ev.target?.result) {
             const resultado = await adicionarMarcaDagua(ev.target.result as string, o.lat ?? null, o.lng ?? null, 1280, 0.70, camera)
             setEFotos((prev) => [...prev, resultado])
+            if (camera) salvarFotoNoDispositivo(resultado)
           }
         } finally {
           setFotosCarregando((n) => Math.max(0, n - 1))
@@ -417,6 +418,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         if (ev.target?.result) {
           const resultado = await adicionarMarcaDagua(ev.target.result as string, o.lat, o.lng, 1280, 0.70, camera)
           setNovaVistoriaFotos((prev) => [...prev, resultado])
+          if (camera) salvarFotoNoDispositivo(resultado)
         }
       }
       reader.readAsDataURL(file)

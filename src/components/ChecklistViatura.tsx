@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { adicionarMarcaDagua } from '../utils'
+import { adicionarMarcaDagua, salvarFotoNoDispositivo } from '../utils'
 import { exportarChecklistExcel, type ChecklistExportData } from '../exportExcel'
 import ModalSenha from './ModalSenha'
 import { wsOn } from '../wsClient'
@@ -270,6 +270,7 @@ function FotoSlotH({ label, foto, onFoto, children }: FotoSlotHProps) {
         const redim = await redimensionarImagem(ev.target.result as string, 1200, 900)
         const comMarca = await adicionarMarcaDagua(redim)
         onFoto(comMarca)
+        salvarFotoNoDispositivo(comMarca)
       }
     }
     reader.readAsDataURL(file)
@@ -718,6 +719,7 @@ export default function ChecklistViatura() {
           const redim = await redimensionarImagem(ev.target.result as string, 1200, 900)
           const comMarca = await adicionarMarcaDagua(redim)
           setFotosAvarias(p => [...p, comMarca])
+          salvarFotoNoDispositivo(comMarca)
         }
       }
       reader.readAsDataURL(file)

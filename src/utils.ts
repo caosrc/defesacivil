@@ -138,3 +138,26 @@ export async function adicionarMarcaDagua(
     img.src = dataUrl
   })
 }
+
+// Salva a foto (base64) como arquivo no celular/dispositivo disparando um download.
+// Só chamar para fotos capturadas pela câmera — fotos da galeria já estão no celular.
+export async function salvarFotoNoDispositivo(dataUrl: string, prefixo = 'DefesaCivil-OB'): Promise<void> {
+  try {
+    const agora = new Date()
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const ts = `${agora.getFullYear()}${pad(agora.getMonth() + 1)}${pad(agora.getDate())}-${pad(agora.getHours())}${pad(agora.getMinutes())}${pad(agora.getSeconds())}`
+    const nomeArquivo = `${prefixo}-${ts}.jpg`
+    const res = await fetch(dataUrl)
+    const blob = await res.blob()
+    const blobUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = blobUrl
+    a.download = nomeArquivo
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 3000)
+  } catch {
+    // Nunca bloquear o fluxo principal se o save falhar
+  }
+}

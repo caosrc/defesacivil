@@ -8,6 +8,7 @@ import { wsOn, wsSend } from '../wsClient'
 import { ativarGps, desativarGps, subscribeGps, getEstadoGps, getDispositivoIdGlobal, getNomeAgenteGlobal } from '../gpsService'
 import { supabase, supabaseDisponivel } from '../supabaseClient'
 import { saveFotoCampoPendente, getFotosCampoPendentes, removeFotoCampoPendente, clearFotosCampoPendentesPlano } from '../offline'
+import { salvarFotoNoDispositivo } from '../utils'
 
 const ORGAOS_EMPENHO: { categoria: string; emoji: string; orgaos: { emoji: string; nome: string }[] }[] = [
   { categoria: 'Segurança Pública', emoji: '🚔', orgaos: [
@@ -2825,6 +2826,8 @@ function DetalheP({
         // Comprime: 800px / 70% qualidade → ~80-150 KB. Gera thumb para galeria.
         const fotoComprimida = await comprimirFotoEvento(b64)
         const thumb = await criarThumbnail(fotoComprimida, 120)
+        // Salva no celular em background (não bloqueia o fluxo)
+        salvarFotoNoDispositivo(fotoComprimida)
         const novaFoto: FotoGeolocada = {
           id: gerarId(), foto: fotoComprimida, thumb, lat, lng,
           agente: meuNomeAgente || 'Agente', timestamp: Date.now(), status: 'pendente',
