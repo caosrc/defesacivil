@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle } 
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { getAgenteLogado } from './Login'
-import { AGENTES } from '../types'
+import { AGENTES, getSenhaAgente } from '../types'
 import { wsOn, wsSend } from '../wsClient'
 import { ativarGps, desativarGps, subscribeGps, getEstadoGps, getDispositivoIdGlobal, getNomeAgenteGlobal } from '../gpsService'
 import { supabase, supabaseDisponivel } from '../supabaseClient'
@@ -1746,7 +1746,7 @@ function exportarPDF(plano: Plano, mapCenter?: [number, number], mapZoom?: numbe
           <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
             ${lote.map((f, fi) => `
               <div style="background:#f8fafc;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;break-inside:avoid">
-                <img src="${f.src}" style="width:100%;height:200px;object-fit:cover;display:block"/>
+                <img src="${f.src}" style="width:100%;max-height:300px;object-fit:contain;display:block;background:#000"/>
                 <div style="padding:8px 10px;font-size:10px;color:#374151">
                   <div style="font-weight:700;margin-bottom:3px;font-size:11px">Foto ${i + fi + 1}</div>
                   ${f.agente ? `<div style="margin-bottom:1px">🧑‍🚒 ${f.agente}</div>` : ''}
@@ -2610,6 +2610,10 @@ function DetalheP({
   })
   const [modalConclusao, setModalConclusao] = useState(false)
   const [textoConclusao, setTextoConclusao] = useState('')
+  const [modalSenha, setModalSenha] = useState(false)
+  const [senhaInput, setSenhaInput] = useState('')
+  const [senhaErro, setSenhaErro] = useState(false)
+  const acaoAposSenhaRef = useRef<(() => void) | null>(null)
   const pendentesRef = useRef<(() => Promise<void>)[]>([])
   // fotosRef mantém o array atualizado de forma SÍNCRONA para evitar race condition
   // quando várias fotos são tiradas rapidamente (planoLocal.fotosEvento fica stale no closure React)
@@ -2918,17 +2922,41 @@ function DetalheP({
     onAtualizar({ ...atualizado, fotosEvento: todasLimpas })
   }
 
+  function pedirSenhaParaExecutar(acao: () => void) {
+    const senhaEsperada = getSenhaAgente(meuNomeAgente) ?? 'dc-2026'
+    if (!senhaEsperada) { acao(); return }
+    acaoAposSenhaRef.current = acao
+    setSenhaInput('')
+    setSenhaErro(false)
+    setModalSenha(true)
+  }
+
+  function confirmarSenha() {
+    const senhaEsperada = getSenhaAgente(meuNomeAgente) ?? 'dc-2026'
+    if (senhaInput === senhaEsperada) {
+      setModalSenha(false)
+      setSenhaInput('')
+      setSenhaErro(false)
+      acaoAposSenhaRef.current?.()
+      acaoAposSenhaRef.current = null
+    } else {
+      setSenhaErro(true)
+    }
+  }
+
   // Abre o modal de edição de coordenadas inicializando os campos GMS com os valores atuais
   function abrirEditarFoto(foto: FotoGeolocada) {
-    setFotoEditando(foto)
-    if (foto.lat != null && foto.lng != null) {
-      const lat = decomporDecimalGMS(foto.lat, 'lat')
-      const lng = decomporDecimalGMS(foto.lng, 'lng')
-      setEditGms({
-        latG: String(lat.graus), latM: String(lat.minutos), latS: String(lat.segundos), latD: lat.direcao as 'N' | 'S',
-        lngG: String(lng.graus), lngM: String(lng.minutos), lngS: String(lng.segundos), lngD: lng.direcao as 'L' | 'O',
-      })
-    }
+    pedirSenhaParaExecutar(() => {
+      if (foto.lat != null && foto.lng != null) {
+        const lat = decomporDecimalGMS(foto.lat, 'lat')
+        const lng = decomporDecimalGMS(foto.lng, 'lng')
+        setEditGms({
+          latG: String(lat.graus), latM: String(lat.minutos), latS: String(lat.segundos), latD: lat.direcao as 'N' | 'S',
+          lngG: String(lng.graus), lngM: String(lng.minutos), lngS: String(lng.segundos), lngD: lng.direcao as 'L' | 'O',
+        })
+      }
+      setFotoEditando(foto)
+    })
   }
 
   async function salvarCoordenadasFoto() {
@@ -3107,7 +3135,7 @@ function DetalheP({
               try { await exportarEventoExcel(planoLocal) } finally { setExportandoExcel(false) }
             }}
           >{exportandoExcel ? '⏳' : '📊'}</button>
-          <button className="plan-detalhe-btn-acao" onClick={() => setEditando(true)} title="Editar">✏️</button>
+          <button className="plan-detalhe-btn-acao" onClick={() => pedirSenhaParaExecutar(() => setEditando(true))} title="Editar">✏️</button>
         </div>
       </div>
 
@@ -3471,24 +3499,13 @@ function DetalheP({
                       ) : null}
                       {temGps && (
                         <div style={{
-                          position: 'absolute', bottom: ePendente || (agente || ts) ? 18 : 2, left: 2,
+                          position: 'absolute', bottom: ePendente ? 18 : 2, left: 2,
                           background: 'rgba(26,75,140,0.88)', color: 'white',
                           borderRadius: 4, padding: '1px 4px', fontSize: '0.58rem', fontWeight: 700,
                         }}>📍GPS</div>
                       )}
-                      {(agente || ts) && (
-                        <div style={{
-                          position: 'absolute', bottom: 0, left: 0, right: 0,
-                          background: 'linear-gradient(transparent,rgba(0,0,0,0.65))',
-                          padding: '6px 4px 3px',
-                          display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-                        }}>
-                          {agente && <span style={{ color: 'white', fontSize: '0.52rem', fontWeight: 700, lineHeight: 1.2, textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>{agente}</span>}
-                          {ts && <span style={{ color: 'rgba(255,255,255,0.85)', fontSize: '0.48rem', lineHeight: 1.2 }}>{new Date(ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</span>}
-                        </div>
-                      )}
                       <button
-                        onClick={() => removerFotoEvento(idx)}
+                        onClick={() => pedirSenhaParaExecutar(() => removerFotoEvento(idx))}
                         style={{
                           position: 'absolute', top: 2, right: 2,
                           background: 'rgba(220,38,38,0.85)', color: 'white',
@@ -3521,7 +3538,7 @@ function DetalheP({
             <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#065f46,#059669)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span>✅ Conclusão da {TIPOS_CONFIG[planoLocal.tipo].label.replace(/s$/, '')}</span>
               <button
-                onClick={() => { setTextoConclusao(planoLocal.conclusao ?? ''); setModalConclusao(true) }}
+                onClick={() => pedirSenhaParaExecutar(() => { setTextoConclusao(planoLocal.conclusao ?? ''); setModalConclusao(true) })}
                 style={{ background: 'rgba(255,255,255,0.22)', border: 'none', color: 'white', borderRadius: 6, padding: '2px 8px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
               >✏️ Editar</button>
             </div>
@@ -3534,7 +3551,7 @@ function DetalheP({
           </div>
         )}
 
-        <button className="plan-btn-deletar" onClick={confirmarDeletar}>
+        <button className="plan-btn-deletar" onClick={() => pedirSenhaParaExecutar(confirmarDeletar)}>
           🗑️ Excluir planejamento
         </button>
       </div>
@@ -3648,8 +3665,8 @@ function DetalheP({
 
             {/* Prévia */}
             <div style={{ background: '#dbeafe', borderRadius: 8, padding: '7px 12px', marginBottom: '1rem', fontFamily: 'monospace', fontSize: '0.78rem', color: '#1a4b8c', fontWeight: 700, textAlign: 'center', lineHeight: 1.6 }}>
-              {formatarGMS(gmsParaDecimal(Number(editGms.latG), Number(editGms.latM), Number(editGms.latS), editGms.latD), 'lat')}
-              {'  '}{formatarGMS(gmsParaDecimal(Number(editGms.lngG), Number(editGms.lngM), Number(editGms.lngS), editGms.lngD), 'lng')}
+              {formatarGMS(gmsComponentesParaDecimal(Number(editGms.latG), Number(editGms.latM), Number(editGms.latS), editGms.latD), 'lat')}
+              {'  '}{formatarGMS(gmsComponentesParaDecimal(Number(editGms.lngG), Number(editGms.lngM), Number(editGms.lngS), editGms.lngD), 'lng')}
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -3661,6 +3678,57 @@ function DetalheP({
                 style={{ flex: 1.6, background: 'linear-gradient(90deg,#1a4b8c,#2563eb)', color: 'white', border: 'none', borderRadius: 9, padding: '0.65rem', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 800 }}>
                 💾 Salvar coordenadas
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal de senha ── */}
+      {modalSenha && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+          onClick={e => { if (e.target === e.currentTarget) { setModalSenha(false); setSenhaInput(''); setSenhaErro(false) } }}
+        >
+          <div style={{ background: 'white', borderRadius: 18, padding: '1.5rem', width: '100%', maxWidth: 340, boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem' }}>
+              <span style={{ fontSize: '1.6rem' }}>🔐</span>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '1rem', color: '#1a3a6b' }}>Confirmar identidade</div>
+                <div style={{ fontSize: '0.73rem', color: '#6b7280' }}>Informe sua senha para continuar</div>
+              </div>
+              <button onClick={() => { setModalSenha(false); setSenhaInput(''); setSenhaErro(false) }} style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#6b7280' }}>✕</button>
+            </div>
+            <div style={{ height: 1, background: '#e5e7eb', marginBottom: '1rem' }} />
+            <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.4rem' }}>
+              Senha de {meuNomeAgente || 'agente'}
+            </label>
+            <input
+              type="password"
+              value={senhaInput}
+              onChange={e => { setSenhaInput(e.target.value); setSenhaErro(false) }}
+              onKeyDown={e => { if (e.key === 'Enter') confirmarSenha() }}
+              autoFocus
+              placeholder="••••••"
+              style={{
+                width: '100%', border: `1.5px solid ${senhaErro ? '#dc2626' : '#d1d5db'}`, borderRadius: 10,
+                padding: '0.65rem 0.8rem', fontSize: '1rem', outline: 'none', fontFamily: 'inherit',
+                boxSizing: 'border-box', background: senhaErro ? '#fef2f2' : 'white',
+              }}
+            />
+            {senhaErro && (
+              <div style={{ color: '#dc2626', fontSize: '0.75rem', fontWeight: 700, marginTop: '0.35rem' }}>
+                ❌ Senha incorreta. Tente novamente.
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+              <button
+                onClick={() => { setModalSenha(false); setSenhaInput(''); setSenhaErro(false) }}
+                style={{ flex: 1, background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 10, padding: '0.7rem', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 700 }}
+              >Cancelar</button>
+              <button
+                onClick={confirmarSenha}
+                style={{ flex: 1.5, background: 'linear-gradient(90deg,#1a4b8c,#2563eb)', color: 'white', border: 'none', borderRadius: 10, padding: '0.7rem', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 800 }}
+              >🔓 Confirmar</button>
             </div>
           </div>
         </div>
