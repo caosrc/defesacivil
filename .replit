@@ -29,7 +29,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm install --silent && PORT=3001 node server/index.js & node_modules/.bin/vite --host 0.0.0.0 --port 5000"
+args = "npm install --silent && PORT=3001 node server/index.js & sleep 3 && npx vite --host 0.0.0.0 --port 5000"
 waitForPort = 5000
 
 [[ports]]
