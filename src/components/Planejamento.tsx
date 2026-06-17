@@ -441,6 +441,26 @@ function gerarId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
+// Decompõe decimal em componentes GMS para preencher campos do formulário de edição
+function decomporDecimalGMS(decimal: number, tipo: 'lat' | 'lng') {
+  const abs = Math.abs(decimal)
+  const graus = Math.floor(abs)
+  const minDecimal = (abs - graus) * 60
+  const minutos = Math.floor(minDecimal)
+  const segundos = Math.round((minDecimal - minutos) * 60 * 10) / 10
+  const direcao = tipo === 'lat' ? (decimal >= 0 ? 'N' : 'S') : (decimal >= 0 ? 'L' : 'O')
+  return { graus, minutos, segundos, direcao }
+}
+
+// Converte componentes GMS separados para decimal (oposto de decomporDecimalGMS)
+function gmsComponentesParaDecimal(graus: number, minutos: number, segundos: number, direcao: string): number {
+  const decimal = graus + minutos / 60 + segundos / 3600
+  return (direcao === 'S' || direcao === 'O') ? -decimal : decimal
+}
+
+// Alias legível para decimalParaGMS (que já existe) — usado nos popups e no PDF
+const formatarGMS = decimalParaGMS
+
 function formatarData(iso: string): string {
   if (!iso) return '—'
   const [y, m, d] = iso.split('-')
@@ -806,6 +826,7 @@ function MapaDetalhe({
   posicaoPropria,
   nomeProprio,
   fotosGeolocadas,
+  onEditarFotoCoords,
 }: {
   plano: Plano
   onAdicionarItem: (item: ItemMapa) => void
@@ -813,6 +834,7 @@ function MapaDetalhe({
   posicaoPropria?: { lat: number; lng: number; precisao: number } | null
   nomeProprio?: string
   fotosGeolocadas?: FotoGeolocada[]
+  onEditarFotoCoords?: (foto: FotoGeolocada) => void
 }) {
   const [itemSelecionado, setItemSelecionado] = useState<string | null>(null)
   const [secaoAberta, setSecaoAberta] = useState<'orgaos'|'agentes'|'materiais'|'icones'|null>('icones')
@@ -1292,15 +1314,21 @@ function MapaDetalhe({
         {(fotosGeolocadas ?? []).filter(f => f.lat != null && f.lng != null).map(f => (
           <Marker key={f.id} position={[f.lat!, f.lng!]} icon={criarIconeFoto(f.thumb || f.foto)}>
             <Popup>
-              <div style={{ textAlign: 'center', minWidth: 150 }}>
-                <img src={f.foto} alt="foto" style={{ width: 130, height: 130, objectFit: 'cover', borderRadius: 8, marginBottom: 6, display: 'block', margin: '0 auto 6px' }} />
-                <div style={{ fontSize: '0.72rem', color: '#1a4b8c', fontWeight: 700, fontFamily: 'monospace' }}>
-                  📍 {f.lat!.toFixed(5)}, {f.lng!.toFixed(5)}
+              <div style={{ textAlign: 'center', minWidth: 160 }}>
+                <img src={f.foto} alt="foto" style={{ width: 130, height: 130, objectFit: 'cover', borderRadius: 8, display: 'block', margin: '0 auto 6px' }} />
+                <div style={{ fontSize: '0.7rem', color: '#1a4b8c', fontWeight: 700, fontFamily: 'monospace', lineHeight: 1.5, marginTop: 4 }}>
+                  📍 {formatarGMS(f.lat!, 'lat')}<br/>{'\u00A0\u00A0\u00A0'}{formatarGMS(f.lng!, 'lng')}
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#374151', marginTop: 2 }}>🧑‍🚒 {f.agente}</div>
-                <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginTop: 1 }}>
+                <div style={{ fontSize: '0.7rem', color: '#374151', marginTop: 3 }}>🧑‍🚒 {f.agente}</div>
+                <div style={{ fontSize: '0.65rem', color: '#9ca3af', marginTop: 1 }}>
                   {new Date(f.timestamp).toLocaleString('pt-BR')}
                 </div>
+                {onEditarFotoCoords && (
+                  <button
+                    onClick={() => onEditarFotoCoords(f)}
+                    style={{ marginTop: 7, width: '100%', background: '#1a4b8c', color: 'white', border: 'none', borderRadius: 6, padding: '5px 10px', fontSize: '0.7rem', cursor: 'pointer', fontWeight: 700 }}
+                  >✏️ Editar coordenadas</button>
+                )}
               </div>
             </Popup>
           </Marker>
@@ -1698,7 +1726,7 @@ function exportarPDF(plano: Plano) {
                 <div style="padding:8px 10px;font-size:10px;color:#374151">
                   <div style="font-weight:700;margin-bottom:3px;font-size:11px">Foto ${i + fi + 1}</div>
                   ${f.agente ? `<div style="margin-bottom:1px">🧑‍🚒 ${f.agente}</div>` : ''}
-                  ${f.lat != null && f.lng != null ? `<div style="color:#1a4b8c;margin-bottom:1px">📍 ${(f.lat as number).toFixed(5)}, ${(f.lng as number).toFixed(5)}</div>` : '<div style="color:#9ca3af">📍 Sem localização GPS</div>'}
+                  ${f.lat != null && f.lng != null ? `<div style="color:#1a4b8c;margin-bottom:1px;font-family:monospace">📍 ${formatarGMS(f.lat as number, 'lat')} / ${formatarGMS(f.lng as number, 'lng')}</div>` : '<div style="color:#9ca3af">📍 Sem localização GPS</div>'}
                   ${f.timestamp ? `<div style="color:#9ca3af">${new Date(f.timestamp as number).toLocaleString('pt-BR')}</div>` : ''}
                 </div>
               </div>
@@ -1834,6 +1862,23 @@ ${(plano.lat && plano.lng) || plano.itensMapa.length > 0 || (plano.pontosExtras 
     .bindPopup('<b>${it.emoji} ${(it.obs || it.tipo).replace(/'/g, "\\'")}</b>');
   bounds.push([${it.lat},${it.lng}]);
   `).join('')}
+  ${(plano.fotosEvento ?? [])
+    .filter(f => typeof f !== 'string' && (f as FotoGeolocada).lat != null && (f as FotoGeolocada).lng != null)
+    .map((f, fi) => {
+      const foto = f as FotoGeolocada
+      const imgSrc = foto.thumb || foto.foto
+      const gmsLat = formatarGMS(foto.lat!, 'lat').replace(/'/g, '&#39;').replace(/"/g, '&#34;')
+      const gmsLng = formatarGMS(foto.lng!, 'lng').replace(/'/g, '&#39;').replace(/"/g, '&#34;')
+      const agente = foto.agente.replace(/'/g, "\\'")
+      return `
+  L.marker([${foto.lat},${foto.lng}], {icon: L.divIcon({
+    html:'<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.55))"><div style="width:46px;height:46px;border-radius:7px;overflow:hidden;border:3px solid #dc2626;background:#e2e8f0"><img src="${imgSrc}" style="width:100%;height:100%;object-fit:cover"/></div><div style="width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:12px solid #dc2626;margin-top:-1px"></div></div>',
+    className:'',iconSize:[46,60],iconAnchor:[23,60],popupAnchor:[0,-63]
+  })}).addTo(map)
+    .bindPopup('<b>&#128247; Foto ${fi + 1}</b><br><span style="font-size:10px">&#129333; ${agente}</span><br><span style="font-family:monospace;font-size:10px">${gmsLat}<br>${gmsLng}</span>');
+  bounds.push([${foto.lat},${foto.lng}]);
+      `
+    }).join('')}
   if(bounds.length > 0) {
     if(bounds.length === 1) { map.setView(bounds[0], 15); }
     else { map.fitBounds(bounds, {padding:[50,50]}); }
@@ -2526,6 +2571,11 @@ function DetalheP({
   const [exportandoExcel, setExportandoExcel] = useState(false)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [salvandoAuto, setSalvandoAuto] = useState(false)
+  const [fotoEditando, setFotoEditando] = useState<FotoGeolocada | null>(null)
+  const [editGms, setEditGms] = useState({
+    latG: '0', latM: '0', latS: '0.0', latD: 'S' as 'N' | 'S',
+    lngG: '0', lngM: '0', lngS: '0.0', lngD: 'O' as 'L' | 'O',
+  })
   const pendentesRef = useRef<(() => Promise<void>)[]>([])
   // fotosRef mantém o array atualizado de forma SÍNCRONA para evitar race condition
   // quando várias fotos são tiradas rapidamente (planoLocal.fotosEvento fica stale no closure React)
@@ -2827,6 +2877,38 @@ function DetalheP({
     const atualizado = { ...planoLocal, fotosEvento: todasFotos }
     setPlanoLocal(atualizado)
     onAtualizar({ ...atualizado, fotosEvento: todasLimpas })
+  }
+
+  // Abre o modal de edição de coordenadas inicializando os campos GMS com os valores atuais
+  function abrirEditarFoto(foto: FotoGeolocada) {
+    setFotoEditando(foto)
+    if (foto.lat != null && foto.lng != null) {
+      const lat = decomporDecimalGMS(foto.lat, 'lat')
+      const lng = decomporDecimalGMS(foto.lng, 'lng')
+      setEditGms({
+        latG: String(lat.graus), latM: String(lat.minutos), latS: String(lat.segundos), latD: lat.direcao as 'N' | 'S',
+        lngG: String(lng.graus), lngM: String(lng.minutos), lngS: String(lng.segundos), lngD: lng.direcao as 'L' | 'O',
+      })
+    }
+  }
+
+  async function salvarCoordenadasFoto() {
+    if (!fotoEditando) return
+    const novaLat = gmsComponentesParaDecimal(Number(editGms.latG), Number(editGms.latM), Number(editGms.latS), editGms.latD)
+    const novaLng = gmsComponentesParaDecimal(Number(editGms.lngG), Number(editGms.lngM), Number(editGms.lngS), editGms.lngD)
+    const todasFotos = fotosRef.current.map(f =>
+      typeof f === 'object' && f !== null && (f as FotoGeolocada).id === fotoEditando.id
+        ? { ...f, lat: novaLat, lng: novaLng } : f
+    )
+    fotosRef.current = todasFotos
+    setPlanoLocal(prev => ({ ...prev, fotosEvento: todasFotos }))
+    onAtualizar({ ...planoLocal, fotosEvento: prepararParaSalvar(todasFotos) })
+    if (navigator.onLine) {
+      try { await persistirFotos(prepararParaSalvar(todasFotos)) } catch { pendentesRef.current.push(() => persistirFotos(prepararParaSalvar(todasFotos))) }
+    } else {
+      pendentesRef.current.push(() => persistirFotos(prepararParaSalvar(todasFotos)))
+    }
+    setFotoEditando(null)
   }
 
   // ── Prontidão ───────────────────────────────────────────────────────────
@@ -3275,6 +3357,7 @@ function DetalheP({
             fotosGeolocadas={(planoLocal.fotosEvento ?? []).filter(
               (f): f is FotoGeolocada => typeof f === 'object' && f !== null && 'foto' in f && f.lat != null
             )}
+            onEditarFotoCoords={abrirEditarFoto}
           />
 
           {/* ── Galeria de fotos abaixo do mapa ── */}
@@ -3391,6 +3474,85 @@ function DetalheP({
           onSalvar={p => { setPlanoLocal(p); onAtualizar(p); setEditando(false) }}
           onFechar={() => setEditando(false)}
         />
+      )}
+
+      {/* ── Modal de edição de coordenadas GMS ── */}
+      {fotoEditando && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.62)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+          onClick={e => { if (e.target === e.currentTarget) setFotoEditando(null) }}>
+          <div style={{ background: 'white', borderRadius: 16, padding: '1.25rem', width: '100%', maxWidth: 400, boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.9rem' }}>
+              <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1a4b8c' }}>✏️ Editar coordenadas</div>
+              <button onClick={() => setFotoEditando(null)} style={{ background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#6b7280', lineHeight: 1 }}>✕</button>
+            </div>
+            <img src={fotoEditando.foto} alt="foto" style={{ width: '100%', height: 130, objectFit: 'cover', borderRadius: 8, marginBottom: '1rem' }} />
+
+            {/* Latitude */}
+            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#374151', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Latitude</div>
+            <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.85rem' }}>
+              {[
+                { label: 'Graus °', key: 'latG' as const, min: 0, max: 90, step: 1 },
+                { label: "Minutos '", key: 'latM' as const, min: 0, max: 59, step: 1 },
+                { label: 'Segundos "', key: 'latS' as const, min: 0, max: 59.9, step: 0.1 },
+              ].map(({ label, key, min, max, step }) => (
+                <div key={key} style={{ flex: key === 'latS' ? 1.3 : 1 }}>
+                  <div style={{ fontSize: '0.6rem', color: '#6b7280', marginBottom: 2 }}>{label}</div>
+                  <input type="number" min={min} max={max} step={step} value={editGms[key]}
+                    onChange={e => setEditGms(p => ({ ...p, [key]: e.target.value }))}
+                    style={{ width: '100%', border: '1.5px solid #d1d5db', borderRadius: 7, padding: '6px 7px', fontSize: '0.85rem', textAlign: 'center' }} />
+                </div>
+              ))}
+              <div style={{ flex: 0.75 }}>
+                <div style={{ fontSize: '0.6rem', color: '#6b7280', marginBottom: 2 }}>Dir.</div>
+                <select value={editGms.latD} onChange={e => setEditGms(p => ({ ...p, latD: e.target.value as 'N' | 'S' }))}
+                  style={{ width: '100%', border: '1.5px solid #d1d5db', borderRadius: 7, padding: '6px 4px', fontSize: '0.85rem' }}>
+                  <option value="S">S</option><option value="N">N</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Longitude */}
+            <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#374151', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Longitude</div>
+            <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.85rem' }}>
+              {[
+                { label: 'Graus °', key: 'lngG' as const, min: 0, max: 180, step: 1 },
+                { label: "Minutos '", key: 'lngM' as const, min: 0, max: 59, step: 1 },
+                { label: 'Segundos "', key: 'lngS' as const, min: 0, max: 59.9, step: 0.1 },
+              ].map(({ label, key, min, max, step }) => (
+                <div key={key} style={{ flex: key === 'lngS' ? 1.3 : 1 }}>
+                  <div style={{ fontSize: '0.6rem', color: '#6b7280', marginBottom: 2 }}>{label}</div>
+                  <input type="number" min={min} max={max} step={step} value={editGms[key]}
+                    onChange={e => setEditGms(p => ({ ...p, [key]: e.target.value }))}
+                    style={{ width: '100%', border: '1.5px solid #d1d5db', borderRadius: 7, padding: '6px 7px', fontSize: '0.85rem', textAlign: 'center' }} />
+                </div>
+              ))}
+              <div style={{ flex: 0.75 }}>
+                <div style={{ fontSize: '0.6rem', color: '#6b7280', marginBottom: 2 }}>Dir.</div>
+                <select value={editGms.lngD} onChange={e => setEditGms(p => ({ ...p, lngD: e.target.value as 'L' | 'O' }))}
+                  style={{ width: '100%', border: '1.5px solid #d1d5db', borderRadius: 7, padding: '6px 4px', fontSize: '0.85rem' }}>
+                  <option value="O">O</option><option value="L">L</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Prévia */}
+            <div style={{ background: '#dbeafe', borderRadius: 8, padding: '7px 12px', marginBottom: '1rem', fontFamily: 'monospace', fontSize: '0.78rem', color: '#1a4b8c', fontWeight: 700, textAlign: 'center', lineHeight: 1.6 }}>
+              {formatarGMS(gmsParaDecimal(Number(editGms.latG), Number(editGms.latM), Number(editGms.latS), editGms.latD), 'lat')}
+              {'  '}{formatarGMS(gmsParaDecimal(Number(editGms.lngG), Number(editGms.lngM), Number(editGms.lngS), editGms.lngD), 'lng')}
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button onClick={() => setFotoEditando(null)}
+                style={{ flex: 1, background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 9, padding: '0.65rem', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 700 }}>
+                Cancelar
+              </button>
+              <button onClick={salvarCoordenadasFoto}
+                style={{ flex: 1.6, background: 'linear-gradient(90deg,#1a4b8c,#2563eb)', color: 'white', border: 'none', borderRadius: 9, padding: '0.65rem', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 800 }}>
+                💾 Salvar coordenadas
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
