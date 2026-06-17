@@ -847,6 +847,7 @@ async function initDb() {
 
   await query(`ALTER TABLE planejamentos ADD COLUMN IF NOT EXISTS confirmacoes_agentes JSONB DEFAULT '[]'`)
   await query(`ALTER TABLE planejamentos ADD COLUMN IF NOT EXISTS fotos_evento JSONB DEFAULT '[]'`)
+  await query(`ALTER TABLE planejamentos ADD COLUMN IF NOT EXISTS conclusao TEXT`)
   await query(`ALTER TABLE ocorrencias ADD COLUMN IF NOT EXISTS descricoes_fotos JSONB DEFAULT '[]'`)
 
   console.log('[DB] Tabelas verificadas/criadas com sucesso')
@@ -1011,15 +1012,16 @@ app.post('/api/planejamentos', async (req, res) => {
   try {
     const p = req.body
     await query(
-      `INSERT INTO planejamentos (id, tipo, nome, descricao, local, data_inicio, data_fim, horario, horario_fim, publico_estimado, status, equipe, agentes_defesa_civil, materiais, itens_mapa, pontos_extras, lat, lng, observacoes, risco, criado_por, criado_em)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
-       ON CONFLICT (id) DO UPDATE SET tipo=$2, nome=$3, descricao=$4, local=$5, data_inicio=$6, data_fim=$7, horario=$8, horario_fim=$9, publico_estimado=$10, status=$11, equipe=$12, agentes_defesa_civil=$13, materiais=$14, itens_mapa=$15, pontos_extras=$16, lat=$17, lng=$18, observacoes=$19, risco=$20, criado_por=$21`,
+      `INSERT INTO planejamentos (id, tipo, nome, descricao, local, data_inicio, data_fim, horario, horario_fim, publico_estimado, status, equipe, agentes_defesa_civil, materiais, itens_mapa, pontos_extras, lat, lng, observacoes, risco, criado_por, criado_em, conclusao)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+       ON CONFLICT (id) DO UPDATE SET tipo=$2, nome=$3, descricao=$4, local=$5, data_inicio=$6, data_fim=$7, horario=$8, horario_fim=$9, publico_estimado=$10, status=$11, equipe=$12, agentes_defesa_civil=$13, materiais=$14, itens_mapa=$15, pontos_extras=$16, lat=$17, lng=$18, observacoes=$19, risco=$20, criado_por=$21, conclusao=$23`,
       [p.id, p.tipo, p.nome, p.descricao, p.local, p.data_inicio, p.data_fim, p.horario, p.horario_fim,
        p.publico_estimado, p.status,
        JSON.stringify(p.equipe || []), JSON.stringify(p.agentes_defesa_civil || []),
        JSON.stringify(p.materiais || []), JSON.stringify(p.itens_mapa || []),
        JSON.stringify(p.pontos_extras || []),
-       p.lat, p.lng, p.observacoes, p.risco, p.criado_por, p.criado_em || new Date().toISOString()]
+       p.lat, p.lng, p.observacoes, p.risco, p.criado_por, p.criado_em || new Date().toISOString(),
+       p.conclusao || null]
     )
     broadcastParaTodos({ tipo: 'planejamentos_atualizados' })
     res.json({ success: true })

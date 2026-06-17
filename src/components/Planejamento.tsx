@@ -198,6 +198,7 @@ interface Plano {
   criadoEm: string
   confirmacoes?: ConfirmacaoAgente[]
   fotosEvento?: (string | FotoGeolocada)[]
+  conclusao?: string
 }
 
 // ── Conversão GMS (Graus, Minutos, Segundos) ─────────────────────────────
@@ -233,6 +234,7 @@ function planoParaSB(p: Plano): Record<string, unknown> {
     materiais: p.materiais, itens_mapa: p.itensMapa, pontos_extras: p.pontosExtras,
     lat: p.lat, lng: p.lng, observacoes: p.observacoes, risco: p.risco,
     criado_por: p.criadoPor, criado_em: p.criadoEm,
+    conclusao: p.conclusao ?? null,
   }
 }
 
@@ -256,6 +258,7 @@ function sbParaPlano(row: Record<string, unknown>): Plano {
     criadoEm: (row.criado_em as string) ?? new Date().toISOString(),
     confirmacoes: (row.confirmacoes_agentes as ConfirmacaoAgente[]) ?? [],
     fotosEvento: (row.fotos_evento as (string | FotoGeolocada)[]) ?? [],
+    conclusao: (row.conclusao as string) ?? '',
   }
 }
 
@@ -1840,6 +1843,11 @@ ${plano.observacoes ? `<div class="section">
   <div class="obs">${plano.observacoes}</div>
 </div>` : ''}
 
+${plano.conclusao ? `<div class="section" style="border-left:4px solid #059669;background:#f0fdf4;padding:14px 18px;border-radius:0 8px 8px 0;margin-top:12px">
+  <h2 style="color:#059669">✅ Conclusão da ${cfg.label.replace(/s$/, '')}</h2>
+  <div class="obs" style="color:#065f46;white-space:pre-wrap">${plano.conclusao}</div>
+</div>` : ''}
+
 <div class="footer">
   <span>Defesa Civil Ouro Branco — Sistema de Gerenciamento de Ocorrências</span>
   <span>Emitido em ${dataEmissao}</span>
@@ -2600,6 +2608,8 @@ function DetalheP({
     latG: '0', latM: '0', latS: '0.0', latD: 'S' as 'N' | 'S',
     lngG: '0', lngM: '0', lngS: '0.0', lngD: 'O' as 'L' | 'O',
   })
+  const [modalConclusao, setModalConclusao] = useState(false)
+  const [textoConclusao, setTextoConclusao] = useState('')
   const pendentesRef = useRef<(() => Promise<void>)[]>([])
   // fotosRef mantém o array atualizado de forma SÍNCRONA para evitar race condition
   // quando várias fotos são tiradas rapidamente (planoLocal.fotosEvento fica stale no closure React)
@@ -2996,9 +3006,22 @@ function DetalheP({
   }
 
   function mudarStatus(status: StatusPlano) {
+    if (status === 'concluido') {
+      setModalConclusao(true)
+      setTextoConclusao(planoLocal.conclusao ?? '')
+      return
+    }
     const atualizado = { ...planoLocal, status }
     setPlanoLocal(atualizado)
     onAtualizar(atualizado)
+  }
+
+  function confirmarConclusao() {
+    const texto = textoConclusao.trim()
+    const atualizado = { ...planoLocal, status: 'concluido' as StatusPlano, conclusao: texto }
+    setPlanoLocal(atualizado)
+    onAtualizar(atualizado)
+    setModalConclusao(false)
   }
 
   useEffect(() => {
@@ -3492,6 +3515,25 @@ function DetalheP({
           </div>
         )}
 
+        {/* Conclusão — exibida quando status é concluído */}
+        {planoLocal.status === 'concluido' && (
+          <div className="plan-detalhe-card" style={{ borderColor: '#059669' }}>
+            <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#065f46,#059669)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span>✅ Conclusão da {TIPOS_CONFIG[planoLocal.tipo].label.replace(/s$/, '')}</span>
+              <button
+                onClick={() => { setTextoConclusao(planoLocal.conclusao ?? ''); setModalConclusao(true) }}
+                style={{ background: 'rgba(255,255,255,0.22)', border: 'none', color: 'white', borderRadius: 6, padding: '2px 8px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+              >✏️ Editar</button>
+            </div>
+            <div style={{ padding: '0.6rem 0.85rem' }}>
+              {planoLocal.conclusao
+                ? <p style={{ margin: 0, fontSize: '0.85rem', color: '#065f46', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{planoLocal.conclusao}</p>
+                : <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af', fontStyle: 'italic' }}>Nenhuma conclusão registrada. Clique em ✏️ Editar para adicionar.</p>
+              }
+            </div>
+          </div>
+        )}
+
         <button className="plan-btn-deletar" onClick={confirmarDeletar}>
           🗑️ Excluir planejamento
         </button>
@@ -3504,6 +3546,45 @@ function DetalheP({
           onSalvar={p => { setPlanoLocal(p); onAtualizar(p); setEditando(false) }}
           onFechar={() => setEditando(false)}
         />
+      )}
+
+      {/* ── Modal de conclusão ── */}
+      {modalConclusao && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.62)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+          onClick={e => { if (e.target === e.currentTarget) setModalConclusao(false) }}>
+          <div style={{ background: 'white', borderRadius: 18, padding: '1.4rem', width: '100%', maxWidth: 440, boxShadow: '0 24px 60px rgba(0,0,0,0.35)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', marginBottom: '0.2rem' }}>
+              <span style={{ fontSize: '1.5rem' }}>✅</span>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '1rem', color: '#065f46' }}>Concluir {TIPOS_CONFIG[planoLocal.tipo].label.replace(/s$/, '')}</div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{planoLocal.nome}</div>
+              </div>
+              <button onClick={() => setModalConclusao(false)} style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#6b7280' }}>✕</button>
+            </div>
+            <div style={{ height: 1, background: '#e5e7eb', margin: '0.85rem 0' }} />
+            <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.4rem' }}>
+              Como foi a conclusão? <span style={{ color: '#9ca3af', fontWeight: 400 }}>(opcional)</span>
+            </label>
+            <textarea
+              value={textoConclusao}
+              onChange={e => setTextoConclusao(e.target.value)}
+              placeholder={`Descreva como foi o encerramento da ${TIPOS_CONFIG[planoLocal.tipo].label.replace(/s$/, '').toLowerCase()}: ocorrências, resultados, observações finais...`}
+              rows={5}
+              autoFocus
+              style={{ width: '100%', border: '1.5px solid #d1d5db', borderRadius: 10, padding: '0.7rem', fontSize: '0.88rem', resize: 'vertical', outline: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
+            />
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.9rem' }}>
+              <button onClick={() => setModalConclusao(false)}
+                style={{ flex: 1, background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 10, padding: '0.7rem', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 700 }}>
+                Cancelar
+              </button>
+              <button onClick={confirmarConclusao}
+                style={{ flex: 1.8, background: 'linear-gradient(90deg,#059669,#10b981)', color: 'white', border: 'none', borderRadius: 10, padding: '0.7rem', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 800, boxShadow: '0 2px 8px rgba(5,150,105,0.35)' }}>
+                ✅ Confirmar conclusão
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Modal de edição de coordenadas GMS ── */}
