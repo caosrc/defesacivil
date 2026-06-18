@@ -292,6 +292,7 @@ export default function App() {
   const [sincronizando, setSincronizando] = useState(false)
   const [sincronizandoIds, setSincronizandoIds] = useState<Set<number>>(new Set())
   const [toastMsg, setToastMsg] = useState('')
+  const [excelProgresso, setExcelProgresso] = useState<string | null>(null)
   const [statusNotif, setStatusNotif] = useState<'ativo'|'concedido'|'negado'|'sem-suporte'|'desconhecido'|null>(null)
   const [ativandoNotif, setAtivandoNotif] = useState(false)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -585,16 +586,25 @@ export default function App() {
   }
 
   async function exportarExcel() {
+    if (excelProgresso !== null) return
     const { exportarTodasExcel } = await import('./exportExcel')
-    // Busca fotos e vistorias em lote antes de exportar (não vêm na listagem para economizar egress)
-    const ids = ocorrenciasFiltradas.map(o => o.id).filter(id => id > 0)
-    const fotosMap = await buscarFotosOcorrencias(ids)
-    const ocorrenciasCompletas = ocorrenciasFiltradas.map(o => ({
-      ...o,
-      fotos: fotosMap[o.id]?.fotos ?? (Array.isArray(o.fotos) ? o.fotos : []),
-      vistorias: fotosMap[o.id]?.vistorias ?? (Array.isArray(o.vistorias) ? o.vistorias : []),
-    }))
-    await exportarTodasExcel(ocorrenciasCompletas)
+    try {
+      const ids = ocorrenciasFiltradas.map(o => o.id).filter(id => id > 0)
+      const total = ids.length
+      setExcelProgresso(`⏳ Buscando fotos… 0/${total}`)
+      const fotosMap = await buscarFotosOcorrencias(ids)
+      setExcelProgresso(`⏳ Gerando planilha… 0/${total}`)
+      const ocorrenciasCompletas = ocorrenciasFiltradas.map(o => ({
+        ...o,
+        fotos: fotosMap[o.id]?.fotos ?? (Array.isArray(o.fotos) ? o.fotos : []),
+        vistorias: fotosMap[o.id]?.vistorias ?? (Array.isArray(o.vistorias) ? o.vistorias : []),
+      }))
+      await exportarTodasExcel(ocorrenciasCompletas, (atual, tot) => {
+        setExcelProgresso(`⏳ Gerando planilha… ${atual}/${tot}`)
+      })
+    } finally {
+      setExcelProgresso(null)
+    }
   }
 
   const datasDisponiveis = useMemo(() => {
@@ -818,8 +828,14 @@ export default function App() {
                 ))}
               </div>
               <div className="filtros-row" style={{ justifyContent: 'flex-end', gap: '0.5rem' }}>
-                <button className="btn-excel-global" onClick={exportarExcel}>
-                  📊 Excel
+                <button
+                  className="btn-excel-global"
+                  onClick={exportarExcel}
+                  disabled={excelProgresso !== null}
+                  title={excelProgresso ?? 'Exportar para Excel'}
+                  style={{ opacity: excelProgresso !== null ? 0.7 : 1, minWidth: excelProgresso ? '14rem' : undefined, fontSize: excelProgresso ? '0.78rem' : undefined }}
+                >
+                  {excelProgresso ?? '📊 Excel'}
                 </button>
                 <button className="btn-kmz-global" onClick={exportarTudoKMZ}>
                   🌍 KMZ

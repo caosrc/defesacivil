@@ -479,7 +479,10 @@ async function adicionarAbaDashboard(wb: ExcelWorkbook, ocorrencias: Ocorrencia[
 }
 
 // ── Export all occurrences (tabular) with embedded photo thumbnails ───────────
-export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<void> {
+export async function exportarTodasExcel(
+  ocorrencias: Ocorrencia[],
+  onProgresso?: (atual: number, total: number) => void,
+): Promise<void> {
   const { default: ExcelJS } = await import('exceljs')
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Defesa Civil Ouro Branco'
@@ -542,6 +545,7 @@ export async function exportarTodasExcel(ocorrencias: Ocorrencia[]): Promise<voi
   const LINHA_INICIO = 3  // primeira linha de dados (1-indexed)
 
   ocorrencias.forEach((o, idx) => {
+    onProgresso?.(idx + 1, ocorrencias.length)
     const temFotos = o.fotos && o.fotos.length > 0
     const linhaNum = LINHA_INICIO + idx
     const r = ws.getRow(linhaNum)
