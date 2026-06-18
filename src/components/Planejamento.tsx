@@ -2043,7 +2043,7 @@ function FormularioPlano({
       <div className="plan-modal">
         <div className="plan-modal-header">
           <span className="plan-modal-titulo">
-            {cfg.emoji} {planoEditando ? 'Editar' : 'Novo'} {cfg.label.slice(0, -1).replace(/s$/, '')}
+            {cfg.emoji} {planoEditando ? 'Editar' : 'Novo'} {cfg.label.replace(/ções$/, 'ção').replace(/s$/, '')}
           </span>
           <button className="plan-modal-fechar" onClick={onFechar}>✕</button>
         </div>
