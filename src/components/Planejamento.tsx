@@ -1768,6 +1768,7 @@ function exportarPDF(plano: Plano, mapCenter?: [number, number], mapZoom?: numbe
   const html = `<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="UTF-8">
 <title>${plano.nome} — Defesa Civil Ouro Branco</title>
+<script>window.addEventListener('afterprint', function(){ setTimeout(function(){ window.close(); }, 300); });<\/script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Arial,sans-serif;font-size:12px;color:#1f2937;padding:28px 32px}
