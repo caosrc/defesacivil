@@ -1847,7 +1847,7 @@ ${plano.observacoes ? `<div class="section">
 </div>` : ''}
 
 ${plano.conclusao ? `<div class="section" style="border-left:4px solid #059669;background:#f0fdf4;padding:14px 18px;border-radius:0 8px 8px 0;margin-top:12px">
-  <h2 style="color:#059669">✅ Conclusão da ${cfg.label.replace(/s$/, '')}</h2>
+  <h2 style="color:#059669">✅ Conclusão da ${cfg.label.replace(/ções$/, 'ção').replace(/s$/, '')}</h2>
   <div class="obs" style="color:#065f46;white-space:pre-wrap">${plano.conclusao}</div>
 </div>` : ''}
 
@@ -3547,7 +3547,7 @@ function DetalheP({
         {planoLocal.status === 'concluido' && (
           <div className="plan-detalhe-card" style={{ borderColor: '#059669' }}>
             <div className="plan-detalhe-card-header" style={{ background: 'linear-gradient(100deg,#065f46,#059669)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>✅ Conclusão da {TIPOS_CONFIG[planoLocal.tipo].label.replace(/s$/, '')}</span>
+              <span>✅ Conclusão da {TIPOS_CONFIG[planoLocal.tipo].label.replace(/ções$/, 'ção').replace(/s$/, '')}</span>
               <button
                 onClick={() => pedirSenhaParaExecutar(() => { setTextoConclusao(planoLocal.conclusao ?? ''); setModalConclusao(true) })}
                 style={{ background: 'rgba(255,255,255,0.22)', border: 'none', color: 'white', borderRadius: 6, padding: '2px 8px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
@@ -3584,7 +3584,7 @@ function DetalheP({
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', marginBottom: '0.2rem' }}>
               <span style={{ fontSize: '1.5rem' }}>✅</span>
               <div>
-                <div style={{ fontWeight: 800, fontSize: '1rem', color: '#065f46' }}>Concluir {TIPOS_CONFIG[planoLocal.tipo].label.replace(/s$/, '')}</div>
+                <div style={{ fontWeight: 800, fontSize: '1rem', color: '#065f46' }}>Concluir {TIPOS_CONFIG[planoLocal.tipo].label.replace(/ções$/, 'ção').replace(/s$/, '')}</div>
                 <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{planoLocal.nome}</div>
               </div>
               <button onClick={() => setModalConclusao(false)} style={{ marginLeft: 'auto', background: 'none', border: 'none', fontSize: '1.2rem', cursor: 'pointer', color: '#6b7280' }}>✕</button>
@@ -3596,7 +3596,7 @@ function DetalheP({
             <textarea
               value={textoConclusao}
               onChange={e => setTextoConclusao(e.target.value)}
-              placeholder={`Descreva como foi o encerramento da ${TIPOS_CONFIG[planoLocal.tipo].label.replace(/s$/, '').toLowerCase()}: ocorrências, resultados, observações finais...`}
+              placeholder={`Descreva como foi o encerramento da ${TIPOS_CONFIG[planoLocal.tipo].label.replace(/ções$/, 'ção').replace(/s$/, '').toLowerCase()}: ocorrências, resultados, observações finais...`}
               rows={5}
               autoFocus
               style={{ width: '100%', border: '1.5px solid #d1d5db', borderRadius: 10, padding: '0.7rem', fontSize: '0.88rem', resize: 'vertical', outline: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
