@@ -197,6 +197,8 @@ export default function App() {
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   // Destino externo enviado pelo botão "Traçar rota de resgate" do SOS.
   // Quando preenchido, o mapa abre com o pino e a rota já calculados.
+  const [convPendentes, setConvPendentes] = useState(0)
+  const [forceOpenConvocacao, setForceOpenConvocacao] = useState(false)
   const [destinoSos, setDestinoSos] = useState<{ lat: number; lng: number } | null>(null)
   const [destinoCampo, setDestinoCampo] = useState<{ lat: number; lng: number; nome?: string; soMostrar?: boolean } | null>(null)
   const [equipamentosCampoMapa, setEquipamentosCampoMapa] = useState<EquipamentoCampoMapa[]>([])
@@ -724,6 +726,18 @@ export default function App() {
         </div>
         <div className="header-direita">
           <AgentesOnline />
+          {logado && convPendentes > 0 && (
+            <button
+              className="convoc-alerta-btn"
+              title={`${convPendentes} convocação${convPendentes !== 1 ? 'ões' : ''} aguardando confirmação — clique para ver`}
+              onClick={() => {
+                setForceOpenConvocacao(true)
+                setTimeout(() => setForceOpenConvocacao(false), 200)
+              }}
+            >
+              📣<span className="convoc-alerta-num">{convPendentes}</span>
+            </button>
+          )}
           {logado && statusNotif !== 'sem-suporte' && statusNotif !== null && (
             <button
               className={`notif-bell-btn ${statusNotif === 'ativo' ? 'notif-bell-ativo' : statusNotif === 'negado' ? 'notif-bell-negado' : 'notif-bell-inativo'}`}
@@ -756,7 +770,10 @@ export default function App() {
         />
       )}
 
-      {logado && <BannerConvocacao />}
+      {logado && <BannerConvocacao
+        onPendentesChange={setConvPendentes}
+        forceOpen={forceOpenConvocacao}
+      />}
 
       {aba === 'lista' && (
         <div className="resumo-strip">

@@ -209,24 +209,45 @@ input, select, textarea { font-family: inherit; }
 @keyframes pulse-dot { 0%,100% { opacity:1; transform: scale(1); } 50% { opacity:0.5; transform: scale(1.3); } }
 
 /* ── Agentes online (pill em tempo real) ─────────────────────── */
-.header-direita { display: flex; align-items: center; gap: 0.5rem; }
+.header-direita { display: flex; align-items: center; gap: 0.35rem; }
 .agentes-online { position: relative; }
 .agentes-online-pill {
-  display: flex; align-items: center; gap: 0.35rem;
+  display: flex; align-items: center; gap: 0.28rem;
   background: rgba(255,255,255,0.15);
   border: none; color: white;
   border-radius: 20px;
-  padding: 0.3rem 0.7rem;
-  font-size: 0.78rem; font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem; font-weight: 700;
   cursor: pointer;
   transition: background 0.15s;
 }
 .agentes-online-pill:hover { background: rgba(255,255,255,0.25); }
 .agentes-online-pill.tem { background: rgba(74,222,128,0.25); }
 .agentes-online-pill.tem:hover { background: rgba(74,222,128,0.4); }
-.ao-icone { font-size: 0.95rem; line-height: 1; }
+.ao-icone { font-size: 0.82rem; line-height: 1; }
 .ao-num { font-weight: 800; }
-.ao-rot { font-weight: 600; opacity: 0.85; font-size: 0.72rem; }
+.ao-rot { font-weight: 600; opacity: 0.85; font-size: 0.68rem; }
+
+/* ── Botão de alerta de convocação (pisca até agente confirmar) ── */
+@keyframes piscar-convocacao {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(234,179,8,0.6); }
+  50%       { opacity: 0.6; box-shadow: 0 0 0 5px rgba(234,179,8,0); }
+}
+.convoc-alerta-btn {
+  display: flex; align-items: center; gap: 0.2rem;
+  background: rgba(234,179,8,0.18);
+  border: 1.5px solid rgba(234,179,8,0.75);
+  border-radius: 20px; padding: 0.2rem 0.5rem;
+  font-size: 0.78rem; cursor: pointer; color: #fef08a;
+  font-weight: 700; white-space: nowrap;
+  animation: piscar-convocacao 1.1s ease-in-out infinite;
+}
+.convoc-alerta-btn:hover { background: rgba(234,179,8,0.35); animation: none; opacity: 1; }
+.convoc-alerta-num {
+  background: rgba(234,179,8,0.45);
+  border-radius: 10px; padding: 0 5px;
+  font-size: 0.68rem; font-weight: 800;
+}
 
 .agentes-online-pop {
   position: fixed;
@@ -4373,10 +4394,10 @@ input, select, textarea { font-family: inherit; }
 
 /* ── Botão de notificação no cabeçalho ─────────────────────────── */
 .notif-bell-btn {
-  display: flex; align-items: center; gap: 0.25rem;
+  display: flex; align-items: center; gap: 0.2rem;
   background: none; border: 1.5px solid rgba(255,255,255,0.35);
-  border-radius: 20px; padding: 0.22rem 0.55rem;
-  font-size: 0.78rem; cursor: pointer; color: white;
+  border-radius: 20px; padding: 0.18rem 0.45rem;
+  font-size: 0.72rem; cursor: pointer; color: white;
   transition: background 0.15s, border-color 0.15s;
   white-space: nowrap;
 }
@@ -4385,7 +4406,7 @@ input, select, textarea { font-family: inherit; }
 .notif-bell-ativo { border-color: #86efac; color: #bbf7d0; }
 .notif-bell-inativo { border-color: rgba(255,200,50,0.5); color: #fde68a; }
 .notif-bell-negado { border-color: rgba(255,100,100,0.5); color: #fca5a5; }
-.notif-bell-label { font-size: 0.7rem; font-weight: 600; }
+.notif-bell-label { font-size: 0.65rem; font-weight: 600; }
 
 /* ── Painel lateral de equipamentos em campo (Material) ─────────── */
 .mapa-material-painel {

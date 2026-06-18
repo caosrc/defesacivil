@@ -87,7 +87,12 @@ function formatarData(iso: string): string {
   return `${d}/${m}/${y}`
 }
 
-export default function BannerConvocacao() {
+interface BannerConvocacaoProps {
+  onPendentesChange?: (count: number) => void
+  forceOpen?: boolean
+}
+
+export default function BannerConvocacao({ onPendentesChange, forceOpen }: BannerConvocacaoProps) {
   const [planos, setPlanos] = useState<PlanoResumido[]>([])
   const [atual, setAtual] = useState(0)
   const [salvando, setSalvando] = useState(false)
@@ -117,6 +122,16 @@ export default function BannerConvocacao() {
       carregar()
     })
   }, [carregar])
+
+  useEffect(() => {
+    onPendentesChange?.(planos.length)
+  }, [planos.length, onPendentesChange])
+
+  useEffect(() => {
+    if (forceOpen && planos.length > 0) {
+      setVisivel(true)
+    }
+  }, [forceOpen, planos.length])
 
   async function responder(confirmado: boolean) {
     if (!agente || salvando) return
