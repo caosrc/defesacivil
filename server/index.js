@@ -892,6 +892,26 @@ function broadcastOcorrenciasAtualizadas() {
 }
 
 // ── Ocorrências ─────────────────────────────────────────────────────────────
+
+// Busca fotos e vistorias em lote (para exportação Excel) — aceita ?ids=1,2,3
+app.get('/api/ocorrencias/fotos-lote', async (req, res) => {
+  try {
+    const raw = (req.query.ids || '').toString().trim()
+    if (!raw) return res.json([])
+    const ids = raw.split(',').map(s => parseInt(s, 10)).filter(n => !isNaN(n) && n > 0)
+    if (ids.length === 0) return res.json([])
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(',')
+    const result = await query(
+      `SELECT id, fotos, vistorias FROM ocorrencias WHERE id IN (${placeholders})`,
+      ids
+    )
+    res.json(result.rows)
+  } catch (err) {
+    console.error('GET /api/ocorrencias/fotos-lote error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.get('/api/ocorrencias', async (req, res) => {
   try {
     // Exclui fotos e vistorias (base64 pesado) da listagem — carregados sob demanda ao abrir

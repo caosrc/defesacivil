@@ -372,7 +372,21 @@ export async function buscarFotosOcorrencias(
     }
   }
 
-  // Express — o /api/ocorrencias já retorna tudo; retorna vazio (fotos já estão na lista)
+  // Express (Replit) — busca fotos e vistorias em lote via rota dedicada
+  try {
+    const res = await fetch(`/api/ocorrencias/fotos-lote?ids=${ids.join(',')}`)
+    if (res.ok) {
+      const rows: { id: number; fotos: string[] | null; vistorias: unknown[] | null }[] = await res.json()
+      const result: Record<number, { fotos: string[]; vistorias: unknown[] }> = {}
+      for (const row of rows) {
+        result[row.id] = {
+          fotos: Array.isArray(row.fotos) ? row.fotos : [],
+          vistorias: Array.isArray(row.vistorias) ? row.vistorias : [],
+        }
+      }
+      return result
+    }
+  } catch { /* segue com vazio */ }
   return {}
 }
 
