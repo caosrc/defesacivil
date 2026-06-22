@@ -255,7 +255,9 @@ function sbParaPlano(row: Record<string, unknown>): Plano {
     observacoes: (row.observacoes as string) ?? '',
     risco: (row.risco as 'baixo' | 'medio' | 'alto') ?? 'baixo',
     criadoPor: (row.criado_por as string) ?? '',
-    criadoEm: (row.criado_em as string) ?? new Date().toISOString(),
+    criadoEm: row.criado_em instanceof Date
+      ? row.criado_em.toISOString()
+      : ((row.criado_em as string) ?? new Date().toISOString()),
     confirmacoes: (row.confirmacoes_agentes as ConfirmacaoAgente[]) ?? [],
     fotosEvento: (row.fotos_evento as (string | FotoGeolocada)[]) ?? [],
     conclusao: (row.conclusao as string) ?? '',
@@ -264,6 +266,10 @@ function sbParaPlano(row: Record<string, unknown>): Plano {
 
 // ── Constantes ──────────────────────────────────────────────────────────
 const STORAGE_KEY = 'defesacivil-planejamentos-v1'
+
+// Registra o momento em que cada plano foi salvo localmente.
+// carregarDoServidor usa isso para não sobrescrever dados salvos recentemente.
+const planosProtegidos = new Map<string, number>() // id → timestamp (ms)
 
 const TIPOS_CONFIG: Record<TipoPlano, { label: string; emoji: string; cor: string; descricao: string }> = {
   evento:     { label: 'Eventos',    emoji: '🎪', cor: '#1a6bbf', descricao: 'Festas, shows, feiras e grandes concentrações' },
@@ -2626,6 +2632,7 @@ function DetalheP({
   // fotosRef mantém o array atualizado de forma SÍNCRONA para evitar race condition
   // quando várias fotos são tiradas rapidamente (planoLocal.fotosEvento fica stale no closure React)
   const fotosRef = useRef<(string | FotoGeolocada)[]>(plano.fotosEvento ?? [])
+  const planoLocalRef = useRef<Plano>(plano)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const fileInputCameraRef = useRef<HTMLInputElement>(null)
   // Viewport atual do mapa — atualizado pelo MapViewTracker quando o usuário move/dá zoom
@@ -2678,6 +2685,7 @@ function DetalheP({
   // (carregandoFotos=true), pois isso causaria perda de fotos recém-tiradas.
   const carregandoFotosRef = useRef(false)
   useEffect(() => { carregandoFotosRef.current = carregandoFotos }, [carregandoFotos])
+  useEffect(() => { planoLocalRef.current = planoLocal }, [planoLocal])
 
   useEffect(() => {
     if (!supabaseDisponivel) return
@@ -2777,7 +2785,7 @@ function DetalheP({
       )
       fotosRef.current = fotasSalvas
       setPlanoLocal(prev => ({ ...prev, fotosEvento: fotasSalvas }))
-      onAtualizar({ ...planoLocal, fotosEvento: prepararParaSalvar(fotasSalvas) })
+      onAtualizar({ ...planoLocalRef.current, fotosEvento: prepararParaSalvar(fotasSalvas) })
     } catch {
       // Permanece no IndexedDB — próxima reconexão tenta de novo
     }
@@ -4147,9 +4155,14 @@ export default function Planejamento() {
           .order('criado_em', { ascending: false }).limit(500)
         if (!error && data) {
           const remote = data.map(row => sbParaPlano(row as Record<string, unknown>))
+          const agora = Date.now()
           setPlanos(prev => {
             const map = new Map(prev.map(p => [p.id, p]))
-            remote.forEach(r => { map.set(r.id, r) })
+            remote.forEach(r => {
+              const protegidoEm = planosProtegidos.get(r.id)
+              if (protegidoEm && agora - protegidoEm < 30000) return
+              map.set(r.id, r)
+            })
             return Array.from(map.values()).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
           })
           return
@@ -4165,9 +4178,14 @@ export default function Planejamento() {
           const rows: Record<string, unknown>[] = await res.json()
           if (Array.isArray(rows) && rows.length > 0) {
             const remote = rows.map(row => sbParaPlano(row))
+            const agora = Date.now()
             setPlanos(prev => {
               const map = new Map(prev.map(p => [p.id, p]))
-              remote.forEach(r => { map.set(r.id, r) })
+              remote.forEach(r => {
+                const protegidoEm = planosProtegidos.get(r.id)
+                if (protegidoEm && agora - protegidoEm < 30000) return
+                map.set(r.id, r)
+              })
               return Array.from(map.values()).sort((a, b) => b.criadoEm.localeCompare(a.criadoEm))
             })
           }
@@ -4250,6 +4268,7 @@ export default function Planejamento() {
 
   const atualizarPlano = useCallback((plano: Plano) => {
     notificarAgentesNovos(plano)
+    planosProtegidos.set(plano.id, Date.now())
     setPlanos(prev => prev.map(p => p.id === plano.id ? plano : p))
     setAberto(plano)
     sincServidor(plano)
