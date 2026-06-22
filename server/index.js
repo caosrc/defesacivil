@@ -1050,6 +1050,22 @@ app.post('/api/planejamentos', async (req, res) => {
   }
 })
 
+app.patch('/api/planejamentos/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { status, conclusao } = req.body
+    const result = await query(
+      `UPDATE planejamentos SET status=$1, conclusao=$2 WHERE id=$3 RETURNING id, status, conclusao`,
+      [status, conclusao ?? null, id]
+    )
+    if (!result.rows[0]) return res.status(404).json({ error: 'Planejamento não encontrado' })
+    broadcastParaTodos({ tipo: 'planejamentos_atualizados' })
+    res.json(result.rows[0])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.delete('/api/planejamentos/:id', async (req, res) => {
   try {
     await query('DELETE FROM planejamentos WHERE id = $1', [req.params.id])

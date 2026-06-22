@@ -3045,7 +3045,7 @@ function DetalheP({
     }
   }
 
-  function mudarStatus(status: StatusPlano) {
+  async function mudarStatus(status: StatusPlano) {
     if (status === 'concluido') {
       setModalConclusao(true)
       setTextoConclusao(planoLocal.conclusao ?? '')
@@ -3054,14 +3054,28 @@ function DetalheP({
     const atualizado = { ...planoLocal, status }
     setPlanoLocal(atualizado)
     onAtualizar(atualizado)
+    try {
+      await fetch(`/api/planejamentos/${planoLocal.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, conclusao: atualizado.conclusao ?? null }),
+      })
+    } catch { /* fallback: onAtualizar já salvou via sincServidor */ }
   }
 
-  function confirmarConclusao() {
+  async function confirmarConclusao() {
     const texto = textoConclusao.trim()
     const atualizado = { ...planoLocal, status: 'concluido' as StatusPlano, conclusao: texto }
     setPlanoLocal(atualizado)
-    onAtualizar(atualizado)
     setModalConclusao(false)
+    try {
+      await fetch(`/api/planejamentos/${planoLocal.id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'concluido', conclusao: texto }),
+      })
+    } catch { /* fallback: onAtualizar vai sincronizar */ }
+    onAtualizar(atualizado)
   }
 
   useEffect(() => {
