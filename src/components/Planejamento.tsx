@@ -2617,6 +2617,7 @@ function DetalheP({
   })
   const [modalConclusao, setModalConclusao] = useState(false)
   const [textoConclusao, setTextoConclusao] = useState('')
+  const [salvandoConclusao, setSalvandoConclusao] = useState(false)
   const [modalSenha, setModalSenha] = useState(false)
   const [senhaInput, setSenhaInput] = useState('')
   const [senhaErro, setSenhaErro] = useState(false)
@@ -3066,8 +3067,7 @@ function DetalheP({
   async function confirmarConclusao() {
     const texto = textoConclusao.trim()
     const atualizado = { ...planoLocal, status: 'concluido' as StatusPlano, conclusao: texto }
-    setPlanoLocal(atualizado)
-    setModalConclusao(false)
+    setSalvandoConclusao(true)
     try {
       await fetch(`/api/planejamentos/${planoLocal.id}/status`, {
         method: 'PATCH',
@@ -3075,7 +3075,10 @@ function DetalheP({
         body: JSON.stringify({ status: 'concluido', conclusao: texto }),
       })
     } catch { /* fallback: onAtualizar vai sincronizar */ }
+    setPlanoLocal(atualizado)
     onAtualizar(atualizado)
+    setSalvandoConclusao(false)
+    setModalConclusao(false)
   }
 
   useEffect(() => {
@@ -3617,13 +3620,15 @@ function DetalheP({
               style={{ width: '100%', border: '1.5px solid #d1d5db', borderRadius: 10, padding: '0.7rem', fontSize: '0.88rem', resize: 'vertical', outline: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
             />
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.9rem' }}>
-              <button onClick={() => setModalConclusao(false)}
-                style={{ flex: 1, background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 10, padding: '0.7rem', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 700 }}>
+              <button onClick={() => setModalConclusao(false)} disabled={salvandoConclusao}
+                style={{ flex: 1, background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 10, padding: '0.7rem', fontSize: '0.88rem', cursor: salvandoConclusao ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: salvandoConclusao ? 0.5 : 1 }}>
                 Cancelar
               </button>
-              <button onClick={confirmarConclusao}
-                style={{ flex: 1.8, background: 'linear-gradient(90deg,#059669,#10b981)', color: 'white', border: 'none', borderRadius: 10, padding: '0.7rem', fontSize: '0.88rem', cursor: 'pointer', fontWeight: 800, boxShadow: '0 2px 8px rgba(5,150,105,0.35)' }}>
-                ✅ Confirmar conclusão
+              <button onClick={confirmarConclusao} disabled={salvandoConclusao}
+                style={{ flex: 2, background: salvandoConclusao ? '#6b7280' : 'linear-gradient(90deg,#065f46,#059669)', color: 'white', border: 'none', borderRadius: 10, padding: '0.7rem', fontSize: '0.9rem', cursor: salvandoConclusao ? 'not-allowed' : 'pointer', fontWeight: 800, boxShadow: salvandoConclusao ? 'none' : '0 3px 12px rgba(5,150,105,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', transition: 'all 0.2s' }}>
+                {salvandoConclusao
+                  ? <><span style={{ fontSize: '1rem' }}>⏳</span> Salvando...</>
+                  : <><span style={{ fontSize: '1rem' }}>🏁</span> Finalizar Operação</>}
               </button>
             </div>
           </div>
