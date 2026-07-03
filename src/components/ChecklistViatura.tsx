@@ -266,26 +266,40 @@ interface FotoSlotHProps {
 function FotoSlotH({ label, foto, onFoto, children }: FotoSlotHProps) {
   const cameraRef = useRef<HTMLInputElement>(null)
   const galeriaRef = useRef<HTMLInputElement>(null)
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = async (ev) => {
-      if (ev.target?.result) {
-        const redim = await redimensionarImagem(ev.target.result as string, 800, 600)
-        const comMarca = await adicionarMarcaDagua(redim, null, null, 800, 0.45)
-        onFoto(comMarca)
-        salvarFotoNoDispositivo(comMarca)
+
+  async function processarArquivo(file: File) {
+    return new Promise<void>((resolve) => {
+      const reader = new FileReader()
+      reader.onload = async (ev) => {
+        if (ev.target?.result) {
+          const redim = await redimensionarImagem(ev.target.result as string, 800, 600)
+          const comMarca = await adicionarMarcaDagua(redim, null, null, 800, 0.45)
+          onFoto(comMarca)
+          salvarFotoNoDispositivo(comMarca)
+        }
+        resolve()
       }
-    }
-    reader.readAsDataURL(file)
+      reader.readAsDataURL(file)
+    })
+  }
+
+  function handleCamera(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) processarArquivo(file)
     e.target.value = ''
   }
+
+  function handleGaleria(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (file) processarArquivo(file)
+    e.target.value = ''
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleCamera} />
+      <input ref={galeriaRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleGaleria} />
       <div className="ck-foto-slot" onClick={() => cameraRef.current?.click()}>
-        <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleChange} />
-        <input ref={galeriaRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleChange} />
         {foto ? (
           <>
             <img src={foto} alt={label} className="ck-foto-img" />
@@ -301,7 +315,7 @@ function FotoSlotH({ label, foto, onFoto, children }: FotoSlotHProps) {
       </div>
       <button
         type="button"
-        onClick={(e) => { e.stopPropagation(); galeriaRef.current?.click() }}
+        onClick={() => galeriaRef.current?.click()}
         style={{
           background: 'none', border: 'none', color: '#1a4b8c',
           fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline',
