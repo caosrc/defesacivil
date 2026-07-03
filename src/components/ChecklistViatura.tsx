@@ -247,7 +247,7 @@ function redimensionarImagem(dataUrl: string, maxW: number, maxH: number): Promi
       canvas.width = w; canvas.height = h
       const ctx = canvas.getContext('2d')!
       ctx.drawImage(img, 0, 0, w, h)
-      const result = canvas.toDataURL('image/jpeg', 0.60)
+      const result = canvas.toDataURL('image/jpeg', 0.45)
       canvas.width = 0; canvas.height = 0
       resolve(result)
     }
@@ -271,8 +271,8 @@ function FotoSlotH({ label, foto, onFoto, children }: FotoSlotHProps) {
     const reader = new FileReader()
     reader.onload = async (ev) => {
       if (ev.target?.result) {
-        const redim = await redimensionarImagem(ev.target.result as string, 900, 675)
-        const comMarca = await adicionarMarcaDagua(redim, null, null, 900, 0.60)
+        const redim = await redimensionarImagem(ev.target.result as string, 800, 600)
+        const comMarca = await adicionarMarcaDagua(redim, null, null, 800, 0.45)
         onFoto(comMarca)
         salvarFotoNoDispositivo(comMarca)
       }
