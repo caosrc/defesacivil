@@ -45,6 +45,7 @@ export const AGENTES = ['Moisés', 'Valteir', 'Arthur', 'Gustavo', 'Vânia', 'Gr
 export const AGENTE_SENHAS: Record<string, string> = {
   'Sócrates': '3004',
   'Moisés': '301067',
+  'Arthur': '0620',
   'Gustavo': '8228',
   'Cristiane': '1950',
   'Vânia': '1210',

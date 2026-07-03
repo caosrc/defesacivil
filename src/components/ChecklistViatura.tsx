@@ -264,7 +264,8 @@ interface FotoSlotHProps {
 }
 
 function FotoSlotH({ label, foto, onFoto, children }: FotoSlotHProps) {
-  const ref = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const galeriaRef = useRef<HTMLInputElement>(null)
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -281,20 +282,34 @@ function FotoSlotH({ label, foto, onFoto, children }: FotoSlotHProps) {
     e.target.value = ''
   }
   return (
-    <div className="ck-foto-slot" onClick={() => ref.current?.click()}>
-      <input ref={ref} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleChange} />
-      {foto ? (
-        <>
-          <img src={foto} alt={label} className="ck-foto-img" />
-          <span className="ck-foto-nome">{label}</span>
-        </>
-      ) : (
-        <div className="ck-foto-empty">
-          <div className="ck-foto-icon">{children}</div>
-          <span className="ck-foto-label">{label}</span>
-          <span className="ck-foto-hint">📷</span>
-        </div>
-      )}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem' }}>
+      <div className="ck-foto-slot" onClick={() => cameraRef.current?.click()}>
+        <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleChange} />
+        <input ref={galeriaRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleChange} />
+        {foto ? (
+          <>
+            <img src={foto} alt={label} className="ck-foto-img" />
+            <span className="ck-foto-nome">{label}</span>
+          </>
+        ) : (
+          <div className="ck-foto-empty">
+            <div className="ck-foto-icon">{children}</div>
+            <span className="ck-foto-label">{label}</span>
+            <span className="ck-foto-hint">📷</span>
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); galeriaRef.current?.click() }}
+        style={{
+          background: 'none', border: 'none', color: '#1a4b8c',
+          fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline',
+          padding: '0.1rem 0.3rem',
+        }}
+      >
+        📁 Carregar foto
+      </button>
     </div>
   )
 }
@@ -410,6 +425,7 @@ export default function ChecklistViatura() {
   }
 
   const avariaRef = useRef<HTMLInputElement>(null)
+  const avariaGaleriaRef = useRef<HTMLInputElement>(null)
   const assinaturaRef = useRef<HTMLCanvasElement>(null)
   const assinandoRef = useRef(false)
 
@@ -937,6 +953,21 @@ export default function ChecklistViatura() {
               )}
               <input ref={avariaRef} type="file" accept="image/*" multiple capture="environment"
                 style={{ display: 'none' }} onChange={adicionarAvaria} />
+              <input ref={avariaGaleriaRef} type="file" accept="image/*" multiple
+                style={{ display: 'none' }} onChange={adicionarAvaria} />
+            </div>
+            <div style={{ textAlign: 'center', marginTop: '0.25rem' }}>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); avariaGaleriaRef.current?.click() }}
+                style={{
+                  background: 'none', border: 'none', color: '#1a4b8c',
+                  fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline',
+                  padding: '0.1rem 0.3rem',
+                }}
+              >
+                📁 Carregar foto
+              </button>
             </div>
 
             {/* ── Conservação ── */}
