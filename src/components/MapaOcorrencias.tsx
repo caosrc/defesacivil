@@ -257,6 +257,8 @@ interface Props {
   onDestinoExternoConsumido?: () => void
   /** Equipamentos em campo para exibir no mapa. */
   equipamentosCampo?: EquipamentoCampoMapa[]
+  /** Abre o detalhe de um equipamento em campo no Patrimônio. */
+  onVerDetalheCampo?: (equipId: number) => void
 }
 
 interface DispositivoRemoto {
@@ -338,7 +340,7 @@ const OURO_BRANCO: [number, number] = [-20.5195, -43.6983]
 const MAX_TRILHA = 300
 
 // ── Componente principal ────────────────────────────────────────
-export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExterno, onDestinoExternoConsumido, equipamentosCampo = [] }: Props) {
+export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExterno, onDestinoExternoConsumido, equipamentosCampo = [], onVerDetalheCampo }: Props) {
   const [selecionada, setSelecionada] = useState<Ocorrencia | null>(null)
   const [legendaAberta, setLegendaAberta] = useState(false)
   const [camadaMapa, setCamadaMapa] = useState<CamadaMapa>('padrao')
@@ -1153,7 +1155,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
             icon={criarIconeCone(c.material_nome)}
           >
             <Popup>
-              <div style={{ minWidth: 160, fontFamily: 'inherit' }}>
+              <div style={{ minWidth: 180, fontFamily: 'inherit' }}>
                 <div style={{ fontWeight: 700, fontSize: '0.92rem', marginBottom: 4 }}>
                   🚧 {c.material_nome ?? 'Equipamento em Campo'}
                 </div>
@@ -1167,7 +1169,19 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
                     {c.observacao}
                   </div>
                 )}
-                <div style={{ fontSize: '0.72rem', color: '#ea580c', fontWeight: 600 }}>● Ativo em campo</div>
+                <div style={{ fontSize: '0.72rem', color: '#ea580c', fontWeight: 600, marginBottom: 8 }}>● Ativo em campo</div>
+                {onVerDetalheCampo && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onVerDetalheCampo(c.id) }}
+                    style={{
+                      width: '100%', background: '#ea580c', color: 'white',
+                      border: 'none', borderRadius: 6, padding: '6px 0',
+                      fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem',
+                    }}
+                  >
+                    Ver detalhes completos
+                  </button>
+                )}
               </div>
             </Popup>
           </Marker>

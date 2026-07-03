@@ -153,7 +153,13 @@ async function lerArquivoComoDataUrl(file: File): Promise<string> {
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════════
-export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: (lat: number, lng: number) => void } = {}) {
+interface MateriaisProps {
+  onIrParaMapa?: (lat: number, lng: number, nome?: string) => void
+  abrirCampoId?: number | null
+  onAbrirCampoIdConsumido?: () => void
+}
+
+export default function MateriaisEmprestimos({ onIrParaMapa, abrirCampoId, onAbrirCampoIdConsumido }: MateriaisProps = {}) {
   const [modo, setModo] = useState<Modo>('inicial')
   const [carregando, setCarregando] = useState(true)
   const [materiais, setMateriais] = useState<Material[]>([])
@@ -194,6 +200,18 @@ export default function MateriaisEmprestimos({ onIrParaMapa }: { onIrParaMapa?: 
   }, [])
 
   useEffect(() => { carregar() }, [carregar])
+
+  // Navega direto para o Detalhe em Campo quando abrirCampoId é recebido do mapa
+  useEffect(() => {
+    if (!abrirCampoId || carregando) return
+    const equip = equipamentosCampo.find(c => c.id === abrirCampoId)
+    if (equip) {
+      setCampoSelecionado(equip)
+      setAbaCampo('ativos')
+      setModo('detalheCampo')
+      onAbrirCampoIdConsumido?.()
+    }
+  }, [abrirCampoId, equipamentosCampo, carregando])
 
   // Verifica prazos vencidos/hoje e dispara notificação do navegador
   useEffect(() => {

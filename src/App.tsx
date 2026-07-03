@@ -202,6 +202,7 @@ export default function App() {
   const [destinoSos, setDestinoSos] = useState<{ lat: number; lng: number } | null>(null)
   const [destinoCampo, setDestinoCampo] = useState<{ lat: number; lng: number; nome?: string; soMostrar?: boolean } | null>(null)
   const [equipamentosCampoMapa, setEquipamentosCampoMapa] = useState<EquipamentoCampoMapa[]>([])
+  const [abrirCampoId, setAbrirCampoId] = useState<number | null>(null)
 
   useEffect(() => {
     function aoSolicitarRota(e: Event) {
@@ -940,6 +941,7 @@ export default function App() {
                 destinoExterno={destinoSos ?? destinoCampo}
                 onDestinoExternoConsumido={() => { setDestinoSos(null); setDestinoCampo(null) }}
                 equipamentosCampo={equipamentosCampoMapa}
+                onVerDetalheCampo={(id) => { setAbrirCampoId(id); setAba('materiais') }}
               />
             </Suspense>
           </ErrorBoundary>
@@ -964,10 +966,14 @@ export default function App() {
         {aba === 'materiais' && (
           <ErrorBoundary>
             <Suspense fallback={<LazyFallback />}>
-              <MateriaisEmprestimos onIrParaMapa={(lat, lng, nome) => {
-                setDestinoCampo({ lat, lng, nome, soMostrar: true })
-                setAba('mapa')
-              }} />
+              <MateriaisEmprestimos
+                onIrParaMapa={(lat, lng, nome) => {
+                  setDestinoCampo({ lat, lng, nome, soMostrar: true })
+                  setAba('mapa')
+                }}
+                abrirCampoId={abrirCampoId}
+                onAbrirCampoIdConsumido={() => setAbrirCampoId(null)}
+              />
             </Suspense>
           </ErrorBoundary>
         )}

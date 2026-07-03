@@ -132,7 +132,9 @@ export async function adicionarMarcaDagua(
         })
       }
 
-      resolve(canvas.toDataURL('image/jpeg', qualidade))
+      const result = canvas.toDataURL('image/jpeg', qualidade)
+      canvas.width = 0; canvas.height = 0
+      resolve(result)
     }
     img.onerror = () => resolve(dataUrl)
     img.src = dataUrl
