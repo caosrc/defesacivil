@@ -3086,21 +3086,18 @@ function DetalheP({
     const texto = textoConclusao.trim()
     const atualizado = { ...planoLocal, status: 'concluido' as StatusPlano, conclusao: texto }
     setSalvandoConclusao(true)
+    // Atualiza estado local e fecha modal imediatamente — a conclusão é uma ação definitiva
+    setPlanoLocal(atualizado)
+    onAtualizar(atualizado)
+    setModalConclusao(false)
+    setSalvandoConclusao(false)
     try {
-      const res = await fetch(`/api/planejamentos/${planoLocal.id}/status`, {
+      await fetch(`/api/planejamentos/${planoLocal.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'concluido', conclusao: texto }),
       })
-      if (res.ok) {
-        setPlanoLocal(atualizado)
-        onAtualizar(atualizado)
-        setModalConclusao(false)
-      }
-    } catch {
-      // Falha de rede — mantém modal aberto para o usuário tentar novamente
-    }
-    setSalvandoConclusao(false)
+    } catch { /* silencioso — estado local já foi salvo */ }
   }
 
   useEffect(() => {
