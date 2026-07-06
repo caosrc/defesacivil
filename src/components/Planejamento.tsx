@@ -3060,16 +3060,26 @@ function DetalheP({
       setTextoConclusao(planoLocal.conclusao ?? '')
       return
     }
+    const anterior = planoLocal
     const atualizado = { ...planoLocal, status }
     setPlanoLocal(atualizado)
     onAtualizar(atualizado)
     try {
-      await fetch(`/api/planejamentos/${planoLocal.id}/status`, {
+      const res = await fetch(`/api/planejamentos/${planoLocal.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, conclusao: atualizado.conclusao ?? null }),
       })
-    } catch { /* fallback: onAtualizar já salvou via sincServidor */ }
+      if (!res.ok) {
+        // Reverte estado local se o servidor recusar (ex: 409 já concluído)
+        setPlanoLocal(anterior)
+        onAtualizar(anterior)
+      }
+    } catch {
+      // Falha de rede — reverte para o estado anterior
+      setPlanoLocal(anterior)
+      onAtualizar(anterior)
+    }
   }
 
   async function confirmarConclusao() {
@@ -3077,16 +3087,20 @@ function DetalheP({
     const atualizado = { ...planoLocal, status: 'concluido' as StatusPlano, conclusao: texto }
     setSalvandoConclusao(true)
     try {
-      await fetch(`/api/planejamentos/${planoLocal.id}/status`, {
+      const res = await fetch(`/api/planejamentos/${planoLocal.id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'concluido', conclusao: texto }),
       })
-    } catch { /* fallback: onAtualizar vai sincronizar */ }
-    setPlanoLocal(atualizado)
-    onAtualizar(atualizado)
+      if (res.ok) {
+        setPlanoLocal(atualizado)
+        onAtualizar(atualizado)
+        setModalConclusao(false)
+      }
+    } catch {
+      // Falha de rede — mantém modal aberto para o usuário tentar novamente
+    }
     setSalvandoConclusao(false)
-    setModalConclusao(false)
   }
 
   useEffect(() => {
@@ -3181,11 +3195,16 @@ function DetalheP({
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {(Object.keys(STATUS_CONFIG) as StatusPlano[]).map(s => {
             const sc = STATUS_CONFIG[s]
+            const jaConcluido = planoLocal.status === 'concluido'
+            const isAtivo = planoLocal.status === s
             return (
               <button
                 key={s}
-                className={`plan-status-pill ${sc.classe} ${planoLocal.status === s ? 'ativo-pill' : ''}`}
-                onClick={() => mudarStatus(s)}
+                className={`plan-status-pill ${sc.classe} ${isAtivo ? 'ativo-pill' : ''}`}
+                onClick={() => { if (!jaConcluido) mudarStatus(s) }}
+                disabled={jaConcluido && !isAtivo}
+                title={jaConcluido && !isAtivo ? 'Atividade concluída — status não pode ser alterado' : undefined}
+                style={jaConcluido && !isAtivo ? { opacity: 0.35, cursor: 'not-allowed' } : undefined}
               >
                 {sc.emoji} {sc.label}
               </button>

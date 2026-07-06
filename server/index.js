@@ -1031,10 +1031,17 @@ app.get('/api/planejamentos', async (_req, res) => {
 app.post('/api/planejamentos', async (req, res) => {
   try {
     const p = req.body
+    // Se a atividade já existe e está concluída, preserva status e conclusão
     await query(
       `INSERT INTO planejamentos (id, tipo, nome, descricao, local, data_inicio, data_fim, horario, horario_fim, publico_estimado, status, equipe, agentes_defesa_civil, materiais, itens_mapa, pontos_extras, lat, lng, observacoes, risco, criado_por, criado_em, conclusao)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
-       ON CONFLICT (id) DO UPDATE SET tipo=$2, nome=$3, descricao=$4, local=$5, data_inicio=$6, data_fim=$7, horario=$8, horario_fim=$9, publico_estimado=$10, status=$11, equipe=$12, agentes_defesa_civil=$13, materiais=$14, itens_mapa=$15, pontos_extras=$16, lat=$17, lng=$18, observacoes=$19, risco=$20, criado_por=$21, conclusao=$23`,
+       ON CONFLICT (id) DO UPDATE SET
+         tipo=$2, nome=$3, descricao=$4, local=$5, data_inicio=$6, data_fim=$7,
+         horario=$8, horario_fim=$9, publico_estimado=$10,
+         status=CASE WHEN planejamentos.status='concluido' THEN planejamentos.status ELSE $11 END,
+         equipe=$12, agentes_defesa_civil=$13, materiais=$14, itens_mapa=$15, pontos_extras=$16,
+         lat=$17, lng=$18, observacoes=$19, risco=$20, criado_por=$21,
+         conclusao=CASE WHEN planejamentos.status='concluido' THEN planejamentos.conclusao ELSE $23 END`,
       [p.id, p.tipo, p.nome, p.descricao, p.local, p.data_inicio, p.data_fim, p.horario, p.horario_fim,
        p.publico_estimado, p.status,
        JSON.stringify(p.equipe || []), JSON.stringify(p.agentes_defesa_civil || []),
@@ -1054,11 +1061,21 @@ app.patch('/api/planejamentos/:id/status', async (req, res) => {
   try {
     const { id } = req.params
     const { status, conclusao } = req.body
+    // UPDATE atômico: só altera se não estiver concluído (ou se estiver confirmando a própria conclusão)
     const result = await query(
-      `UPDATE planejamentos SET status=$1, conclusao=$2 WHERE id=$3 RETURNING id, status, conclusao`,
+      `UPDATE planejamentos
+         SET status=$1, conclusao=$2
+       WHERE id=$3
+         AND (status <> 'concluido' OR $1 = 'concluido')
+       RETURNING id, status, conclusao`,
       [status, conclusao ?? null, id]
     )
-    if (!result.rows[0]) return res.status(404).json({ error: 'Planejamento não encontrado' })
+    if (result.rowCount === 0) {
+      // Nenhuma linha atualizada — verifica se o registro existe
+      const existe = await query(`SELECT status FROM planejamentos WHERE id=$1`, [id])
+      if (!existe.rows[0]) return res.status(404).json({ error: 'Planejamento não encontrado' })
+      return res.status(409).json({ error: 'Atividade já concluída — status não pode ser alterado.' })
+    }
     broadcastParaTodos({ tipo: 'planejamentos_atualizados' })
     res.json(result.rows[0])
   } catch (err) {
