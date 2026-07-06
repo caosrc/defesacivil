@@ -3086,18 +3086,19 @@ function DetalheP({
     const texto = textoConclusao.trim()
     const atualizado = { ...planoLocal, status: 'concluido' as StatusPlano, conclusao: texto }
     setSalvandoConclusao(true)
-    // Atualiza estado local e fecha modal imediatamente — a conclusão é uma ação definitiva
+    try {
+      // Salva o plano completo no banco (upsert — garante que a linha existe e status='concluido')
+      await fetch('/api/planejamentos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(planoParaSB(atualizado)),
+      })
+    } catch { /* silencioso — onAtualizar sincroniza depois */ }
+    // Atualiza estado local e fecha modal
     setPlanoLocal(atualizado)
     onAtualizar(atualizado)
     setModalConclusao(false)
     setSalvandoConclusao(false)
-    try {
-      await fetch(`/api/planejamentos/${planoLocal.id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'concluido', conclusao: texto }),
-      })
-    } catch { /* silencioso — estado local já foi salvo */ }
   }
 
   useEffect(() => {

@@ -1031,6 +1031,7 @@ app.get('/api/planejamentos', async (_req, res) => {
 app.post('/api/planejamentos', async (req, res) => {
   try {
     const p = req.body
+    console.log(`[planejamentos POST] id=${p.id} status=${p.status} conclusao=${p.conclusao ?? ''}`)
     // Se a atividade já existe e está concluída, preserva status e conclusão
     await query(
       `INSERT INTO planejamentos (id, tipo, nome, descricao, local, data_inicio, data_fim, horario, horario_fim, publico_estimado, status, equipe, agentes_defesa_civil, materiais, itens_mapa, pontos_extras, lat, lng, observacoes, risco, criado_por, criado_em, conclusao)
