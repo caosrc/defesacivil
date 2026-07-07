@@ -3087,14 +3087,29 @@ function DetalheP({
     const atualizado = { ...planoLocal, status: 'concluido' as StatusPlano, conclusao: texto }
     setSalvandoConclusao(true)
     try {
-      // Salva o plano completo no banco (upsert — garante que a linha existe e status='concluido')
-      await fetch('/api/planejamentos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(planoParaSB(atualizado)),
-      })
-    } catch { /* silencioso — onAtualizar sincroniza depois */ }
-    // Atualiza estado local e fecha modal
+      if (supabaseDisponivel) {
+        // Supabase (Netlify): update direto com status e conclusao
+        const { error } = await supabase
+          .from('planejamentos')
+          .update({ status: 'concluido', conclusao: texto })
+          .eq('id', planoLocal.id)
+        if (error) throw new Error(error.message)
+      } else {
+        // Express (Replit): usa o endpoint PATCH que tem proteção CASE no banco
+        const res = await fetch(`/api/planejamentos/${planoLocal.id}/status`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'concluido', conclusao: texto }),
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      }
+    } catch (e) {
+      console.error('[confirmarConclusao] Erro ao salvar:', e)
+      alert('Erro ao finalizar operação. Verifique sua conexão e tente novamente.')
+      setSalvandoConclusao(false)
+      return
+    }
+    // Salvo com sucesso — atualiza estado local e fecha modal
     setPlanoLocal(atualizado)
     onAtualizar(atualizado)
     setModalConclusao(false)
@@ -4223,7 +4238,24 @@ export default function Planejamento() {
     const payload = planoParaSB(plano)
     // Supabase (Netlify + Replit com VITE_USE_SUPABASE=true)
     if (supabaseDisponivel) {
-      try { await supabase.from('planejamentos').upsert(payload) } catch { /* silencioso */ }
+      try {
+        if (plano.status === 'concluido') {
+          // Conclusão confirmada: upsert completo garante que status e conclusao ficam salvos
+          await supabase.from('planejamentos').upsert(payload)
+        } else {
+          // Outros estados: atualiza somente se o registro não estiver concluído no banco
+          const { data: atualizado } = await supabase
+            .from('planejamentos')
+            .update(payload)
+            .eq('id', plano.id)
+            .neq('status', 'concluido')
+            .select('id')
+          // Se nenhuma linha foi afetada, o registro pode ser novo → tenta inserir
+          if (!atualizado || atualizado.length === 0) {
+            await supabase.from('planejamentos').upsert(payload, { ignoreDuplicates: true })
+          }
+        }
+      } catch { /* silencioso */ }
       return
     }
     // Fallback Express (Replit sem Supabase)
