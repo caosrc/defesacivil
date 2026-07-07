@@ -14,6 +14,7 @@ import BotaoSos from './components/BotaoSos'
 import BannerNotifSos from './components/BannerNotifSos'
 import BannerConvocacao from './components/BannerConvocacao'
 import { cacheOcorrencias, getCachedOcorrencias, getPending, removePending, countPending, clearAllPending } from './offline'
+import { calcularAreaM2, formatarArea } from './components/PoligonoAreaQueimada'
 
 interface EquipamentoCampoMapa {
   id: number
@@ -500,6 +501,13 @@ export default function App() {
     if (!comGeo.length && !comPoligono.length) { alert('Nenhuma ocorrência com GPS para exportar.'); return }
 
     function kmlDescricao(o: typeof ocorrencias[0]) {
+      const pol = Array.isArray((o as any).poligono_area_queimada)
+        ? (o as any).poligono_area_queimada as { lat: number; lng: number }[]
+        : []
+      const ehIncendioKmz = o.natureza === 'Incêndio em Área Urbana' || o.natureza === 'Incêndio em Área Rural'
+      const areaQueimadaTexto = (pol.length >= 3 && ehIncendioKmz)
+        ? `<b>Área Queimada:</b> ${formatarArea(calcularAreaM2(pol))}<br/>`
+        : ''
       return `<![CDATA[
         <b>Tipo:</b> ${o.tipo}<br/>
         <b>Natureza:</b> ${o.natureza}${o.subnatureza ? ` (${o.subnatureza})` : ''}<br/>
@@ -507,7 +515,7 @@ export default function App() {
         <b>Status:</b> ${o.status_oc}<br/>
         ${o.endereco ? `<b>Endereço:</b> ${o.endereco}<br/>` : ''}
         ${o.proprietario ? `<b>Proprietário:</b> ${o.proprietario}<br/>` : ''}
-        <b>Data:</b> ${new Date(o.created_at).toLocaleString('pt-BR')}
+        ${areaQueimadaTexto}<b>Data:</b> ${new Date(o.created_at).toLocaleString('pt-BR')}
       ]]>`
     }
 

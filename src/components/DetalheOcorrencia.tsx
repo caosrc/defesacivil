@@ -336,6 +336,11 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
       : []
     const temPoligono = pol.length >= 3
 
+    const ehIncendioKmz = o.natureza === 'Incêndio em Área Urbana' || o.natureza === 'Incêndio em Área Rural'
+    const areaQueimadaTexto = (temPoligono && ehIncendioKmz)
+      ? `<b>Área Queimada:</b> ${formatarArea(calcularAreaM2(pol))}<br/>`
+      : ''
+
     const descricao = `<![CDATA[
         <b>Tipo:</b> ${o.tipo}<br/>
         <b>Natureza:</b> ${o.natureza}${o.subnatureza ? ` (${o.subnatureza})` : ''}<br/>
@@ -344,7 +349,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
         ${o.endereco ? `<b>Endereço:</b> ${o.endereco}<br/>` : ''}
         ${o.proprietario ? `<b>Proprietário:</b> ${o.proprietario}<br/>` : ''}
         ${o.situacao ? `<b>Situação:</b> ${o.situacao}<br/>` : ''}
-        <b>Data:</b> ${dataFormatada}
+        ${areaQueimadaTexto}<b>Data:</b> ${dataFormatada}
       ]]>`
 
     const poligonoPlacemark = temPoligono ? `
