@@ -25,6 +25,15 @@ type DmsEdicao = {
   direcao: string
 }
 
+/** Converte ISO UTC para o formato esperado pelo input datetime-local (horário local). */
+function isoParaDatetimeLocal(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function decimalParaPartesGms(valor: number | null, positivo: string, negativo: string): DmsEdicao {
   if (valor == null) return { graus: '', minutos: '', segundos: '', direcao: negativo }
   const absoluto = Math.abs(valor)
@@ -171,6 +180,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const [eRecomendacao, setERecomendacao] = useState(o.recomendacao ?? '')
   const [eConclusao, setEConclusao] = useState(o.conclusao ?? '')
   const [eAgentes, setEAgentes] = useState<string[]>(Array.isArray(o.agentes) ? o.agentes : [])
+  const [eCreatedAt, setECreatedAt] = useState(() => isoParaDatetimeLocal(o.created_at))
 
   const precisaSubnatureza = eNatureza === 'Queda de Estrutura' || eNatureza === 'Apreensão e Captura de Animal'
   const labelSubnatureza = eNatureza === 'Queda de Estrutura' ? 'Qual é a estrutura?' : 'Qual é o animal?'
@@ -201,6 +211,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
     setERecomendacao(o.recomendacao ?? '')
     setEConclusao(o.conclusao ?? '')
     setEAgentes(Array.isArray(o.agentes) ? o.agentes : [])
+    setECreatedAt(isoParaDatetimeLocal(o.created_at))
     setEFotos(Array.isArray(o.fotos) ? [...o.fotos] : [])
     setEDescricoesFotos(Array.isArray(o.descricoes_fotos) ? [...o.descricoes_fotos] : [])
     setEFotoAmpliada(null)
@@ -290,6 +301,7 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
       const dadosEditados = {
         tipo: tipoFinal,
         natureza: eNatureza,
+        created_at: eCreatedAt ? new Date(eCreatedAt).toISOString() : o.created_at,
         subnatureza: precisaSubnatureza ? eSubnatureza || null : null,
         nivel_risco: eNivel,
         status_oc: eStatus,
@@ -1094,6 +1106,17 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
                       </label>
                     ))}
                   </div>
+                </div>
+
+                {/* Registrado em */}
+                <div className="campo campo-edit">
+                  <label className="campo-label">🕐 Registrado em</label>
+                  <input
+                    className="campo-input"
+                    type="datetime-local"
+                    value={eCreatedAt}
+                    onChange={(e) => setECreatedAt(e.target.value)}
+                  />
                 </div>
 
                 {/* Fotos */}
