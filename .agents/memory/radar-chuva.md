@@ -15,3 +15,10 @@ O RainViewer é adequado para o quadro observado recente, mas não para confirma
 **Why:** Os quadros públicos do RainViewer são limitados ao radar recente e podem não ter pixels sobre municípios pequenos; um quadro vazio não prova que não choveu.
 
 **How to apply:** Exibir o horário do quadro observado, manter um resumo histórico separado e tratar a grade meteorológica ao redor como estimativa complementar, nunca como substituta silenciosa do radar.
+
+## Animação do radar
+Para reproduzir a evolução das áreas de chuva, usar a sequência `radar.past` e `radar.nowcast` da API pública, trocando os tiles por quadro no cliente e oferecendo pausa/controle manual.
+
+**Why:** O endpoint entrega metadados de vários quadros, mas usar apenas o último quadro faz a chuva parecer desaparecer e não mostra o deslocamento das células.
+
+**How to apply:** Reiniciar a sequência ao atualizar os metadados, exibir horário e tipo de cada quadro, e manter a grade Open-Meteo como complemento quando houver poucos pixels de radar no município.

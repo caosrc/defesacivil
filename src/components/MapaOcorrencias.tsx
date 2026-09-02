@@ -129,8 +129,15 @@ interface DadosRadarChuva {
   atualizadoEm: string
   fonte: string
   tipoQuadro?: 'observado' | 'nowcast'
+  quadros?: QuadroRadarChuva[]
   cache?: boolean
   erroAtualizacao?: boolean
+}
+
+interface QuadroRadarChuva {
+  path: string
+  frameTime: number
+  tipoQuadro: 'observado' | 'nowcast'
 }
 
 interface ResumoChuvaOntem {
@@ -520,6 +527,8 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [mostrarChuva, setMostrarChuva] = useState(false)
   const [painelChuvaAberto, setPainelChuvaAberto] = useState(false)
   const [radarChuva, setRadarChuva] = useState<DadosRadarChuva | null>(null)
+  const [indiceQuadroRadar, setIndiceQuadroRadar] = useState(0)
+  const [radarAnimando, setRadarAnimando] = useState(true)
   const [chuvaNoPonto, setChuvaNoPonto] = useState<ChuvaNoPonto | null>(null)
   const [chuvaOntem, setChuvaOntem] = useState<ResumoChuvaOntem | null>(null)
   const [chuvaArea, setChuvaArea] = useState<PontoChuvaArea[]>([])
@@ -609,6 +618,8 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
     let radarAtualizado = false
     if (resultadoRadar.status === 'fulfilled' && resultadoRadar.value.ok) {
       setRadarChuva(await resultadoRadar.value.json())
+      setIndiceQuadroRadar(0)
+      setRadarAnimando(true)
       radarAtualizado = true
     } else {
       setRadarChuvaErro('Radar ao vivo indisponível; exibindo a estimativa local.')
@@ -659,6 +670,28 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
       document.removeEventListener('visibilitychange', atualizarAoVoltar)
     }
   }, [mostrarChuva, buscarRadarChuva])
+
+  const quadrosRadar = useMemo<QuadroRadarChuva[]>(() => {
+    if (!radarChuva) return []
+    if (Array.isArray(radarChuva.quadros) && radarChuva.quadros.length > 0) {
+      return radarChuva.quadros
+    }
+    return [{
+      path: radarChuva.path,
+      frameTime: radarChuva.frameTime,
+      tipoQuadro: radarChuva.tipoQuadro || 'observado',
+    }]
+  }, [radarChuva])
+
+  const quadroRadarAtual = quadrosRadar[indiceQuadroRadar] || quadrosRadar.at(-1) || null
+
+  useEffect(() => {
+    if (!mostrarChuva || !radarAnimando || quadrosRadar.length < 2) return
+    const intervalo = setInterval(() => {
+      setIndiceQuadroRadar(indice => (indice + 1) % quadrosRadar.length)
+    }, 900)
+    return () => clearInterval(intervalo)
+  }, [mostrarChuva, radarAnimando, quadrosRadar.length])
 
   const buscarRRQPE = useCallback(async () => {
     setRRQPECarregando(true)
@@ -1392,10 +1425,10 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
             zIndex={10}
           />
         )}
-        {mostrarChuva && radarChuva && (
+        {mostrarChuva && radarChuva && quadroRadarAtual && (
           <TileLayer
-            key={`radar-chuva-${radarChuva.frameTime}`}
-            url={`${radarChuva.host}${radarChuva.path}/256/{z}/{x}/{y}/2/1_1.png`}
+            key={`radar-chuva-${quadroRadarAtual.frameTime}`}
+            url={`${radarChuva.host}${quadroRadarAtual.path}/256/{z}/{x}/{y}/2/1_1.png`}
             opacity={0.82}
             attribution='Radar meteorológico: <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">RainViewer</a>'
             maxNativeZoom={7}
@@ -1780,7 +1813,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
               if (!proximoEstado) setMostrarRRQPE(false)
             }}
             aria-pressed={mostrarChuva}
-            title="Mostrar radar de chuva ao vivo em Ouro Branco"
+            title="Mostrar radar animado de chuva em Ouro Branco"
           >
             🌧️ Chuva
           </button>
@@ -1855,13 +1888,38 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
                     <div>
                       <span className="mapa-chuva-resumo-label">Quadro do radar</span>
                       <strong>
-                        {new Date(radarChuva.frameTime * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                        {quadroRadarAtual
+                          ? new Date(quadroRadarAtual.frameTime * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                          : '–'}
                         <small className="mapa-chuva-quadro-tipo">
-                          {radarChuva.tipoQuadro === 'nowcast' ? 'estimativa' : 'observado'}
+                          {quadroRadarAtual?.tipoQuadro === 'nowcast' ? 'estimativa' : 'observado'}
                         </small>
                       </strong>
                     </div>
                   </div>
+                  {quadrosRadar.length > 1 && (
+                    <div className="mapa-chuva-animacao">
+                      <button
+                        type="button"
+                        onClick={() => setRadarAnimando(v => !v)}
+                        aria-label={radarAnimando ? 'Pausar animação do radar' : 'Reproduzir animação do radar'}
+                      >
+                        {radarAnimando ? '⏸' : '▶'}
+                      </button>
+                      <input
+                        type="range"
+                        min={0}
+                        max={quadrosRadar.length - 1}
+                        value={Math.min(indiceQuadroRadar, quadrosRadar.length - 1)}
+                        onChange={evento => {
+                          setRadarAnimando(false)
+                          setIndiceQuadroRadar(Number(evento.target.value))
+                        }}
+                        aria-label="Posição da animação do radar"
+                      />
+                      <span>{indiceQuadroRadar + 1}/{quadrosRadar.length}</span>
+                    </div>
+                  )}
                   <div className="mapa-chuva-legenda">
                     <span><i className="chuva-cor chuva-cor--fraca" /> fraca</span>
                     <span><i className="chuva-cor chuva-cor--moderada" /> moderada</span>

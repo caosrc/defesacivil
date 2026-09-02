@@ -1283,6 +1283,37 @@ input, select, textarea { font-family: inherit; }
   font-size: 0.44rem;
   font-weight: 500;
 }
+.mapa-chuva-animacao {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.34rem 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+.mapa-chuva-animacao button {
+  flex: 0 0 auto;
+  width: 1.35rem;
+  height: 1.25rem;
+  border: 1px solid #bae6fd;
+  border-radius: 5px;
+  background: white;
+  color: #075985;
+  font-size: 0.6rem;
+  cursor: pointer;
+}
+.mapa-chuva-animacao input {
+  min-width: 0;
+  flex: 1;
+  accent-color: #0284c7;
+  cursor: pointer;
+}
+.mapa-chuva-animacao span {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
 .mapa-chuva-legenda {
   display: flex;
   flex-wrap: wrap;
