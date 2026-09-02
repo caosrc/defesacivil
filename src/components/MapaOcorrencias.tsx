@@ -2042,15 +2042,23 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
             className={`mapa-camada-btn ${mostrarOcorrencias ? 'ativo' : ''}`}
             onClick={() => {
               if (!mostrarOcorrencias) setMostrarOcorrencias(true)
-              setSubmenuFiltroAberto(v => !v)
+              // O botão de Ocorrências serve para abrir os filtros.
+              // O fechamento fica no botão ✕ do próprio painel.
+              setSubmenuFiltroAberto(true)
               setSelecionada(null)
             }}
+            aria-expanded={submenuFiltroAberto}
+            aria-controls="filtro-naturezas-ocorrencias"
           >
             📋 Ocorrências {mostrarOcorrencias && `▾`}
           </button>
 
           {submenuFiltroAberto && (
-            <div className="mapa-ocorr-submenu" onClick={(e) => e.stopPropagation()}>
+            <div
+              id="filtro-naturezas-ocorrencias"
+              className="mapa-ocorr-submenu"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="mapa-ocorr-submenu-header">
                 <span>Filtrar tipos</span>
                 <button onClick={() => setSubmenuFiltroAberto(false)} aria-label="Fechar">✕</button>

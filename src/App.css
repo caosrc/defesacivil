@@ -887,7 +887,7 @@ input, select, textarea { font-family: inherit; }
   display: flex;
   gap: 0.08rem;
   max-width: calc(100% - 16px);
-  overflow-x: auto;
+  overflow: visible;
   scrollbar-width: none;
 }
 .mapa-camadas::-webkit-scrollbar { display: none; }
