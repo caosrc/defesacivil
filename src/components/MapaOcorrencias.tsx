@@ -133,6 +133,27 @@ interface DadosRadarChuva {
   erroAtualizacao?: boolean
 }
 
+interface ResumoChuvaOntem {
+  data: string
+  precipitacao: number
+  horasComChuva: number
+  picoHoraria: number
+  horaPico: string | null
+  coberturaNuvensMedia: number | null
+  fonte?: string
+}
+
+interface PontoChuvaArea {
+  lat: number
+  lng: number
+  hora: string | null
+  precipitacao: number
+  chuva: number
+  pancadas: number
+  coberturaNuvens: number | null
+  codigoTempo: number | null
+}
+
 interface DadosRRQPE {
   disponivel: boolean
   tileUrl?: string
@@ -144,6 +165,30 @@ interface DadosRRQPE {
 interface ChuvaNoPonto {
   precipitacao: number | null
   fonte?: string
+}
+
+function intensidadeChuva(precipitacao: number): string {
+  if (precipitacao >= 50) return 'extrema'
+  if (precipitacao >= 20) return 'intensa'
+  if (precipitacao >= 7.6) return 'muito-forte'
+  if (precipitacao >= 2.5) return 'forte'
+  if (precipitacao >= 0.5) return 'moderada'
+  if (precipitacao > 0) return 'fraca'
+  return 'nuvens'
+}
+
+function corIntensidadeChuva(precipitacao: number, coberturaNuvens: number | null): string {
+  if (precipitacao <= 0 && (coberturaNuvens ?? 0) >= 40) return '#93c5fd'
+  const cores: Record<string, string> = {
+    fraca: '#7dd3fc',
+    moderada: '#22c55e',
+    forte: '#facc15',
+    'muito-forte': '#f97316',
+    intensa: '#ef4444',
+    extrema: '#c026d3',
+    nuvens: '#bfdbfe',
+  }
+  return cores[intensidadeChuva(precipitacao)]
 }
 
 // ── Cache de ícones no nível do módulo ──────────────────────────
@@ -476,6 +521,8 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [painelChuvaAberto, setPainelChuvaAberto] = useState(false)
   const [radarChuva, setRadarChuva] = useState<DadosRadarChuva | null>(null)
   const [chuvaNoPonto, setChuvaNoPonto] = useState<ChuvaNoPonto | null>(null)
+  const [chuvaOntem, setChuvaOntem] = useState<ResumoChuvaOntem | null>(null)
+  const [chuvaArea, setChuvaArea] = useState<PontoChuvaArea[]>([])
   const [radarChuvaCarregando, setRadarChuvaCarregando] = useState(false)
   const [radarChuvaErro, setRadarChuvaErro] = useState<string | null>(null)
   const [mostrarRRQPE, setMostrarRRQPE] = useState(false)
@@ -552,43 +599,51 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const buscarRadarChuva = useCallback(async () => {
     setRadarChuvaCarregando(true)
     setRadarChuvaErro(null)
-    try {
-      const [respostaRadar, respostaTempo] = await Promise.all([
-        fetch(`/api/radar-chuva?_ts=${Date.now()}`, { cache: 'no-store' }),
-        fetch(`/api/tempo?_ts=${Date.now()}`, { cache: 'no-store' }),
-      ])
-      if (!respostaRadar.ok) throw new Error('Radar indisponível')
+    const agora = Date.now()
+    const [resultadoRadar, resultadoTempo, resultadoArea] = await Promise.allSettled([
+      fetch(`/api/radar-chuva?_ts=${agora}`, { cache: 'no-store' }),
+      fetch(`/api/tempo?_ts=${agora}`, { cache: 'no-store' }),
+      fetch(`/api/chuva-area?_ts=${agora}`, { cache: 'no-store' }),
+    ])
 
-      const dadosRadar = await respostaRadar.json()
-      setRadarChuva(dadosRadar)
-
-      if (respostaTempo.ok) {
-        const dadosTempo = await respostaTempo.json()
-        const agora = Date.now()
-        const precipitacaoAtual = Number(dadosTempo?.atual?.precipitacao)
-        const horas = Array.isArray(dadosTempo?.horas) ? dadosTempo.horas : []
-        const maisProxima = horas
-          .filter((hora: { time?: string }) => hora?.time)
-          .sort((a: { time: string }, b: { time: string }) => (
-            Math.abs(new Date(a.time).getTime() - agora) - Math.abs(new Date(b.time).getTime() - agora)
-          ))[0]
-        setChuvaNoPonto(Number.isFinite(precipitacaoAtual)
-          ? {
-              precipitacao: precipitacaoAtual,
-              fonte: 'condição atual no ponto central',
-            }
-          : {
-              precipitacao: Number.isFinite(Number(maisProxima?.precipitacao))
-                ? Number(maisProxima.precipitacao)
-                : null,
-              fonte: 'previsão horária mais próxima',
-            })
-      }
-    } catch {
-      setRadarChuvaErro('Não foi possível atualizar o radar agora.')
-    } finally {
-      setRadarChuvaCarregando(false)
+    let radarAtualizado = false
+    if (resultadoRadar.status === 'fulfilled' && resultadoRadar.value.ok) {
+      setRadarChuva(await resultadoRadar.value.json())
+      radarAtualizado = true
+    } else {
+      setRadarChuvaErro('Radar ao vivo indisponível; exibindo a estimativa local.')
     }
+
+    if (resultadoTempo.status === 'fulfilled' && resultadoTempo.value.ok) {
+      const dadosTempo = await resultadoTempo.value.json()
+      setChuvaOntem(dadosTempo?.ontem || null)
+      const precipitacaoAtual = Number(dadosTempo?.atual?.precipitacao)
+      const horas = Array.isArray(dadosTempo?.horas) ? dadosTempo.horas : []
+      const maisProxima = horas
+        .filter((hora: { time?: string }) => hora?.time)
+        .sort((a: { time: string }, b: { time: string }) => (
+          Math.abs(new Date(a.time).getTime() - agora) - Math.abs(new Date(b.time).getTime() - agora)
+        ))[0]
+      setChuvaNoPonto(Number.isFinite(precipitacaoAtual)
+        ? {
+            precipitacao: precipitacaoAtual,
+            fonte: 'condição atual no ponto central',
+          }
+        : {
+            precipitacao: Number.isFinite(Number(maisProxima?.precipitacao))
+              ? Number(maisProxima.precipitacao)
+              : null,
+            fonte: 'previsão horária mais próxima',
+          })
+    }
+
+    if (resultadoArea.status === 'fulfilled' && resultadoArea.value.ok) {
+      const dadosArea = await resultadoArea.value.json()
+      setChuvaArea(Array.isArray(dadosArea?.pontos) ? dadosArea.pontos : [])
+    }
+
+    if (radarAtualizado) setRadarChuvaErro(null)
+    setRadarChuvaCarregando(false)
   }, [])
 
   useEffect(() => {
@@ -1341,7 +1396,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           <TileLayer
             key={`radar-chuva-${radarChuva.frameTime}`}
             url={`${radarChuva.host}${radarChuva.path}/256/{z}/{x}/{y}/2/1_1.png`}
-            opacity={0.72}
+            opacity={0.82}
             attribution='Radar meteorológico: <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">RainViewer</a>'
             maxNativeZoom={7}
             maxZoom={19}
@@ -1351,6 +1406,46 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
             updateWhenIdle={true}
           />
         )}
+        {mostrarChuva && chuvaArea.map(ponto => {
+          const precipitacao = Number(ponto.precipitacao) || 0
+          const coberturaNuvens = Number.isFinite(Number(ponto.coberturaNuvens))
+            ? Number(ponto.coberturaNuvens)
+            : null
+          const temChuva = precipitacao >= 0.1
+          const mostrarNuvens = !temChuva && (coberturaNuvens ?? 0) >= 40
+          if (!temChuva && !mostrarNuvens) return null
+          const cor = corIntensidadeChuva(precipitacao, coberturaNuvens)
+          return (
+            <Circle
+              key={`chuva-area-${ponto.lat}-${ponto.lng}`}
+              center={[ponto.lat, ponto.lng]}
+              radius={temChuva ? 7_000 : 5_500}
+              pathOptions={{
+                color: cor,
+                weight: temChuva ? 1.5 : 1,
+                opacity: temChuva ? 0.9 : 0.55,
+                fillColor: cor,
+                fillOpacity: temChuva ? 0.28 : 0.12,
+              }}
+            >
+              <Popup>
+                <strong>{temChuva ? 'Precipitação estimada' : 'Cobertura de nuvens'}</strong>
+                <br />
+                {temChuva
+                  ? `${precipitacao.toFixed(1)} mm/h · intensidade ${intensidadeChuva(precipitacao)}`
+                  : `${coberturaNuvens}% de nuvens`}
+                {coberturaNuvens != null && temChuva && (
+                  <>
+                    <br />
+                    {coberturaNuvens}% de cobertura de nuvens
+                  </>
+                )}
+                <br />
+                <small>Open-Meteo · {ponto.hora || 'agora'}</small>
+              </Popup>
+            </Circle>
+          )
+        })}
         {mostrarChuva && mostrarRRQPE && rrqpe?.disponivel && rrqpe.tileUrl && (
           <TileLayer
             key={`rrqpe-${rrqpe.atualizadoEm || rrqpe.tileUrl}`}
@@ -1719,6 +1814,28 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
               {radarChuvaErro && (
                 <div className="mapa-chuva-status mapa-chuva-status--erro">{radarChuvaErro}</div>
               )}
+              {chuvaOntem && (
+                <div className="mapa-chuva-historico">
+                  <div>
+                    <span className="mapa-chuva-resumo-label">
+                      Ontem · {new Date(`${chuvaOntem.data}T12:00:00`).toLocaleDateString('pt-BR')}
+                    </span>
+                    <strong className={chuvaOntem.precipitacao > 0 ? 'chovendo' : ''}>
+                      {chuvaOntem.precipitacao > 0
+                        ? `🌧️ ${chuvaOntem.precipitacao.toFixed(1)} mm registrados`
+                        : '☀️ Sem precipitação registrada'}
+                    </strong>
+                  </div>
+                  <span>
+                    {chuvaOntem.horasComChuva > 0
+                      ? `${chuvaOntem.horasComChuva}h com chuva · pico ${chuvaOntem.picoHoraria.toFixed(1)} mm/h`
+                      : 'Nenhuma hora com chuva detectada'}
+                    {chuvaOntem.coberturaNuvensMedia != null
+                      ? ` · ${chuvaOntem.coberturaNuvensMedia}% de nuvens em média`
+                      : ''}
+                  </span>
+                </div>
+              )}
               {radarChuva && (
                 <>
                   <div className="mapa-chuva-resumo">
@@ -1752,9 +1869,10 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
                     <span><i className="chuva-cor chuva-cor--muito-forte" /> muito forte</span>
                     <span><i className="chuva-cor chuva-cor--intensa" /> intensa</span>
                     <span><i className="chuva-cor chuva-cor--extrema" /> extrema</span>
+                    <span><i className="chuva-cor chuva-cor--nuvens" /> nuvens</span>
                   </div>
                   <p className="mapa-chuva-ajuda">
-                     As manchas coloridas mostram os núcleos e a área da precipitação no radar. O contorno azul tracejado indica um raio de observação de 10 km; o radar continua visível além dele. O ponto escuro marca a consulta local.
+                     O radar mostra os núcleos observados e as áreas coloridas indicam a intensidade. Os círculos azuis claros complementam a cobertura de nuvens no entorno. O contorno azul tracejado indica um raio de observação de 10 km; o ponto escuro marca a consulta local.
                   </p>
                   {mostrarRRQPE && (
                     <div className={`mapa-rrqpe-status ${rrqpe?.disponivel ? 'disponivel' : ''}`}>

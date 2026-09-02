@@ -2888,12 +2888,47 @@ let climaCache = null
 let climaCacheTs = 0
 const CLIMA_TTL_MS = 10 * 60 * 1000
 
+function dataLocalISO(offsetDias = 0) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(Date.now() + offsetDias * 24 * 60 * 60 * 1000))
+}
+
+function resumirChuvaOntem(horas) {
+  const data = dataLocalISO(-1)
+  const horasOntem = horas.filter(hora => hora.time?.slice(0, 10) === data)
+  const comChuva = horasOntem.filter(hora => Number(hora.precipitacao) >= 0.1)
+  const total = horasOntem.reduce((soma, hora) => soma + (Number(hora.precipitacao) || 0), 0)
+  const pico = horasOntem
+    .filter(hora => Number.isFinite(Number(hora.precipitacao)))
+    .sort((a, b) => Number(b.precipitacao) - Number(a.precipitacao))[0] || null
+  const nuvens = horasOntem
+    .filter(hora => Number.isFinite(Number(hora.coberturaNuvens)))
+    .reduce((soma, hora) => soma + Number(hora.coberturaNuvens), 0)
+
+  return {
+    data,
+    precipitacao: Number(total.toFixed(1)),
+    horasComChuva: comChuva.length,
+    picoHoraria: pico ? Number(Number(pico.precipitacao).toFixed(1)) : 0,
+    horaPico: pico?.time || null,
+    coberturaNuvensMedia: horasOntem.length
+      ? Math.round(nuvens / horasOntem.length)
+      : null,
+    fonte: 'Open-Meteo · histórico horário',
+  }
+}
+
 async function buscarPrevisaoOpenMeteo() {
   const params = new URLSearchParams({
     latitude: String(OURO_BRANCO_LAT),
     longitude: String(OURO_BRANCO_LON),
 
     timezone: 'America/Sao_Paulo',
+    past_days: '2',
     forecast_days: '7',
 
     hourly: [
@@ -2903,6 +2938,7 @@ async function buscarPrevisaoOpenMeteo() {
       'precipitation',
       'rain',
       'showers',
+      'cloud_cover',
       'weather_code',
       'wind_speed_10m',
       'wind_direction_10m',
@@ -2973,6 +3009,9 @@ async function buscarPrevisaoOpenMeteo() {
     pancadas:
       h.showers?.[i] ?? 0,
 
+    coberturaNuvens:
+      h.cloud_cover?.[i] ?? null,
+
     codigoTempo:
       h.weather_code?.[i] ?? null,
 
@@ -3034,6 +3073,8 @@ async function buscarPrevisaoOpenMeteo() {
 
     horas,
 
+    ontem: resumirChuvaOntem(horas),
+
     diario: json.daily ?? null,
 
     extremos: {
@@ -3086,6 +3127,63 @@ app.get('/api/tempo', async (_req, res) => {
     res.status(503).json({
       erro: 'Serviço climático indisponível'
     })
+  }
+})
+
+// ── Condições de chuva e nuvens no entorno de Ouro Branco ───────────────────
+// O radar mostra a precipitação observada, mas pode ficar sem pixels sobre
+// cidades pequenas. Esta grade do Open-Meteo é uma camada complementar:
+// cada ponto representa uma célula de aproximadamente 15–20 km.
+const GRADE_CHUVA = [-0.14, 0, 0.14].flatMap(deltaLat =>
+  [-0.18, 0, 0.18].map(deltaLon => ({
+    lat: OURO_BRANCO_LAT + deltaLat,
+    lon: OURO_BRANCO_LON + deltaLon,
+  })),
+)
+
+app.get('/api/chuva-area', async (_req, res) => {
+  try {
+    const params = new URLSearchParams({
+      latitude: GRADE_CHUVA.map(ponto => ponto.lat.toFixed(4)).join(','),
+      longitude: GRADE_CHUVA.map(ponto => ponto.lon.toFixed(4)).join(','),
+      timezone: 'America/Sao_Paulo',
+      forecast_days: '1',
+      current: 'precipitation,rain,showers,cloud_cover,weather_code',
+    })
+    const resposta = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!resposta.ok) throw new Error(`Open-Meteo grade: ${resposta.status}`)
+
+    const dados = await resposta.json()
+    const locais = Array.isArray(dados) ? dados : [dados]
+    const pontos = locais.map((local, indice) => {
+      const atual = local?.current || {}
+      return {
+        lat: Number(local?.latitude ?? GRADE_CHUVA[indice]?.lat),
+        lng: Number(local?.longitude ?? GRADE_CHUVA[indice]?.lon),
+        hora: atual.time || null,
+        precipitacao: Number(atual.precipitation ?? 0),
+        chuva: Number(atual.rain ?? 0),
+        pancadas: Number(atual.showers ?? 0),
+        coberturaNuvens: Number.isFinite(Number(atual.cloud_cover))
+          ? Number(atual.cloud_cover)
+          : null,
+        codigoTempo: Number.isFinite(Number(atual.weather_code))
+          ? Number(atual.weather_code)
+          : null,
+      }
+    }).filter(ponto => Number.isFinite(ponto.lat) && Number.isFinite(ponto.lng))
+
+    res.json({
+      pontos,
+      atualizadoEm: new Date().toISOString(),
+      fonte: 'Open-Meteo · grade de precipitação e nuvens',
+    })
+  } catch (err) {
+    console.error('Erro na grade de chuva:', err?.message || err)
+    res.status(503).json({ erro: 'Grade de chuva indisponível' })
   }
 })
 
