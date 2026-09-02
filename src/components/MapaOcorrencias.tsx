@@ -756,7 +756,11 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [mostrarMateriais, setMostrarMateriais] = useState(false)
   const [painelMaterialAberto, setPainelMaterialAberto] = useState(false)
   const [submenuFiltroAberto, setSubmenuFiltroAberto] = useState(false)
-  const [naturezasOcultas, setNaturezasOcultas] = useState<Set<string>>(new Set())
+  // Nenhuma natureza aparece por padrão. O usuário escolhe explicitamente
+  // quais tipos deseja visualizar no mapa.
+  const [naturezasOcultas, setNaturezasOcultas] = useState<Set<string>>(
+    () => new Set(NATUREZAS),
+  )
 
   // Busca de endereço + rota (estilo Google Maps)
   const [enderecoBusca, setEnderecoBusca] = useState('')
@@ -2062,21 +2066,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
               <div className="mapa-ocorr-submenu-header">
                 <span>Filtrar tipos</span>
                 <button onClick={() => setSubmenuFiltroAberto(false)} aria-label="Fechar">✕</button>
-              </div>
-
-              <div className="mapa-ocorr-submenu-acoes">
-                <button onClick={() => { setMostrarOcorrencias(true); setNaturezasOcultas(new Set()) }}>
-                  ✓ Marcar todas
-                </button>
-                <button onClick={() => setNaturezasOcultas(new Set(NATUREZAS))}>
-                  ✕ Desmarcar todas
-                </button>
-                <button
-                  className={mostrarOcorrencias ? 'mapa-ocorr-submenu-toggle on' : 'mapa-ocorr-submenu-toggle off'}
-                  onClick={() => setMostrarOcorrencias(v => !v)}
-                >
-                  {mostrarOcorrencias ? '👁 Ocultar todas' : '👁‍🗨 Mostrar no mapa'}
-                </button>
               </div>
 
               <div className="mapa-ocorr-submenu-lista">
