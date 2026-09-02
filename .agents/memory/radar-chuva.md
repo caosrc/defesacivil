@@ -22,3 +22,10 @@ Para reproduzir a evolução das áreas de chuva, usar a sequência `radar.past`
 **Why:** O endpoint entrega metadados de vários quadros, mas usar apenas o último quadro faz a chuva parecer desaparecer e não mostra o deslocamento das células.
 
 **How to apply:** Reiniciar a sequência ao atualizar os metadados, exibir horário e tipo de cada quadro, e manter a grade Open-Meteo como complemento quando houver poucos pixels de radar no município.
+
+## Imagem de nuvens GOES
+A imagem Full Disk GeoColor publicada pela NOAA/NESDIS/STAR cobre o Brasil e pode ser usada como ImageOverlay de baixa opacidade; o radar deve permanecer por cima para indicar a chuva.
+
+**Why:** A imagem de satélite dá o contexto visual das nuvens, mas não mede intensidade de precipitação com a mesma semântica do radar.
+
+**How to apply:** Atualizar o arquivo oficial periodicamente, mostrar a atribuição NOAA/NESDIS/STAR e deixar o usuário desligar a camada para ver melhor os tiles coloridos.

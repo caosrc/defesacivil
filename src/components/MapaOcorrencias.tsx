@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
+import { MapContainer, TileLayer, ImageOverlay, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Ocorrencia } from '../types'
@@ -159,14 +159,6 @@ interface PontoChuvaArea {
   pancadas: number
   coberturaNuvens: number | null
   codigoTempo: number | null
-}
-
-interface DadosRRQPE {
-  disponivel: boolean
-  tileUrl?: string
-  atualizadoEm?: string
-  fonte: string
-  mensagem?: string
 }
 
 interface ChuvaNoPonto {
@@ -373,6 +365,230 @@ function GpsCenter({ position, seguir }: { position: [number, number]; seguir: b
   return null
 }
 
+interface RadarChuvaPoligonosProps {
+  host: string
+  path: string
+  frameTime: number
+  enabled: boolean
+}
+
+type PixelPoint = [number, number]
+type RadarCell = { x: number; y: number; alpha: number }
+
+function latLngParaTile(lat: number, lng: number, zoom: number) {
+  const escala = 2 ** zoom
+  const seno = Math.sin((lat * Math.PI) / 180)
+  return {
+    x: ((lng + 180) / 360) * escala,
+    y: ((1 - Math.log((1 + seno) / (1 - seno)) / (2 * Math.PI)) / 2) * escala,
+  }
+}
+
+function pixelTileParaLatLng(x: number, y: number, tileX: number, tileY: number, zoom: number, tamanho: number): [number, number] {
+  const mundoX = (tileX * tamanho + x) / (tamanho * (2 ** zoom))
+  const mundoY = (tileY * tamanho + y) / (tamanho * (2 ** zoom))
+  const lng = mundoX * 360 - 180
+  const lat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * mundoY))) * 180) / Math.PI
+  return [lat, lng]
+}
+
+function corPorAlphaRadar(alpha: number) {
+  if (alpha >= 190) return '#ef4444'
+  if (alpha >= 125) return '#f97316'
+  if (alpha >= 75) return '#facc15'
+  return '#38bdf8'
+}
+
+function chavePonto(ponto: PixelPoint) {
+  return `${ponto[0]},${ponto[1]}`
+}
+
+function extrairBordas(celulas: RadarCell[], largura: number, altura: number) {
+  const ocupada = new Set(celulas.map(celula => `${celula.x},${celula.y}`))
+  const arestas: Array<{ inicio: PixelPoint; fim: PixelPoint }> = []
+  const adicionar = (x1: number, y1: number, x2: number, y2: number) => {
+    arestas.push({ inicio: [x1, y1], fim: [x2, y2] })
+  }
+
+  for (const celula of celulas) {
+    const { x, y } = celula
+    if (y === 0 || !ocupada.has(`${x},${y - 1}`)) adicionar(x, y, x + 1, y)
+    if (x === largura - 1 || !ocupada.has(`${x + 1},${y}`)) adicionar(x + 1, y, x + 1, y + 1)
+    if (y === altura - 1 || !ocupada.has(`${x},${y + 1}`)) adicionar(x + 1, y + 1, x, y + 1)
+    if (x === 0 || !ocupada.has(`${x - 1},${y}`)) adicionar(x, y + 1, x, y)
+  }
+
+  if (!arestas.length) return []
+  const poligonos: PixelPoint[][] = []
+  const usadas = new Set<number>()
+
+  for (let indiceInicial = 0; indiceInicial < arestas.length; indiceInicial += 1) {
+    if (usadas.has(indiceInicial)) continue
+    const primeira = arestas[indiceInicial]
+    usadas.add(indiceInicial)
+    const poligono: PixelPoint[] = [primeira.inicio, primeira.fim]
+    let atual = primeira.fim
+
+    for (let passos = 0; passos < arestas.length; passos += 1) {
+      if (chavePonto(atual) === chavePonto(primeira.inicio)) break
+      const proximoIndice = arestas.findIndex((aresta, indice) =>
+        !usadas.has(indice) && chavePonto(aresta.inicio) === chavePonto(atual)
+      )
+      if (proximoIndice < 0) break
+      usadas.add(proximoIndice)
+      atual = arestas[proximoIndice].fim
+      poligono.push(atual)
+    }
+
+    if (poligono.length >= 4 && chavePonto(poligono[0]) === chavePonto(poligono.at(-1)!)) {
+      poligonos.push(poligono)
+    }
+  }
+  return poligonos
+}
+
+function RadarChuvaPoligonos({ host, path, frameTime, enabled }: RadarChuvaPoligonosProps) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!enabled) return
+
+    let desmontado = false
+    const zoom = 7
+    const tamanhoTile = 512
+    const pontoTile = latLngParaTile(OURO_BRANCO[0], OURO_BRANCO[1], zoom)
+    const tileX = Math.floor(pontoTile.x)
+    const tileY = Math.floor(pontoTile.y)
+    const canvas = document.createElement('canvas')
+    canvas.width = tamanhoTile
+    canvas.height = tamanhoTile
+    const contexto = canvas.getContext('2d', { willReadFrequently: true })
+    const grupo = L.layerGroup().addTo(map)
+    const pane = 'radar-poligonos-pane'
+    if (!map.getPane(pane)) map.createPane(pane)
+    map.getPane(pane)!.style.zIndex = '650'
+
+    const carregarImagem = () => new Promise<HTMLImageElement>((resolve, reject) => {
+      const imagem = new Image()
+      imagem.crossOrigin = 'anonymous'
+      imagem.onload = () => resolve(imagem)
+      imagem.onerror = () => reject(new Error('Tile do radar não pôde ser lido'))
+      imagem.src = `${host}${path}/${tamanhoTile}/${zoom}/${tileX}/${tileY}/2/1_1.png`
+    })
+
+    const desenhar = async () => {
+      try {
+        const imagem = await carregarImagem()
+        if (desmontado || !contexto) return
+        contexto.clearRect(0, 0, tamanhoTile, tamanhoTile)
+        contexto.drawImage(imagem, 0, 0, tamanhoTile, tamanhoTile)
+        const pixels = contexto.getImageData(0, 0, tamanhoTile, tamanhoTile).data
+        const bloco = 4
+        const largura = tamanhoTile / bloco
+        const altura = tamanhoTile / bloco
+        const celulas: RadarCell[] = []
+
+        for (let y = 0; y < altura; y += 1) {
+          for (let x = 0; x < largura; x += 1) {
+            let maiorAlpha = 0
+            for (let dy = 0; dy < bloco; dy += 1) {
+              for (let dx = 0; dx < bloco; dx += 1) {
+                const indice = (((y * bloco + dy) * tamanhoTile) + (x * bloco + dx)) * 4 + 3
+                maiorAlpha = Math.max(maiorAlpha, pixels[indice] || 0)
+              }
+            }
+            if (maiorAlpha >= 12) celulas.push({ x, y, alpha: maiorAlpha })
+          }
+        }
+
+        const visitadas = new Set<string>()
+        const celulasPorChave = new Map(celulas.map(celula => [`${celula.x},${celula.y}`, celula]))
+        const componentes: RadarCell[][] = []
+        for (const celula of celulas) {
+          const chave = `${celula.x},${celula.y}`
+          if (visitadas.has(chave)) continue
+          const componente: RadarCell[] = []
+          const fila = [celula]
+          visitadas.add(chave)
+          while (fila.length) {
+            const atual = fila.shift()!
+            componente.push(atual)
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const vizinho = celulasPorChave.get(`${atual.x + dx},${atual.y + dy}`)
+              if (!vizinho) continue
+              const chaveVizinho = `${vizinho.x},${vizinho.y}`
+              if (!visitadas.has(chaveVizinho)) {
+                visitadas.add(chaveVizinho)
+                fila.push(vizinho)
+              }
+            }
+          }
+          if (componente.length >= 2) componentes.push(componente)
+        }
+
+        for (const componente of componentes) {
+          const maiorAlpha = Math.max(...componente.map(celula => celula.alpha))
+          const cor = corPorAlphaRadar(maiorAlpha)
+          const bordas = extrairBordas(componente, largura, altura)
+          const centroide = componente.reduce(
+            (acumulado, celula) => [acumulado[0] + celula.x, acumulado[1] + celula.y],
+            [0, 0]
+          ).map(valor => valor / componente.length) as [number, number]
+
+          for (const borda of bordas) {
+            const coordenadas = borda.map(([x, y]) => pixelTileParaLatLng(
+              x * bloco,
+              y * bloco,
+              tileX,
+              tileY,
+              zoom,
+              tamanhoTile
+            )) as [number, number][]
+            L.polygon(coordenadas, {
+              pane,
+              color: cor,
+              weight: 2,
+              opacity: 0.9,
+              fillColor: cor,
+              fillOpacity: Math.min(0.42, 0.18 + maiorAlpha / 700),
+            }).bindPopup(
+              `<strong>Núcleo de chuva observado</strong><br />Radar RainViewer<br />Intensidade relativa: ${maiorAlpha}%`
+            ).addTo(grupo)
+          }
+
+          const centro = pixelTileParaLatLng(
+            (centroide[0] + 0.5) * bloco,
+            (centroide[1] + 0.5) * bloco,
+            tileX,
+            tileY,
+            zoom,
+            tamanhoTile
+          )
+          L.circleMarker(centro, {
+            pane,
+            radius: maiorAlpha >= 125 ? 7 : 5,
+            color: '#ffffff',
+            weight: 2,
+            fillColor: cor,
+            fillOpacity: 1,
+          }).bindTooltip('Ponto de chuva observado', { direction: 'top' }).addTo(grupo)
+        }
+      } catch {
+        // O tile continua visível como raster mesmo quando o navegador não permite
+        // ler seus pixels para desenhar o contorno vetorial.
+      }
+    }
+
+    void desenhar()
+    return () => {
+      desmontado = true
+      grupo.removeFrom(map)
+    }
+  }, [enabled, frameTime, host, map, path])
+
+  return null
+}
+
 // Centraliza no destino quando ele muda — usado pela busca de endereço.
 function FocoDestino({ destino, rota }: {
   destino: { lat: number; lng: number } | null
@@ -514,6 +730,13 @@ function nomeDiaSemana(dateStr: string): string {
 
 const OURO_BRANCO: [number, number] = [-20.5195, -43.6983]
 const RAIO_RADAR_CHUVA_METROS = 10_000
+const GOES_GEOCOLOR_URL = 'https://cdn.star.nesdis.noaa.gov/GOES19/ABI/FD/GEOCOLOR/1808x1808.jpg'
+// Extensão aproximada do disco completo geoestacionário. O radar colorido
+// continua sendo a referência para intensidade e localização da chuva.
+const GOES_FULL_DISK_BOUNDS: [[number, number], [number, number]] = [
+  [-81.3, -156.3],
+  [81.3, 5.7],
+]
 
 const MAX_TRILHA = 300
 
@@ -534,10 +757,10 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [chuvaArea, setChuvaArea] = useState<PontoChuvaArea[]>([])
   const [radarChuvaCarregando, setRadarChuvaCarregando] = useState(false)
   const [radarChuvaErro, setRadarChuvaErro] = useState<string | null>(null)
-  const [mostrarRRQPE, setMostrarRRQPE] = useState(false)
-  const [rrqpe, setRRQPE] = useState<DadosRRQPE | null>(null)
-  const [rrqpeCarregando, setRRQPECarregando] = useState(false)
-  const [rrqpeErro, setRRQPEErro] = useState<string | null>(null)
+  const [mostrarNuvensGOES, setMostrarNuvensGOES] = useState(true)
+  const [nuvensGOESUrl, setNuvensGOESUrl] = useState(
+    () => `${GOES_GEOCOLOR_URL}?t=${Math.floor(Date.now() / (10 * 60 * 1000))}`
+  )
   const [mostrarOcorrencias, setMostrarOcorrencias] = useState(false)
   const [mostrarMateriais, setMostrarMateriais] = useState(false)
   const [painelMaterialAberto, setPainelMaterialAberto] = useState(false)
@@ -684,6 +907,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   }, [radarChuva])
 
   const quadroRadarAtual = quadrosRadar[indiceQuadroRadar] || quadrosRadar.at(-1) || null
+  const quadroRadarMaisRecente = quadrosRadar.at(-1) || null
 
   useEffect(() => {
     if (!mostrarChuva || !radarAnimando || quadrosRadar.length < 2) return
@@ -693,33 +917,15 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
     return () => clearInterval(intervalo)
   }, [mostrarChuva, radarAnimando, quadrosRadar.length])
 
-  const buscarRRQPE = useCallback(async () => {
-    setRRQPECarregando(true)
-    setRRQPEErro(null)
-    try {
-      const resposta = await fetch(`/api/rrqpe?_ts=${Date.now()}`, { cache: 'no-store' })
-      if (!resposta.ok) throw new Error('RRQPE indisponível')
-      const dados = await resposta.json()
-      setRRQPE({
-        disponivel: dados?.disponivel === true,
-        tileUrl: typeof dados?.tileUrl === 'string' ? dados.tileUrl : undefined,
-        atualizadoEm: typeof dados?.atualizadoEm === 'string' ? dados.atualizadoEm : undefined,
-        fonte: typeof dados?.fonte === 'string' ? dados.fonte : 'GOES-16 RRQPE / NOAA',
-        mensagem: typeof dados?.mensagem === 'string' ? dados.mensagem : undefined,
-      })
-    } catch {
-      setRRQPEErro('Não foi possível consultar o RRQPE agora.')
-    } finally {
-      setRRQPECarregando(false)
-    }
-  }, [])
-
   useEffect(() => {
-    if (!mostrarRRQPE) return
-    buscarRRQPE()
-    const intervalo = setInterval(buscarRRQPE, 10 * 60 * 1000)
+    if (!mostrarChuva || !mostrarNuvensGOES) return
+    const atualizarImagemGOES = () => {
+      setNuvensGOESUrl(`${GOES_GEOCOLOR_URL}?t=${Math.floor(Date.now() / (10 * 60 * 1000))}`)
+    }
+    atualizarImagemGOES()
+    const intervalo = setInterval(atualizarImagemGOES, 10 * 60 * 1000)
     return () => clearInterval(intervalo)
-  }, [mostrarRRQPE, buscarRRQPE])
+  }, [mostrarChuva, mostrarNuvensGOES])
 
   // Mapa offline — inicializa tiles do localStorage para mostrar status imediatamente
   const [statusOffline, setStatusOffline] = useState<StatusOffline>('idle')
@@ -1439,6 +1645,24 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
             updateWhenIdle={true}
           />
         )}
+        {mostrarChuva && radarChuva && quadroRadarMaisRecente && (
+          <RadarChuvaPoligonos
+            host={radarChuva.host}
+            path={quadroRadarMaisRecente.path}
+            frameTime={quadroRadarMaisRecente.frameTime}
+            enabled={mostrarChuva}
+          />
+        )}
+        {mostrarChuva && mostrarNuvensGOES && (
+          <ImageOverlay
+            key={nuvensGOESUrl}
+            url={nuvensGOESUrl}
+            bounds={GOES_FULL_DISK_BOUNDS}
+            opacity={0.34}
+            zIndex={15}
+            attribution='Nuvens: <a href="https://www.star.nesdis.noaa.gov/goes/" target="_blank" rel="noreferrer">NOAA / NESDIS / STAR</a>'
+          />
+        )}
         {mostrarChuva && chuvaArea.map(ponto => {
           const precipitacao = Number(ponto.precipitacao) || 0
           const coberturaNuvens = Number.isFinite(Number(ponto.coberturaNuvens))
@@ -1479,20 +1703,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
             </Circle>
           )
         })}
-        {mostrarChuva && mostrarRRQPE && rrqpe?.disponivel && rrqpe.tileUrl && (
-          <TileLayer
-            key={`rrqpe-${rrqpe.atualizadoEm || rrqpe.tileUrl}`}
-            url={rrqpe.tileUrl}
-            opacity={0.5}
-            attribution='RRQPE: <a href="https://www.noaa.gov/" target="_blank" rel="noreferrer">NOAA / GOES-16</a>'
-            maxNativeZoom={8}
-            maxZoom={19}
-            tileSize={256}
-            zIndex={21}
-            updateWhenZooming={false}
-            updateWhenIdle={true}
-          />
-        )}
         {mostrarChuva && (
           <Circle
             center={OURO_BRANCO}
@@ -1810,7 +2020,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
               const proximoEstado = !mostrarChuva
               setMostrarChuva(proximoEstado)
               setPainelChuvaAberto(proximoEstado)
-              if (!proximoEstado) setMostrarRRQPE(false)
             }}
             aria-pressed={mostrarChuva}
             title="Mostrar radar animado de chuva em Ouro Branco"
@@ -1831,15 +2040,14 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
               </div>
               <div className="mapa-chuva-fontes">
                 <button
-                  className={`mapa-chuva-fonte-btn ${mostrarRRQPE ? 'ativo' : ''}`}
-                  onClick={() => setMostrarRRQPE(v => !v)}
-                  aria-pressed={mostrarRRQPE}
-                  disabled={rrqpeCarregando}
-                  title="Sobrepor a estimativa de precipitação do satélite GOES-16"
+                  className={`mapa-chuva-fonte-btn ${mostrarNuvensGOES ? 'ativo' : ''}`}
+                  onClick={() => setMostrarNuvensGOES(v => !v)}
+                  aria-pressed={mostrarNuvensGOES}
+                  title="Mostrar imagem real de nuvens do satélite GOES"
                 >
-                  ☁️ RRQPE
+                  ☁️ Nuvens GOES
                 </button>
-                <span>Estimativa por satélite · GOES-16</span>
+                <span>Imagem real · NOAA / GOES-19</span>
               </div>
               {radarChuvaCarregando && !radarChuva && (
                 <div className="mapa-chuva-status">⏳ Carregando o último quadro do radar…</div>
@@ -1930,26 +2138,8 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
                     <span><i className="chuva-cor chuva-cor--nuvens" /> nuvens</span>
                   </div>
                   <p className="mapa-chuva-ajuda">
-                     O radar mostra os núcleos observados e as áreas coloridas indicam a intensidade. Os círculos azuis claros complementam a cobertura de nuvens no entorno. O contorno azul tracejado indica um raio de observação de 10 km; o ponto escuro marca a consulta local.
+                     A imagem GOES mostra as nuvens reais; o radar mostra os núcleos observados e as áreas coloridas indicam a intensidade da chuva. Os círculos azuis claros complementam a cobertura no entorno. O contorno tracejado indica 10 km.
                   </p>
-                  {mostrarRRQPE && (
-                    <div className={`mapa-rrqpe-status ${rrqpe?.disponivel ? 'disponivel' : ''}`}>
-                      <strong>☁️ RRQPE · GOES-16</strong>
-                      {rrqpeCarregando && <span>Consultando a última imagem…</span>}
-                      {!rrqpeCarregando && rrqpe?.disponivel && (
-                        <span>
-                          Camada ativa
-                          {rrqpe.atualizadoEm
-                            ? ` · ${new Date(rrqpe.atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
-                            : ''}
-                        </span>
-                      )}
-                      {!rrqpeCarregando && !rrqpe?.disponivel && (
-                        <span>{rrqpe?.mensagem || rrqpeErro || 'A camada RRQPE não está publicada neste ambiente.'}</span>
-                      )}
-                      {rrqpeErro && rrqpe?.disponivel !== true && <small>{rrqpeErro}</small>}
-                    </div>
-                  )}
                   <div className="mapa-chuva-rodape">
                     <span>{radarChuva.erroAtualizacao ? 'Último radar salvo' : 'RainViewer · ao vivo'}</span>
                     <button onClick={buscarRadarChuva} disabled={radarChuvaCarregando}>
