@@ -1341,6 +1341,7 @@ input, select, textarea { font-family: inherit; }
 .chuva-cor--extrema { background: #c026d3; }
 .chuva-cor--nuvens { background: #93c5fd; }
 .chuva-cor--nucleo { background: #006bd6; }
+.chuva-cor--goes { background: #64748b; }
 .mapa-chuva-ajuda {
   margin: 0.25rem 0.5rem 0.35rem;
   color: #64748b;

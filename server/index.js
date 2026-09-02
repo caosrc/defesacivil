@@ -3255,6 +3255,57 @@ app.get('/api/radar-chuva', async (_req, res) => {
   }
 })
 
+// Imagem meteorológica atualizada pelo GOES-19 a cada ~10 minutos. O setor
+// sul da América do Sul cobre Ouro Branco e é usado como overlay sobre a base
+// de satélite. A página oficial informa o timestamp mais recente; usamos a
+// variante 900x540 para não baixar o JPEG de 13 MB do alias latest.jpg.
+const GOES_NUVENS_PAGINA = 'https://www.goes.noaa.gov/sector.php?sat=G19&sector=ssa'
+const GOES_NUVENS_BOUNDS = [[-60, -105], [12, -20]]
+let goesNuvensCache = null
+let goesNuvensCacheTs = 0
+const GOES_NUVENS_TTL_MS = 5 * 60 * 1000
+
+app.get('/api/goes-nuvens', async (_req, res) => {
+  const agora = Date.now()
+  if (goesNuvensCache && (agora - goesNuvensCacheTs) < GOES_NUVENS_TTL_MS) {
+    res.set('Cache-Control', 'no-store')
+    return res.json({ ...goesNuvensCache, cache: true })
+  }
+
+  try {
+    const resposta = await fetch(GOES_NUVENS_PAGINA, {
+      headers: { Accept: 'text/html' },
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!resposta.ok) throw new Error(`Página GOES: ${resposta.status}`)
+    const html = await resposta.text()
+    const correspondencias = [
+      ...html.matchAll(/https:\/\/cdn\.star\.nesdis\.noaa\.gov\/GOES19\/ABI\/SECTOR\/ssa\/GEOCOLOR\/(\d+)_GOES19-ABI-ssa-GEOCOLOR-900x540\.jpg/g),
+    ]
+    const ultima = correspondencias.at(-1)
+    if (!ultima) throw new Error('GOES não publicou imagem GeoColor 900x540')
+
+    goesNuvensCache = {
+      url: ultima[0],
+      bounds: GOES_NUVENS_BOUNDS,
+      atualizadoEm: new Date().toISOString(),
+      timestampGoes: ultima[1],
+      fonte: 'NOAA/NESDIS · GOES-19 ABI GeoColor · setor América do Sul Sul',
+      frequencia: '10 min',
+    }
+    goesNuvensCacheTs = agora
+    res.set('Cache-Control', 'no-store')
+    return res.json(goesNuvensCache)
+  } catch (err) {
+    console.warn('Erro na imagem GOES de nuvens:', err?.message || err)
+    if (goesNuvensCache) {
+      res.set('Cache-Control', 'no-store')
+      return res.json({ ...goesNuvensCache, cache: true, erroAtualizacao: true })
+    }
+    return res.status(503).json({ erro: 'Imagem GOES de nuvens indisponível' })
+  }
+})
+
 // ── Contornos dos núcleos de chuva a partir do PNG do radar ────────────────
 // O PNG do tile é lido exclusivamente no servidor para produzir um GeoJSON
 // com a mancha irregular, os núcleos fortes e seus centros. O navegador não

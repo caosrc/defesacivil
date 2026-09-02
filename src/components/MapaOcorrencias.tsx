@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
+import { MapContainer, TileLayer, ImageOverlay, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Ocorrencia } from '../types'
@@ -371,6 +371,14 @@ interface RadarFeature {
   }
 }
 
+interface DadosNuvensGoes {
+  url: string
+  bounds: [[number, number], [number, number]]
+  atualizadoEm?: string
+  fonte?: string
+  frequencia?: string
+}
+
 function criarIconeNucleoRadar(cor: string): L.DivIcon {
   return L.divIcon({
     className: 'radar-nucleo-icon',
@@ -457,6 +465,55 @@ function RadarChuvaPoligonos({ path, frameTime, enabled }: RadarChuvaPoligonosPr
   }, [enabled, frameTime, map, path])
 
   return null
+}
+
+function CamadaNuvensGoes({ enabled }: { enabled: boolean }) {
+  const [dados, setDados] = useState<DadosNuvensGoes | null>(null)
+
+  useEffect(() => {
+    if (!enabled) {
+      setDados(null)
+      return
+    }
+
+    let desmontado = false
+    const buscar = async () => {
+      try {
+        const resposta = await fetch(`/api/goes-nuvens?_ts=${Date.now()}`, { cache: 'no-store' })
+        if (!resposta.ok) throw new Error('Imagem GOES indisponível')
+        const proximo = await resposta.json() as DadosNuvensGoes
+        if (!desmontado && proximo.url && Array.isArray(proximo.bounds)) setDados(proximo)
+      } catch {
+        // A chuva vetorial permanece disponível mesmo quando a imagem GOES
+        // estiver temporariamente fora do ar.
+      }
+    }
+
+    void buscar()
+    const intervalo = setInterval(buscar, 10 * 60 * 1000)
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === 'visible') void buscar()
+    }
+    document.addEventListener('visibilitychange', atualizarAoVoltar)
+    return () => {
+      desmontado = true
+      clearInterval(intervalo)
+      document.removeEventListener('visibilitychange', atualizarAoVoltar)
+    }
+  }, [enabled])
+
+  if (!enabled || !dados) return null
+
+  return (
+    <ImageOverlay
+      key={`${dados.url}-${dados.atualizadoEm || ''}`}
+      url={`${dados.url}?t=${encodeURIComponent(dados.atualizadoEm || '')}`}
+      bounds={dados.bounds}
+      opacity={0.38}
+      zIndex={20}
+      attribution={dados.fonte || 'NOAA/NESDIS · GOES-19'}
+    />
+  )
 }
 
 // Centraliza no destino quando ele muda — usado pela busca de endereço.
@@ -1472,6 +1529,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
             zIndex={10}
           />
         )}
+        {mostrarChuva && <CamadaNuvensGoes enabled={mostrarChuva} />}
         {mostrarChuva && radarChuva && quadroRadarAtual && (
           <RadarChuvaPoligonos
             path={quadroRadarAtual.path}
@@ -1816,8 +1874,8 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
                 >✕</button>
               </div>
               <div className="mapa-chuva-fontes">
-                <strong>🛰️ Satélite + radar vetorial</strong>
-                <span>Imagem de satélite ao fundo · PNG RainViewer processado no servidor</span>
+                <strong>🛰️ GOES-19 + radar vetorial</strong>
+                <span>Nuvens atualizadas a cada 10 min · PNG RainViewer processado no servidor</span>
               </div>
               {radarChuvaCarregando && !radarChuva && (
                 <div className="mapa-chuva-status">⏳ Carregando o último quadro do radar…</div>
@@ -1899,6 +1957,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
                     </div>
                   )}
                   <div className="mapa-chuva-legenda">
+                    <span><i className="chuva-cor chuva-cor--goes" /> nuvens GOES-19</span>
                     <span><i className="chuva-cor chuva-cor--nuvens" /> mancha de precipitação</span>
                     <span><i className="chuva-cor chuva-cor--nucleo" /> núcleo detectado</span>
                   </div>
