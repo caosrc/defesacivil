@@ -3,3 +3,4 @@
 - [Banco de horas ocorrências automáticas](banco-horas-ocorrencias.md) — lógica de horas extras automáticas de ocorrências implementada em EscalaAgentes.tsx (Jun 2026).
 - [Google Earth Engine](earth-engine.md) — monitoramento MODIS depende de autenticação da conta no ambiente; FIRMS permanece como fonte complementar.
 - [Radar de chuva](radar-chuva.md) — RainViewer fornece tiles observados; camadas GOES/RRQPE exigem processamento geoespacial separado.
+- [Desempenho do mapa](mapa-desempenho.md) — marcadores de ocorrências devem permanecer no Leaflet e ser agrupados, sem desmontagem React durante zoom/arraste.

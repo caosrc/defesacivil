@@ -2,6 +2,9 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { MapContainer, TileLayer, ImageOverlay, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import 'leaflet.markercluster'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { Ocorrencia } from '../types'
 import { NATUREZA_ICONE, NATUREZA_COR, NATUREZAS } from '../types'
 import {
@@ -580,30 +583,6 @@ function criarIconeCone(nome?: string | null, selecionado = false) {
   })
 }
 
-// ── Viewport culling: rastreia bounds do mapa ────────────────────
-// Dispara onChange só no fim do movimento/zoom (moveend/zoomend) para
-// evitar recalcular a lista de marcadores visíveis a cada pixel arrastado.
-function BoundsTracker({ onChange }: { onChange: (b: L.LatLngBounds) => void }) {
-  const map = useMapEvents({
-    moveend: () => onChange(map.getBounds()),
-    zoomend: () => onChange(map.getBounds()),
-  })
-  useEffect(() => { onChange(map.getBounds()) }, []) // captura bounds iniciais
-  return null
-}
-
-// Remove temporariamente os marcadores durante o gesto para o mapa continuar
-// fluido no celular; eles retornam assim que o arraste/zoom termina.
-function MapMovementTracker({ onChange }: { onChange: (movendo: boolean) => void }) {
-  useMapEvents({
-    movestart: () => onChange(true),
-    zoomstart: () => onChange(true),
-    moveend: () => onChange(false),
-    zoomend: () => onChange(false),
-  })
-  return null
-}
-
 // ── Tipos ───────────────────────────────────────────────────────
 interface EquipamentoCampoMapa {
   id: number
@@ -629,6 +608,107 @@ interface Props {
   equipamentosCampo?: EquipamentoCampoMapa[]
   /** Abre o detalhe de um equipamento em campo no Patrimônio. */
   onVerDetalheCampo?: (equipId: number) => void
+}
+
+interface CamadaOcorrenciasProps {
+  ocorrencias: Ocorrencia[]
+  naturezasOcultas: Set<string>
+  selecionadaId: number | undefined
+  onSelecionar: (ocorrencia: Ocorrencia) => void
+}
+
+/**
+ * Mantém os marcadores fora da árvore React.
+ *
+ * Antes, cada movimento do mapa alterava estado e desmontava todos os
+ * <Marker>. Em celulares isso causava o sumiço dos ícones e uma sequência
+ * pesada de criação de DOM. O MarkerClusterGroup mantém os marcadores no
+ * Leaflet, atualizando somente o agrupamento necessário no zoom.
+ */
+function CamadaOcorrencias({
+  ocorrencias,
+  naturezasOcultas,
+  selecionadaId,
+  onSelecionar,
+}: CamadaOcorrenciasProps) {
+  const map = useMap()
+  const onSelecionarRef = useRef(onSelecionar)
+  const marcadoresRef = useRef(new Map<number, {
+    marker: L.Marker
+    natureza: string
+    semGps: boolean
+  }>())
+  onSelecionarRef.current = onSelecionar
+
+  useEffect(() => {
+    const grupo = L.markerClusterGroup({
+      maxClusterRadius: (zoom) => zoom >= 15 ? 36 : 52,
+      disableClusteringAtZoom: 16,
+      chunkedLoading: true,
+      animate: false,
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      removeOutsideVisibleBounds: true,
+      iconCreateFunction: (cluster) => {
+        const total = cluster.getChildCount()
+        const tamanho = total > 99 ? 44 : total > 9 ? 40 : 36
+        return L.divIcon({
+          className: 'ocorrencias-cluster',
+          html: `<span>${total > 999 ? '999+' : total}</span>`,
+          iconSize: [tamanho, tamanho],
+          iconAnchor: [tamanho / 2, tamanho / 2],
+        })
+      },
+    }).addTo(map)
+
+    const marcadores = ocorrencias
+      .filter((ocorrencia) => !naturezasOcultas.has(ocorrencia.natureza))
+      .map((ocorrencia) => {
+        const temGps = ocorrencia.lat != null && ocorrencia.lng != null
+        const posicao: [number, number] = temGps
+          ? [ocorrencia.lat!, ocorrencia.lng!]
+          : coordsSemGps(ocorrencia.id)
+        const marcador = L.marker(posicao, {
+          icon: getIconeCache(ocorrencia.natureza, false, !temGps),
+          title: ocorrencia.natureza,
+        })
+        marcador.on('click', (evento) => {
+          L.DomEvent.stopPropagation(evento)
+          onSelecionarRef.current(ocorrencia)
+        })
+        return marcador
+      })
+
+    marcadoresRef.current = new Map(
+      ocorrencias
+        .filter((ocorrencia) => !naturezasOcultas.has(ocorrencia.natureza))
+        .map((ocorrencia, indice) => {
+          const marcador = marcadores[indice]
+          return [
+            ocorrencia.id,
+            {
+              marker: marcador,
+              natureza: ocorrencia.natureza,
+              semGps: ocorrencia.lat == null || ocorrencia.lng == null,
+            },
+          ]
+        }),
+    )
+    grupo.addLayers(marcadores)
+    return () => {
+      grupo.clearLayers()
+      map.removeLayer(grupo)
+      marcadoresRef.current.clear()
+    }
+  }, [map, ocorrencias, naturezasOcultas])
+
+  useEffect(() => {
+    for (const [id, dados] of marcadoresRef.current) {
+      dados.marker.setIcon(getIconeCache(dados.natureza, selecionadaId === id, dados.semGps))
+    }
+  }, [selecionadaId])
+
+  return null
 }
 
 interface DispositivoRemoto {
@@ -681,8 +761,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [painelMaterialAberto, setPainelMaterialAberto] = useState(false)
   const [submenuFiltroAberto, setSubmenuFiltroAberto] = useState(false)
   const [naturezasOcultas, setNaturezasOcultas] = useState<Set<string>>(new Set())
-  const [mapaBounds, setMapaBounds] = useState<L.LatLngBounds | null>(null)
-  const [mapaEmMovimento, setMapaEmMovimento] = useState(false)
 
   // Busca de endereço + rota (estilo Google Maps)
   const [enderecoBusca, setEnderecoBusca] = useState('')
@@ -878,24 +956,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
     await buscarFocos()
   }, [buscarFocos])
 
-  useEffect(() => {
-    buscarFocos()
-    const intervalo = setInterval(buscarFocos, 60 * 1000)
-
-    const atualizarAoVoltar = () => {
-      if (document.visibilityState === 'visible') {
-        buscarFocos()
-      }
-    }
-
-    document.addEventListener('visibilitychange', atualizarAoVoltar)
-
-    return () => {
-      clearInterval(intervalo)
-      document.removeEventListener('visibilitychange', atualizarAoVoltar)
-    }
-  }, [buscarFocos])
-
   // ── Análise ambiental do Earth Engine ─────────────────────────
   const buscarMonitoramento = useCallback(async () => {
     setMonitoramentoCarregando(true)
@@ -924,11 +984,29 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
     }
   }, [])
 
+  // Consultas ambientais são adiadas até o usuário abrir o painel. Elas não
+  // devem bloquear a primeira interação com o mapa em uma rede móvel lenta.
   useEffect(() => {
-    buscarMonitoramento()
-    const intervalo = setInterval(buscarMonitoramento, 10 * 60 * 1000)
-    return () => clearInterval(intervalo)
-  }, [buscarMonitoramento])
+    if (!painelMonitoramentoAberto) return
+
+    void buscarFocos()
+    void buscarMonitoramento()
+    const intervaloFocos = setInterval(buscarFocos, 60 * 1000)
+    const intervaloCamadas = setInterval(buscarMonitoramento, 10 * 60 * 1000)
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === 'visible') {
+        void buscarFocos()
+        void buscarMonitoramento()
+      }
+    }
+
+    document.addEventListener('visibilitychange', atualizarAoVoltar)
+    return () => {
+      clearInterval(intervaloFocos)
+      clearInterval(intervaloCamadas)
+      document.removeEventListener('visibilitychange', atualizarAoVoltar)
+    }
+  }, [painelMonitoramentoAberto, buscarFocos, buscarMonitoramento])
 
   const comGeo = useMemo(() => ocorrencias.filter((o) => o.lat && o.lng), [ocorrencias])
   const semGeo = ocorrencias.length - comGeo.length
@@ -1465,25 +1543,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const dispositivosArray = useMemo(() => Array.from(dispositivos.values()), [dispositivos])
   const totalOnline = dispositivosArray.length + (statusGps === 'ativo' ? 1 : 0)
 
-  // ── Viewport culling ─────────────────────────────────────────────
-  // Só renderiza marcadores dentro da área visível do mapa + 15% de margem.
-  // Ocorrências sem GPS ficam sempre visíveis (posição virtual perto do centro).
-  const ocorrenciasVisiveis = useMemo(() => {
-    const filtradas = ocorrencias.filter(o => !naturezasOcultas.has(o.natureza))
-    if (!mapaBounds) return filtradas
-    const ne = mapaBounds.getNorthEast()
-    const sw = mapaBounds.getSouthWest()
-    const latPad = (ne.lat - sw.lat) * 0.15
-    const lngPad = (ne.lng - sw.lng) * 0.15
-    return filtradas.filter(o => {
-      if (!(o.lat && o.lng)) return true  // sem GPS → sempre mostra
-      return (
-        o.lat >= sw.lat - latPad && o.lat <= ne.lat + latPad &&
-        o.lng >= sw.lng - lngPad && o.lng <= ne.lng + lngPad
-      )
-    })
-  }, [ocorrencias, naturezasOcultas, mapaBounds])
-
   // ── Render ────────────────────────────────────────────────────
   return (
     <div className="mapa-wrapper">
@@ -1577,8 +1636,14 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         )}
 
         <MapClickHandler onMapClick={() => setSelecionada(null)} />
-        <BoundsTracker onChange={setMapaBounds} />
-        <MapMovementTracker onChange={setMapaEmMovimento} />
+        {mostrarOcorrencias && (
+          <CamadaOcorrencias
+            ocorrencias={ocorrencias}
+            naturezasOcultas={naturezasOcultas}
+            selecionadaId={selecionada?.id}
+            onSelecionar={selecionarOc}
+          />
+        )}
 
         {/* Trilha GPS local */}
         {trilha.length >= 2 && (
@@ -1732,20 +1797,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
                 </div>
               </Popup>
             </Marker>
-          )
-        })}
-
-        {/* Ocorrências — ícones individuais, viewport culling ativo */}
-        {mostrarOcorrencias && !mapaEmMovimento && ocorrenciasVisiveis.map(o => {
-          const temGps = !!(o.lat && o.lng)
-          const pos: [number, number] = temGps ? [o.lat!, o.lng!] : coordsSemGps(o.id)
-          return (
-            <Marker
-              key={o.id}
-              position={pos}
-              icon={getIconeCache(o.natureza, selecionada?.id === o.id, !temGps)}
-              eventHandlers={{ click: (e) => { e.originalEvent?.stopPropagation?.(); selecionarOc(o) } }}
-            />
           )
         })}
 

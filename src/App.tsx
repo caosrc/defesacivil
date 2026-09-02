@@ -555,26 +555,6 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', aoRetomarFoco)
   }, [sincronizar])
 
-  // Pré-carrega TODOS os chunks lazy assim que o app abre online,
-  // para que o Service Worker cacheie tudo e o app funcione 100% offline
-  // mesmo em telas que o usuário ainda não visitou.
-  useEffect(() => {
-    if (!navigator.onLine) return
-    const id = window.setTimeout(() => {
-      Promise.all([
-        import('./components/MapaOcorrencias'),
-        import('./components/NovaOcorrencia'),
-        import('./components/DetalheOcorrencia'),
-        import('./components/ChecklistViatura'),
-        import('./components/EscalaAgentes'),
-        import('./components/Dashboard'),
-        import('./components/MateriaisEmprestimos'),
-        import('./components/Planejamento'),
-      ]).catch(() => { /* sem internet ou bloqueado, ignora */ })
-    }, 1500)
-    return () => window.clearTimeout(id)
-  }, [])
-
   // Realtime: recarrega a lista quando outro usuário cria/edita/apaga uma ocorrência
   useEffect(() => {
     const off = wsOn('ocorrencias_atualizadas', () => { carregar() })
