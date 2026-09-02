@@ -3255,6 +3255,222 @@ app.get('/api/radar-chuva', async (_req, res) => {
   }
 })
 
+// ── Contornos dos núcleos de chuva a partir do PNG do radar ────────────────
+// O tile continua sendo entregue ao mapa como raster. Esta rota também lê os
+// pixels no servidor para produzir um GeoJSON com o contorno e o centro de
+// cada núcleo, evitando depender de canvas/CORS no navegador.
+const radarPoligonoCache = new Map()
+const RADAR_POLIGONO_TTL_MS = 2 * 60 * 1000
+const RADAR_POLIGONO_ZOOM = 7
+const RADAR_POLIGONO_TILE_SIZE = 512
+const RADAR_POLIGONO_BLOCO = 4
+
+function radarPixelParaLatLng(x, y, tileX, tileY) {
+  const mundoX = (tileX * RADAR_POLIGONO_TILE_SIZE + x)
+    / (RADAR_POLIGONO_TILE_SIZE * (2 ** RADAR_POLIGONO_ZOOM))
+  const mundoY = (tileY * RADAR_POLIGONO_TILE_SIZE + y)
+    / (RADAR_POLIGONO_TILE_SIZE * (2 ** RADAR_POLIGONO_ZOOM))
+  const lng = mundoX * 360 - 180
+  const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * mundoY))) * 180 / Math.PI
+  return [lng, lat]
+}
+
+function intensidadeRadarPorAlpha(alpha) {
+  if (alpha >= 190) return { nome: 'muito forte', cor: '#1288ff' }
+  if (alpha >= 125) return { nome: 'forte', cor: '#16b9ff' }
+  if (alpha >= 75) return { nome: 'moderada', cor: '#62d7ff' }
+  return { nome: 'fraca', cor: '#b9edff' }
+}
+
+function extrairBordasRadar(celulas, largura, altura) {
+  const ocupada = new Set(celulas.map(celula => `${celula.x},${celula.y}`))
+  const arestas = []
+  const adicionar = (x1, y1, x2, y2) => arestas.push({ inicio: [x1, y1], fim: [x2, y2] })
+
+  for (const celula of celulas) {
+    const { x, y } = celula
+    if (y === 0 || !ocupada.has(`${x},${y - 1}`)) adicionar(x, y, x + 1, y)
+    if (x === largura - 1 || !ocupada.has(`${x + 1},${y}`)) adicionar(x + 1, y, x + 1, y + 1)
+    if (y === altura - 1 || !ocupada.has(`${x},${y + 1}`)) adicionar(x + 1, y + 1, x, y + 1)
+    if (x === 0 || !ocupada.has(`${x - 1},${y}`)) adicionar(x, y + 1, x, y)
+  }
+
+  const porInicio = new Map()
+  arestas.forEach((aresta, indice) => {
+    const chave = `${aresta.inicio[0]},${aresta.inicio[1]}`
+    const lista = porInicio.get(chave) || []
+    lista.push(indice)
+    porInicio.set(chave, lista)
+  })
+
+  const poligonos = []
+  const usadas = new Set()
+  for (let indiceInicial = 0; indiceInicial < arestas.length; indiceInicial += 1) {
+    if (usadas.has(indiceInicial)) continue
+    const primeira = arestas[indiceInicial]
+    usadas.add(indiceInicial)
+    const poligono = [primeira.inicio, primeira.fim]
+    let atual = primeira.fim
+
+    for (let passos = 0; passos < arestas.length; passos += 1) {
+      if (atual[0] === primeira.inicio[0] && atual[1] === primeira.inicio[1]) break
+      const candidatos = porInicio.get(`${atual[0]},${atual[1]}`) || []
+      const proximoIndice = candidatos.find(indice => !usadas.has(indice))
+      if (proximoIndice === undefined) break
+      usadas.add(proximoIndice)
+      atual = arestas[proximoIndice].fim
+      poligono.push(atual)
+    }
+
+    if (
+      poligono.length >= 4
+      && poligono[0][0] === poligono.at(-1)[0]
+      && poligono[0][1] === poligono.at(-1)[1]
+    ) {
+      poligonos.push(poligono)
+    }
+  }
+  return poligonos
+}
+
+function gerarGeoJsonRadarChuva(pngBuffer, tileX, tileY) {
+  const imagem = PNG.sync.read(pngBuffer)
+  const bloco = RADAR_POLIGONO_BLOCO
+  const largura = Math.ceil(imagem.width / bloco)
+  const altura = Math.ceil(imagem.height / bloco)
+  const celulas = []
+
+  for (let y = 0; y < altura; y += 1) {
+    for (let x = 0; x < largura; x += 1) {
+      let maiorAlpha = 0
+      for (let dy = 0; dy < bloco && (y * bloco + dy) < imagem.height; dy += 1) {
+        for (let dx = 0; dx < bloco && (x * bloco + dx) < imagem.width; dx += 1) {
+          const indice = (((y * bloco + dy) * imagem.width) + (x * bloco + dx)) * 4 + 3
+          maiorAlpha = Math.max(maiorAlpha, imagem.data[indice] || 0)
+        }
+      }
+      // Alpha baixo é garoa/franja do radar e ainda precisa aparecer no mapa.
+      if (maiorAlpha >= 8) celulas.push({ x, y, alpha: maiorAlpha })
+    }
+  }
+
+  const porChave = new Map(celulas.map(celula => [`${celula.x},${celula.y}`, celula]))
+  const visitadas = new Set()
+  const componentes = []
+  for (const celula of celulas) {
+    const chave = `${celula.x},${celula.y}`
+    if (visitadas.has(chave)) continue
+    const fila = [celula]
+    const componente = []
+    visitadas.add(chave)
+    while (fila.length) {
+      const atual = fila.shift()
+      componente.push(atual)
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const vizinho = porChave.get(`${atual.x + dx},${atual.y + dy}`)
+        if (!vizinho) continue
+        const chaveVizinho = `${vizinho.x},${vizinho.y}`
+        if (!visitadas.has(chaveVizinho)) {
+          visitadas.add(chaveVizinho)
+          fila.push(vizinho)
+        }
+      }
+    }
+    if (componente.length >= 2) componentes.push(componente)
+  }
+
+  componentes.sort((a, b) => b.length - a.length)
+  const features = []
+  for (const componente of componentes.slice(0, 40)) {
+    const maiorAlpha = Math.max(...componente.map(celula => celula.alpha))
+    const intensidade = intensidadeRadarPorAlpha(maiorAlpha)
+    const bordas = extrairBordasRadar(componente, largura, altura)
+    for (const borda of bordas) {
+      const coordenadas = borda.map(([x, y]) => radarPixelParaLatLng(
+        x * bloco,
+        y * bloco,
+        tileX,
+        tileY,
+      ))
+      features.push({
+        type: 'Feature',
+        properties: {
+          tipo: 'poligono',
+          intensidade: intensidade.nome,
+          cor: intensidade.cor,
+          alpha: maiorAlpha,
+          pixels: componente.length,
+        },
+        geometry: { type: 'Polygon', coordinates: [coordenadas] },
+      })
+    }
+
+    const centro = componente.reduce(
+      (acumulado, celula) => [acumulado[0] + celula.x, acumulado[1] + celula.y],
+      [0, 0],
+    ).map(valor => valor / componente.length)
+    const [lng, lat] = radarPixelParaLatLng(
+      (centro[0] + 0.5) * bloco,
+      (centro[1] + 0.5) * bloco,
+      tileX,
+      tileY,
+    )
+    features.push({
+      type: 'Feature',
+      properties: {
+        tipo: 'ponto',
+        intensidade: intensidade.nome,
+        cor: intensidade.cor,
+        alpha: maiorAlpha,
+        pixels: componente.length,
+      },
+      geometry: { type: 'Point', coordinates: [lng, lat] },
+    })
+  }
+
+  return {
+    type: 'FeatureCollection',
+    features,
+    fonte: 'RainViewer · pixels observados',
+    atualizadoEm: new Date().toISOString(),
+  }
+}
+
+app.get('/api/radar-chuva-poligonos', async (req, res) => {
+  const caminho = String(req.query.path || '')
+  if (!/^\/v2\/radar\/[a-z0-9]+$/i.test(caminho)) {
+    return res.status(400).json({ erro: 'Quadro de radar inválido' })
+  }
+
+  const cacheKey = caminho
+  const cache = radarPoligonoCache.get(cacheKey)
+  if (cache && Date.now() - cache.timestamp < RADAR_POLIGONO_TTL_MS) {
+    return res.json({ ...cache.geojson, cache: true })
+  }
+
+  try {
+    const lat = -20.5195
+    const lng = -43.6983
+    const escala = 2 ** RADAR_POLIGONO_ZOOM
+    const tileX = Math.floor(((lng + 180) / 360) * escala)
+    const seno = Math.sin((lat * Math.PI) / 180)
+    const tileY = Math.floor(((1 - Math.log((1 + seno) / (1 - seno)) / (2 * Math.PI)) / 2) * escala)
+    const url = `https://tilecache.rainviewer.com${caminho}/${RADAR_POLIGONO_TILE_SIZE}/${RADAR_POLIGONO_ZOOM}/${tileX}/${tileY}/2/1_1.png`
+    const resposta = await fetch(url, { signal: AbortSignal.timeout(15000) })
+    if (!resposta.ok) throw new Error(`Tile do radar: ${resposta.status}`)
+    const geojson = gerarGeoJsonRadarChuva(
+      Buffer.from(await resposta.arrayBuffer()),
+      tileX,
+      tileY,
+    )
+    radarPoligonoCache.set(cacheKey, { timestamp: Date.now(), geojson })
+    return res.json(geojson)
+  } catch (err) {
+    console.error('Erro ao gerar polígonos do radar:', err?.message || err)
+    return res.status(503).json({ erro: 'Contorno do radar indisponível' })
+  }
+})
+
 // ── RRQPE do GOES-16 ────────────────────────────────────────────────────────
 // O produto ABI-L2-RRQPEF original da NOAA é um NetCDF georreferenciado, não
 // um tile que o Leaflet consiga desenhar diretamente. O processamento desse

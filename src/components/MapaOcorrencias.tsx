@@ -476,8 +476,59 @@ function RadarChuvaPoligonos({ host, path, frameTime, enabled }: RadarChuvaPolig
       imagem.src = `${host}${path}/${tamanhoTile}/${zoom}/${tileX}/${tileY}/2/1_1.png`
     })
 
+    const desenharGeoJson = (geojson: {
+      features?: Array<{
+        geometry?: { type?: string; coordinates?: unknown }
+        properties?: { cor?: string; intensidade?: string; alpha?: number; pixels?: number }
+      }>
+    }) => {
+      for (const feature of geojson.features || []) {
+        const propriedades = feature.properties || {}
+        const cor = propriedades.cor || '#38bdf8'
+        if (feature.geometry?.type === 'Polygon' && Array.isArray(feature.geometry.coordinates)) {
+          const anel = feature.geometry.coordinates[0]
+          if (!Array.isArray(anel)) continue
+          const coordenadas = anel.map((coordenada: any) => [coordenada[1], coordenada[0]]) as [number, number][]
+          L.polygon(coordenadas, {
+            pane,
+            color: cor,
+            weight: 2.5,
+            opacity: 0.98,
+            fillColor: cor,
+            fillOpacity: Math.min(0.52, 0.24 + Number(propriedades.alpha || 0) / 600),
+          }).bindPopup(
+            `<strong>Área de chuva observada</strong><br />RainViewer · intensidade ${propriedades.intensidade || 'não informada'}`
+          ).addTo(grupo)
+        }
+        if (feature.geometry?.type === 'Point' && Array.isArray(feature.geometry.coordinates)) {
+          const coordenada = feature.geometry.coordinates as number[]
+          const ponto = [coordenada[1], coordenada[0]] as [number, number]
+          L.circleMarker(ponto, {
+            pane,
+            radius: Number(propriedades.alpha || 0) >= 125 ? 8 : 6,
+            color: '#ffffff',
+            weight: 2,
+            fillColor: cor,
+            fillOpacity: 1,
+          }).bindPopup(
+            `<strong>💧 Núcleo de chuva</strong><br />Intensidade ${propriedades.intensidade || 'não informada'}<br />${propriedades.pixels || 0} células do radar`
+          ).addTo(grupo)
+        }
+      }
+    }
+
     const desenhar = async () => {
       try {
+        const respostaGeoJson = await fetch(
+          `/api/radar-chuva-poligonos?path=${encodeURIComponent(path)}&frameTime=${frameTime}`,
+          { cache: 'no-store' }
+        )
+        if (respostaGeoJson.ok) {
+          const geojson = await respostaGeoJson.json()
+          desenharGeoJson(geojson)
+          return
+        }
+
         const imagem = await carregarImagem()
         if (desmontado || !contexto) return
         contexto.clearRect(0, 0, tamanhoTile, tamanhoTile)
