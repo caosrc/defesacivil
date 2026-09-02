@@ -1335,11 +1335,12 @@ input, select, textarea { font-family: inherit; }
 }
 .chuva-cor--fraca { background: #67e8f9; }
 .chuva-cor--moderada { background: #22c55e; }
-.chuva-cor--forte { background: #facc15; }
+.chuva-cor--forte { background: #007fe8; }
 .chuva-cor--muito-forte { background: #f97316; }
 .chuva-cor--intensa { background: #ef4444; }
 .chuva-cor--extrema { background: #c026d3; }
 .chuva-cor--nuvens { background: #93c5fd; }
+.chuva-cor--nucleo { background: #006bd6; }
 .mapa-chuva-ajuda {
   margin: 0.25rem 0.5rem 0.35rem;
   color: #64748b;

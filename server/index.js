@@ -3256,9 +3256,9 @@ app.get('/api/radar-chuva', async (_req, res) => {
 })
 
 // ── Contornos dos núcleos de chuva a partir do PNG do radar ────────────────
-// O tile continua sendo entregue ao mapa como raster. Esta rota também lê os
-// pixels no servidor para produzir um GeoJSON com o contorno e o centro de
-// cada núcleo, evitando depender de canvas/CORS no navegador.
+// O PNG do tile é lido exclusivamente no servidor para produzir um GeoJSON
+// com a mancha irregular, os núcleos fortes e seus centros. O navegador não
+// precisa acessar pixels via canvas/CORS nem desenha o raster colorido.
 const radarPoligonoCache = new Map()
 const RADAR_POLIGONO_TTL_MS = 2 * 60 * 1000
 const RADAR_POLIGONO_ZOOM = 7
@@ -3276,10 +3276,40 @@ function radarPixelParaLatLng(x, y, tileX, tileY) {
 }
 
 function intensidadeRadarPorAlpha(alpha) {
-  if (alpha >= 190) return { nome: 'muito forte', cor: '#1288ff' }
-  if (alpha >= 125) return { nome: 'forte', cor: '#16b9ff' }
-  if (alpha >= 75) return { nome: 'moderada', cor: '#62d7ff' }
-  return { nome: 'fraca', cor: '#b9edff' }
+  if (alpha >= 190) return { nome: 'muito forte', cor: '#006bd6', mancha: '#c4eaff' }
+  if (alpha >= 125) return { nome: 'forte', cor: '#007fe8', mancha: '#cceeff' }
+  if (alpha >= 75) return { nome: 'moderada', cor: '#1799e6', mancha: '#d7f2ff' }
+  return { nome: 'fraca', cor: '#3daeea', mancha: '#e3f7ff' }
+}
+
+function extrairComponentesRadar(celulas, minimoPixels = 1) {
+  const porChave = new Map(celulas.map(celula => [`${celula.x},${celula.y}`, celula]))
+  const visitadas = new Set()
+  const componentes = []
+
+  for (const celula of celulas) {
+    const chave = `${celula.x},${celula.y}`
+    if (visitadas.has(chave)) continue
+    const fila = [celula]
+    const componente = []
+    visitadas.add(chave)
+
+    while (fila.length) {
+      const atual = fila.pop()
+      componente.push(atual)
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const vizinho = porChave.get(`${atual.x + dx},${atual.y + dy}`)
+        if (!vizinho) continue
+        const chaveVizinho = `${vizinho.x},${vizinho.y}`
+        if (visitadas.has(chaveVizinho)) continue
+        visitadas.add(chaveVizinho)
+        fila.push(vizinho)
+      }
+    }
+
+    if (componente.length >= minimoPixels) componentes.push(componente)
+  }
+  return componentes
 }
 
 function extrairBordasRadar(celulas, largura, altura) {
@@ -3354,34 +3384,10 @@ function gerarGeoJsonRadarChuva(pngBuffer, tileX, tileY) {
     }
   }
 
-  const porChave = new Map(celulas.map(celula => [`${celula.x},${celula.y}`, celula]))
-  const visitadas = new Set()
-  const componentes = []
-  for (const celula of celulas) {
-    const chave = `${celula.x},${celula.y}`
-    if (visitadas.has(chave)) continue
-    const fila = [celula]
-    const componente = []
-    visitadas.add(chave)
-    while (fila.length) {
-      const atual = fila.shift()
-      componente.push(atual)
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const vizinho = porChave.get(`${atual.x + dx},${atual.y + dy}`)
-        if (!vizinho) continue
-        const chaveVizinho = `${vizinho.x},${vizinho.y}`
-        if (!visitadas.has(chaveVizinho)) {
-          visitadas.add(chaveVizinho)
-          fila.push(vizinho)
-        }
-      }
-    }
-    if (componente.length >= 2) componentes.push(componente)
-  }
-
+  const componentes = extrairComponentesRadar(celulas, 2)
   componentes.sort((a, b) => b.length - a.length)
   const features = []
-  for (const componente of componentes.slice(0, 40)) {
+  for (const componente of componentes.slice(0, 24)) {
     const maiorAlpha = Math.max(...componente.map(celula => celula.alpha))
     const intensidade = intensidadeRadarPorAlpha(maiorAlpha)
     const bordas = extrairBordasRadar(componente, largura, altura)
@@ -3395,20 +3401,49 @@ function gerarGeoJsonRadarChuva(pngBuffer, tileX, tileY) {
       features.push({
         type: 'Feature',
         properties: {
-          tipo: 'poligono',
+           tipo: 'mancha',
           intensidade: intensidade.nome,
-          cor: intensidade.cor,
+           cor: intensidade.mancha,
           alpha: maiorAlpha,
           pixels: componente.length,
         },
         geometry: { type: 'Polygon', coordinates: [coordenadas] },
       })
     }
+  }
 
-    const centro = componente.reduce(
+  // Pontos/gotas não representam a grade inteira: aparecem somente no
+  // núcleo de pixels fortes detectado dentro da mancha.
+  const celulasNucleo = celulas.filter(celula => celula.alpha >= 125)
+  const nucleos = extrairComponentesRadar(celulasNucleo, 1)
+  nucleos.sort((a, b) => b.length - a.length)
+  for (const nucleo of nucleos.slice(0, 18)) {
+    const maiorAlpha = Math.max(...nucleo.map(celula => celula.alpha))
+    const intensidade = intensidadeRadarPorAlpha(maiorAlpha)
+    const bordas = extrairBordasRadar(nucleo, largura, altura)
+    for (const borda of bordas) {
+      const coordenadas = borda.map(([x, y]) => radarPixelParaLatLng(
+        x * bloco,
+        y * bloco,
+        tileX,
+        tileY,
+      ))
+      features.push({
+        type: 'Feature',
+        properties: {
+          tipo: 'nucleo',
+          intensidade: intensidade.nome,
+          cor: intensidade.cor,
+          alpha: maiorAlpha,
+          pixels: nucleo.length,
+        },
+        geometry: { type: 'Polygon', coordinates: [coordenadas] },
+      })
+    }
+    const centro = nucleo.reduce(
       (acumulado, celula) => [acumulado[0] + celula.x, acumulado[1] + celula.y],
       [0, 0],
-    ).map(valor => valor / componente.length)
+    ).map(valor => valor / nucleo.length)
     const [lng, lat] = radarPixelParaLatLng(
       (centro[0] + 0.5) * bloco,
       (centro[1] + 0.5) * bloco,
@@ -3418,11 +3453,11 @@ function gerarGeoJsonRadarChuva(pngBuffer, tileX, tileY) {
     features.push({
       type: 'Feature',
       properties: {
-        tipo: 'ponto',
+        tipo: 'nucleo-ponto',
         intensidade: intensidade.nome,
         cor: intensidade.cor,
         alpha: maiorAlpha,
-        pixels: componente.length,
+        pixels: nucleo.length,
       },
       geometry: { type: 'Point', coordinates: [lng, lat] },
     })

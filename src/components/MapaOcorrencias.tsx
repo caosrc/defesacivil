@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { MapContainer, TileLayer, ImageOverlay, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Ocorrencia } from '../types'
@@ -148,17 +148,6 @@ interface ResumoChuvaOntem {
   horaPico: string | null
   coberturaNuvensMedia: number | null
   fonte?: string
-}
-
-interface PontoChuvaArea {
-  lat: number
-  lng: number
-  hora: string | null
-  precipitacao: number
-  chuva: number
-  pancadas: number
-  coberturaNuvens: number | null
-  codigoTempo: number | null
 }
 
 interface ChuvaNoPonto {
@@ -366,125 +355,52 @@ function GpsCenter({ position, seguir }: { position: [number, number]; seguir: b
 }
 
 interface RadarChuvaPoligonosProps {
-  host: string
   path: string
   frameTime: number
   enabled: boolean
 }
 
-type PixelPoint = [number, number]
-type RadarCell = { x: number; y: number; alpha: number }
-
-function latLngParaTile(lat: number, lng: number, zoom: number) {
-  const escala = 2 ** zoom
-  const seno = Math.sin((lat * Math.PI) / 180)
-  return {
-    x: ((lng + 180) / 360) * escala,
-    y: ((1 - Math.log((1 + seno) / (1 - seno)) / (2 * Math.PI)) / 2) * escala,
+interface RadarFeature {
+  geometry?: { type?: string; coordinates?: unknown }
+  properties?: {
+    tipo?: string
+    cor?: string
+    intensidade?: string
+    alpha?: number
+    pixels?: number
   }
 }
 
-function pixelTileParaLatLng(x: number, y: number, tileX: number, tileY: number, zoom: number, tamanho: number): [number, number] {
-  const mundoX = (tileX * tamanho + x) / (tamanho * (2 ** zoom))
-  const mundoY = (tileY * tamanho + y) / (tamanho * (2 ** zoom))
-  const lng = mundoX * 360 - 180
-  const lat = (Math.atan(Math.sinh(Math.PI * (1 - 2 * mundoY))) * 180) / Math.PI
-  return [lat, lng]
+function criarIconeNucleoRadar(cor: string): L.DivIcon {
+  return L.divIcon({
+    className: 'radar-nucleo-icon',
+    html: `<span style="display:block;width:15px;height:15px;border:2px solid #fff;
+      border-radius:70% 32% 70% 32%;background:${cor};transform:rotate(45deg);
+      box-shadow:0 0 0 2px rgba(0,91,187,.24),0 2px 8px rgba(0,35,90,.55);">
+      <i style="display:block;width:4px;height:4px;margin:3px auto;background:#dff5ff;
+      border-radius:50%;opacity:.9;"></i></span>`,
+    iconSize: [21, 21],
+    iconAnchor: [10.5, 10.5],
+  })
 }
 
-function corPorAlphaRadar(alpha: number) {
-  if (alpha >= 190) return '#ef4444'
-  if (alpha >= 125) return '#f97316'
-  if (alpha >= 75) return '#facc15'
-  return '#38bdf8'
-}
-
-function chavePonto(ponto: PixelPoint) {
-  return `${ponto[0]},${ponto[1]}`
-}
-
-function extrairBordas(celulas: RadarCell[], largura: number, altura: number) {
-  const ocupada = new Set(celulas.map(celula => `${celula.x},${celula.y}`))
-  const arestas: Array<{ inicio: PixelPoint; fim: PixelPoint }> = []
-  const adicionar = (x1: number, y1: number, x2: number, y2: number) => {
-    arestas.push({ inicio: [x1, y1], fim: [x2, y2] })
-  }
-
-  for (const celula of celulas) {
-    const { x, y } = celula
-    if (y === 0 || !ocupada.has(`${x},${y - 1}`)) adicionar(x, y, x + 1, y)
-    if (x === largura - 1 || !ocupada.has(`${x + 1},${y}`)) adicionar(x + 1, y, x + 1, y + 1)
-    if (y === altura - 1 || !ocupada.has(`${x},${y + 1}`)) adicionar(x + 1, y + 1, x, y + 1)
-    if (x === 0 || !ocupada.has(`${x - 1},${y}`)) adicionar(x, y + 1, x, y)
-  }
-
-  if (!arestas.length) return []
-  const poligonos: PixelPoint[][] = []
-  const usadas = new Set<number>()
-
-  for (let indiceInicial = 0; indiceInicial < arestas.length; indiceInicial += 1) {
-    if (usadas.has(indiceInicial)) continue
-    const primeira = arestas[indiceInicial]
-    usadas.add(indiceInicial)
-    const poligono: PixelPoint[] = [primeira.inicio, primeira.fim]
-    let atual = primeira.fim
-
-    for (let passos = 0; passos < arestas.length; passos += 1) {
-      if (chavePonto(atual) === chavePonto(primeira.inicio)) break
-      const proximoIndice = arestas.findIndex((aresta, indice) =>
-        !usadas.has(indice) && chavePonto(aresta.inicio) === chavePonto(atual)
-      )
-      if (proximoIndice < 0) break
-      usadas.add(proximoIndice)
-      atual = arestas[proximoIndice].fim
-      poligono.push(atual)
-    }
-
-    if (poligono.length >= 4 && chavePonto(poligono[0]) === chavePonto(poligono.at(-1)!)) {
-      poligonos.push(poligono)
-    }
-  }
-  return poligonos
-}
-
-function RadarChuvaPoligonos({ host, path, frameTime, enabled }: RadarChuvaPoligonosProps) {
+function RadarChuvaPoligonos({ path, frameTime, enabled }: RadarChuvaPoligonosProps) {
   const map = useMap()
 
   useEffect(() => {
     if (!enabled) return
 
     let desmontado = false
-    const zoom = 7
-    const tamanhoTile = 512
-    const pontoTile = latLngParaTile(OURO_BRANCO[0], OURO_BRANCO[1], zoom)
-    const tileX = Math.floor(pontoTile.x)
-    const tileY = Math.floor(pontoTile.y)
-    const canvas = document.createElement('canvas')
-    canvas.width = tamanhoTile
-    canvas.height = tamanhoTile
-    const contexto = canvas.getContext('2d', { willReadFrequently: true })
     const grupo = L.layerGroup().addTo(map)
     const pane = 'radar-poligonos-pane'
     if (!map.getPane(pane)) map.createPane(pane)
     map.getPane(pane)!.style.zIndex = '650'
 
-    const carregarImagem = () => new Promise<HTMLImageElement>((resolve, reject) => {
-      const imagem = new Image()
-      imagem.crossOrigin = 'anonymous'
-      imagem.onload = () => resolve(imagem)
-      imagem.onerror = () => reject(new Error('Tile do radar não pôde ser lido'))
-      imagem.src = `${host}${path}/${tamanhoTile}/${zoom}/${tileX}/${tileY}/2/1_1.png`
-    })
-
-    const desenharGeoJson = (geojson: {
-      features?: Array<{
-        geometry?: { type?: string; coordinates?: unknown }
-        properties?: { cor?: string; intensidade?: string; alpha?: number; pixels?: number }
-      }>
-    }) => {
+    const desenharGeoJson = (geojson: { features?: RadarFeature[] }) => {
       for (const feature of geojson.features || []) {
         const propriedades = feature.properties || {}
-        const cor = propriedades.cor || '#38bdf8'
+        const tipo = propriedades.tipo || 'mancha'
+        const cor = propriedades.cor || (tipo === 'nucleo' ? '#006bd6' : '#bdeaff')
         if (feature.geometry?.type === 'Polygon' && Array.isArray(feature.geometry.coordinates)) {
           const anel = feature.geometry.coordinates[0]
           if (!Array.isArray(anel)) continue
@@ -492,26 +408,27 @@ function RadarChuvaPoligonos({ host, path, frameTime, enabled }: RadarChuvaPolig
           L.polygon(coordenadas, {
             pane,
             color: cor,
-            weight: 2.5,
-            opacity: 0.98,
+            weight: tipo === 'nucleo' ? 1 : 0,
+            opacity: tipo === 'nucleo' ? 0.72 : 0,
             fillColor: cor,
-            fillOpacity: Math.min(0.52, 0.24 + Number(propriedades.alpha || 0) / 600),
+            fillOpacity: tipo === 'nucleo'
+              ? Math.min(0.78, 0.42 + Number(propriedades.alpha || 0) / 700)
+              : Math.min(0.42, 0.18 + Number(propriedades.alpha || 0) / 900),
+            smoothFactor: tipo === 'nucleo' ? 1.4 : 2.8,
+            lineJoin: 'round',
           }).bindPopup(
-            `<strong>Área de chuva observada</strong><br />RainViewer · intensidade ${propriedades.intensidade || 'não informada'}`
+            `<strong>${tipo === 'nucleo' ? 'Núcleo de chuva' : 'Mancha de precipitação'}</strong><br />RainViewer · intensidade ${propriedades.intensidade || 'não informada'}`
           ).addTo(grupo)
         }
         if (feature.geometry?.type === 'Point' && Array.isArray(feature.geometry.coordinates)) {
           const coordenada = feature.geometry.coordinates as number[]
           const ponto = [coordenada[1], coordenada[0]] as [number, number]
-          L.circleMarker(ponto, {
+          L.marker(ponto, {
             pane,
-            radius: Number(propriedades.alpha || 0) >= 125 ? 8 : 6,
-            color: '#ffffff',
-            weight: 2,
-            fillColor: cor,
-            fillOpacity: 1,
+            icon: criarIconeNucleoRadar(cor),
+            zIndexOffset: 50,
           }).bindPopup(
-            `<strong>💧 Núcleo de chuva</strong><br />Intensidade ${propriedades.intensidade || 'não informada'}<br />${propriedades.pixels || 0} células do radar`
+            `<strong>💧 Núcleo de chuva detectado</strong><br />Intensidade ${propriedades.intensidade || 'não informada'}<br />${propriedades.pixels || 0} células do radar`
           ).addTo(grupo)
         }
       }
@@ -523,110 +440,12 @@ function RadarChuvaPoligonos({ host, path, frameTime, enabled }: RadarChuvaPolig
           `/api/radar-chuva-poligonos?path=${encodeURIComponent(path)}&frameTime=${frameTime}`,
           { cache: 'no-store' }
         )
-        if (respostaGeoJson.ok) {
-          const geojson = await respostaGeoJson.json()
-          desenharGeoJson(geojson)
-          return
-        }
-
-        const imagem = await carregarImagem()
-        if (desmontado || !contexto) return
-        contexto.clearRect(0, 0, tamanhoTile, tamanhoTile)
-        contexto.drawImage(imagem, 0, 0, tamanhoTile, tamanhoTile)
-        const pixels = contexto.getImageData(0, 0, tamanhoTile, tamanhoTile).data
-        const bloco = 4
-        const largura = tamanhoTile / bloco
-        const altura = tamanhoTile / bloco
-        const celulas: RadarCell[] = []
-
-        for (let y = 0; y < altura; y += 1) {
-          for (let x = 0; x < largura; x += 1) {
-            let maiorAlpha = 0
-            for (let dy = 0; dy < bloco; dy += 1) {
-              for (let dx = 0; dx < bloco; dx += 1) {
-                const indice = (((y * bloco + dy) * tamanhoTile) + (x * bloco + dx)) * 4 + 3
-                maiorAlpha = Math.max(maiorAlpha, pixels[indice] || 0)
-              }
-            }
-            if (maiorAlpha >= 12) celulas.push({ x, y, alpha: maiorAlpha })
-          }
-        }
-
-        const visitadas = new Set<string>()
-        const celulasPorChave = new Map(celulas.map(celula => [`${celula.x},${celula.y}`, celula]))
-        const componentes: RadarCell[][] = []
-        for (const celula of celulas) {
-          const chave = `${celula.x},${celula.y}`
-          if (visitadas.has(chave)) continue
-          const componente: RadarCell[] = []
-          const fila = [celula]
-          visitadas.add(chave)
-          while (fila.length) {
-            const atual = fila.shift()!
-            componente.push(atual)
-            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-              const vizinho = celulasPorChave.get(`${atual.x + dx},${atual.y + dy}`)
-              if (!vizinho) continue
-              const chaveVizinho = `${vizinho.x},${vizinho.y}`
-              if (!visitadas.has(chaveVizinho)) {
-                visitadas.add(chaveVizinho)
-                fila.push(vizinho)
-              }
-            }
-          }
-          if (componente.length >= 2) componentes.push(componente)
-        }
-
-        for (const componente of componentes) {
-          const maiorAlpha = Math.max(...componente.map(celula => celula.alpha))
-          const cor = corPorAlphaRadar(maiorAlpha)
-          const bordas = extrairBordas(componente, largura, altura)
-          const centroide = componente.reduce(
-            (acumulado, celula) => [acumulado[0] + celula.x, acumulado[1] + celula.y],
-            [0, 0]
-          ).map(valor => valor / componente.length) as [number, number]
-
-          for (const borda of bordas) {
-            const coordenadas = borda.map(([x, y]) => pixelTileParaLatLng(
-              x * bloco,
-              y * bloco,
-              tileX,
-              tileY,
-              zoom,
-              tamanhoTile
-            )) as [number, number][]
-            L.polygon(coordenadas, {
-              pane,
-              color: cor,
-              weight: 2,
-              opacity: 0.9,
-              fillColor: cor,
-              fillOpacity: Math.min(0.42, 0.18 + maiorAlpha / 700),
-            }).bindPopup(
-              `<strong>Núcleo de chuva observado</strong><br />Radar RainViewer<br />Intensidade relativa: ${maiorAlpha}%`
-            ).addTo(grupo)
-          }
-
-          const centro = pixelTileParaLatLng(
-            (centroide[0] + 0.5) * bloco,
-            (centroide[1] + 0.5) * bloco,
-            tileX,
-            tileY,
-            zoom,
-            tamanhoTile
-          )
-          L.circleMarker(centro, {
-            pane,
-            radius: maiorAlpha >= 125 ? 7 : 5,
-            color: '#ffffff',
-            weight: 2,
-            fillColor: cor,
-            fillOpacity: 1,
-          }).bindTooltip('Ponto de chuva observado', { direction: 'top' }).addTo(grupo)
-        }
+        if (!respostaGeoJson.ok) throw new Error('Contorno do radar indisponível')
+        const geojson = await respostaGeoJson.json()
+        if (!desmontado) desenharGeoJson(geojson)
       } catch {
-        // O tile continua visível como raster mesmo quando o navegador não permite
-        // ler seus pixels para desenhar o contorno vetorial.
+        // O painel segue informando o quadro do radar; a camada vetorial só é
+        // desenhada quando o PNG real pôde ser lido no servidor.
       }
     }
 
@@ -635,7 +454,7 @@ function RadarChuvaPoligonos({ host, path, frameTime, enabled }: RadarChuvaPolig
       desmontado = true
       grupo.removeFrom(map)
     }
-  }, [enabled, frameTime, host, map, path])
+  }, [enabled, frameTime, map, path])
 
   return null
 }
@@ -781,13 +600,6 @@ function nomeDiaSemana(dateStr: string): string {
 
 const OURO_BRANCO: [number, number] = [-20.5195, -43.6983]
 const RAIO_RADAR_CHUVA_METROS = 10_000
-const GOES_GEOCOLOR_URL = 'https://cdn.star.nesdis.noaa.gov/GOES19/ABI/FD/GEOCOLOR/1808x1808.jpg'
-// Extensão aproximada do disco completo geoestacionário. O radar colorido
-// continua sendo a referência para intensidade e localização da chuva.
-const GOES_FULL_DISK_BOUNDS: [[number, number], [number, number]] = [
-  [-81.3, -156.3],
-  [81.3, 5.7],
-]
 
 const MAX_TRILHA = 300
 
@@ -805,13 +617,8 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [radarAnimando, setRadarAnimando] = useState(true)
   const [chuvaNoPonto, setChuvaNoPonto] = useState<ChuvaNoPonto | null>(null)
   const [chuvaOntem, setChuvaOntem] = useState<ResumoChuvaOntem | null>(null)
-  const [chuvaArea, setChuvaArea] = useState<PontoChuvaArea[]>([])
   const [radarChuvaCarregando, setRadarChuvaCarregando] = useState(false)
   const [radarChuvaErro, setRadarChuvaErro] = useState<string | null>(null)
-  const [mostrarNuvensGOES, setMostrarNuvensGOES] = useState(true)
-  const [nuvensGOESUrl, setNuvensGOESUrl] = useState(
-    () => `${GOES_GEOCOLOR_URL}?t=${Math.floor(Date.now() / (10 * 60 * 1000))}`
-  )
   const [mostrarOcorrencias, setMostrarOcorrencias] = useState(false)
   const [mostrarMateriais, setMostrarMateriais] = useState(false)
   const [painelMaterialAberto, setPainelMaterialAberto] = useState(false)
@@ -883,10 +690,9 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
     setRadarChuvaCarregando(true)
     setRadarChuvaErro(null)
     const agora = Date.now()
-    const [resultadoRadar, resultadoTempo, resultadoArea] = await Promise.allSettled([
+    const [resultadoRadar, resultadoTempo] = await Promise.allSettled([
       fetch(`/api/radar-chuva?_ts=${agora}`, { cache: 'no-store' }),
       fetch(`/api/tempo?_ts=${agora}`, { cache: 'no-store' }),
-      fetch(`/api/chuva-area?_ts=${agora}`, { cache: 'no-store' }),
     ])
 
     let radarAtualizado = false
@@ -922,11 +728,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           })
     }
 
-    if (resultadoArea.status === 'fulfilled' && resultadoArea.value.ok) {
-      const dadosArea = await resultadoArea.value.json()
-      setChuvaArea(Array.isArray(dadosArea?.pontos) ? dadosArea.pontos : [])
-    }
-
     if (radarAtualizado) setRadarChuvaErro(null)
     setRadarChuvaCarregando(false)
   }, [])
@@ -958,7 +759,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   }, [radarChuva])
 
   const quadroRadarAtual = quadrosRadar[indiceQuadroRadar] || quadrosRadar.at(-1) || null
-  const quadroRadarMaisRecente = quadrosRadar.at(-1) || null
 
   useEffect(() => {
     if (!mostrarChuva || !radarAnimando || quadrosRadar.length < 2) return
@@ -967,16 +767,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
     }, 900)
     return () => clearInterval(intervalo)
   }, [mostrarChuva, radarAnimando, quadrosRadar.length])
-
-  useEffect(() => {
-    if (!mostrarChuva || !mostrarNuvensGOES) return
-    const atualizarImagemGOES = () => {
-      setNuvensGOESUrl(`${GOES_GEOCOLOR_URL}?t=${Math.floor(Date.now() / (10 * 60 * 1000))}`)
-    }
-    atualizarImagemGOES()
-    const intervalo = setInterval(atualizarImagemGOES, 10 * 60 * 1000)
-    return () => clearInterval(intervalo)
-  }, [mostrarChuva, mostrarNuvensGOES])
 
   // Mapa offline — inicializa tiles do localStorage para mostrar status imediatamente
   const [statusOffline, setStatusOffline] = useState<StatusOffline>('idle')
@@ -1650,7 +1440,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         zoomControl={false}
         whenReady={() => {}}
       >
-        {camadaMapa === 'padrao' ? (
+        {camadaMapa === 'padrao' && !mostrarChuva ? (
           <TileLayer
             key="mapa-padrao"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -1683,77 +1473,12 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           />
         )}
         {mostrarChuva && radarChuva && quadroRadarAtual && (
-          <TileLayer
-            key={`radar-chuva-${quadroRadarAtual.frameTime}`}
-            url={`${radarChuva.host}${quadroRadarAtual.path}/256/{z}/{x}/{y}/2/1_1.png`}
-            opacity={0.82}
-            attribution='Radar meteorológico: <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">RainViewer</a>'
-            maxNativeZoom={7}
-            maxZoom={19}
-            tileSize={256}
-            zIndex={20}
-            updateWhenZooming={false}
-            updateWhenIdle={true}
-          />
-        )}
-        {mostrarChuva && radarChuva && quadroRadarMaisRecente && (
           <RadarChuvaPoligonos
-            host={radarChuva.host}
-            path={quadroRadarMaisRecente.path}
-            frameTime={quadroRadarMaisRecente.frameTime}
+            path={quadroRadarAtual.path}
+            frameTime={quadroRadarAtual.frameTime}
             enabled={mostrarChuva}
           />
         )}
-        {mostrarChuva && mostrarNuvensGOES && (
-          <ImageOverlay
-            key={nuvensGOESUrl}
-            url={nuvensGOESUrl}
-            bounds={GOES_FULL_DISK_BOUNDS}
-            opacity={0.34}
-            zIndex={15}
-            attribution='Nuvens: <a href="https://www.star.nesdis.noaa.gov/goes/" target="_blank" rel="noreferrer">NOAA / NESDIS / STAR</a>'
-          />
-        )}
-        {mostrarChuva && chuvaArea.map(ponto => {
-          const precipitacao = Number(ponto.precipitacao) || 0
-          const coberturaNuvens = Number.isFinite(Number(ponto.coberturaNuvens))
-            ? Number(ponto.coberturaNuvens)
-            : null
-          const temChuva = precipitacao >= 0.1
-          const mostrarNuvens = !temChuva && (coberturaNuvens ?? 0) >= 40
-          if (!temChuva && !mostrarNuvens) return null
-          const cor = corIntensidadeChuva(precipitacao, coberturaNuvens)
-          return (
-            <Circle
-              key={`chuva-area-${ponto.lat}-${ponto.lng}`}
-              center={[ponto.lat, ponto.lng]}
-              radius={temChuva ? 7_000 : 5_500}
-              pathOptions={{
-                color: cor,
-                weight: temChuva ? 1.5 : 1,
-                opacity: temChuva ? 0.9 : 0.55,
-                fillColor: cor,
-                fillOpacity: temChuva ? 0.28 : 0.12,
-              }}
-            >
-              <Popup>
-                <strong>{temChuva ? 'Precipitação estimada' : 'Cobertura de nuvens'}</strong>
-                <br />
-                {temChuva
-                  ? `${precipitacao.toFixed(1)} mm/h · intensidade ${intensidadeChuva(precipitacao)}`
-                  : `${coberturaNuvens}% de nuvens`}
-                {coberturaNuvens != null && temChuva && (
-                  <>
-                    <br />
-                    {coberturaNuvens}% de cobertura de nuvens
-                  </>
-                )}
-                <br />
-                <small>Open-Meteo · {ponto.hora || 'agora'}</small>
-              </Popup>
-            </Circle>
-          )
-        })}
         {mostrarChuva && (
           <Circle
             center={OURO_BRANCO}
@@ -2053,13 +1778,13 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
 
       <div className="mapa-camadas" aria-label="Escolher visualização do mapa">
         <button
-          className={`mapa-camada-btn ${camadaMapa === 'padrao' ? 'ativo' : ''}`}
+          className={`mapa-camada-btn ${camadaMapa === 'padrao' && !mostrarChuva ? 'ativo' : ''}`}
           onClick={() => setCamadaMapa('padrao')}
         >
           🗺️ Mapa
         </button>
         <button
-          className={`mapa-camada-btn ${camadaMapa === 'satelite' ? 'ativo' : ''}`}
+          className={`mapa-camada-btn ${camadaMapa === 'satelite' || mostrarChuva ? 'ativo' : ''}`}
           onClick={() => setCamadaMapa('satelite')}
         >
           🛰️ Satélite
@@ -2070,6 +1795,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
             onClick={() => {
               const proximoEstado = !mostrarChuva
               setMostrarChuva(proximoEstado)
+              if (proximoEstado) setCamadaMapa('satelite')
               setPainelChuvaAberto(proximoEstado)
             }}
             aria-pressed={mostrarChuva}
@@ -2090,15 +1816,8 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
                 >✕</button>
               </div>
               <div className="mapa-chuva-fontes">
-                <button
-                  className={`mapa-chuva-fonte-btn ${mostrarNuvensGOES ? 'ativo' : ''}`}
-                  onClick={() => setMostrarNuvensGOES(v => !v)}
-                  aria-pressed={mostrarNuvensGOES}
-                  title="Mostrar imagem real de nuvens do satélite GOES"
-                >
-                  ☁️ Nuvens GOES
-                </button>
-                <span>Imagem real · NOAA / GOES-19</span>
+                <strong>🛰️ Satélite + radar vetorial</strong>
+                <span>Imagem de satélite ao fundo · PNG RainViewer processado no servidor</span>
               </div>
               {radarChuvaCarregando && !radarChuva && (
                 <div className="mapa-chuva-status">⏳ Carregando o último quadro do radar…</div>
@@ -2180,16 +1899,11 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
                     </div>
                   )}
                   <div className="mapa-chuva-legenda">
-                    <span><i className="chuva-cor chuva-cor--fraca" /> fraca</span>
-                    <span><i className="chuva-cor chuva-cor--moderada" /> moderada</span>
-                    <span><i className="chuva-cor chuva-cor--forte" /> forte</span>
-                    <span><i className="chuva-cor chuva-cor--muito-forte" /> muito forte</span>
-                    <span><i className="chuva-cor chuva-cor--intensa" /> intensa</span>
-                    <span><i className="chuva-cor chuva-cor--extrema" /> extrema</span>
-                    <span><i className="chuva-cor chuva-cor--nuvens" /> nuvens</span>
+                    <span><i className="chuva-cor chuva-cor--nuvens" /> mancha de precipitação</span>
+                    <span><i className="chuva-cor chuva-cor--nucleo" /> núcleo detectado</span>
                   </div>
                   <p className="mapa-chuva-ajuda">
-                     A imagem GOES mostra as nuvens reais; o radar mostra os núcleos observados e as áreas coloridas indicam a intensidade da chuva. Os círculos azuis claros complementam a cobertura no entorno. O contorno tracejado indica 10 km.
+                     A base usa imagem de satélite. A mancha irregular e os núcleos azuis são derivados dos pixels reais do PNG do radar; pontos só aparecem quando há núcleo detectado. O contorno tracejado indica 10 km.
                   </p>
                   <div className="mapa-chuva-rodape">
                     <span>{radarChuva.erroAtualizacao ? 'Último radar salvo' : 'RainViewer · ao vivo'}</span>
