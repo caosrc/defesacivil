@@ -840,28 +840,6 @@ input, select, textarea { font-family: inherit; }
   z-index: 1;
 }
 
-/* Agrupamento leve dos marcadores de ocorrências. O Leaflet mantém o grupo
-   durante zoom/arraste, evitando reconstruir centenas de nós no celular. */
-.ocorrencias-cluster {
-  background: transparent;
-  border: 0;
-}
-.ocorrencias-cluster span {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
-  border: 3px solid white;
-  border-radius: 50%;
-  background: #1a4b8c;
-  color: white;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.35);
-  font-size: 0.76rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-
 /* Top stats bar */
 .mapa-topbar {
   position: absolute;

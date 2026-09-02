@@ -2,9 +2,6 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { MapContainer, TileLayer, ImageOverlay, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import 'leaflet.markercluster'
-import 'leaflet.markercluster/dist/MarkerCluster.css'
-import 'leaflet.markercluster/dist/MarkerCluster.Default.css'
 import type { Ocorrencia } from '../types'
 import { NATUREZA_ICONE, NATUREZA_COR, NATUREZAS } from '../types'
 import {
@@ -622,8 +619,9 @@ interface CamadaOcorrenciasProps {
  *
  * Antes, cada movimento do mapa alterava estado e desmontava todos os
  * <Marker>. Em celulares isso causava o sumiço dos ícones e uma sequência
- * pesada de criação de DOM. O MarkerClusterGroup mantém os marcadores no
- * Leaflet, atualizando somente o agrupamento necessário no zoom.
+ * pesada de criação de DOM. O LayerGroup mantém todos os ícones individuais
+ * no Leaflet, enquanto a inclusão inicial é feita em pequenos lotes para não
+ * bloquear a tela.
  */
 function CamadaOcorrencias({
   ocorrencias,
@@ -641,26 +639,9 @@ function CamadaOcorrencias({
   onSelecionarRef.current = onSelecionar
 
   useEffect(() => {
-    const grupo = L.markerClusterGroup({
-      maxClusterRadius: (zoom) => zoom >= 15 ? 36 : 52,
-      disableClusteringAtZoom: 16,
-      chunkedLoading: true,
-      animate: false,
-      showCoverageOnHover: false,
-      spiderfyOnMaxZoom: true,
-      removeOutsideVisibleBounds: true,
-      iconCreateFunction: (cluster) => {
-        const total = cluster.getChildCount()
-        const tamanho = total > 99 ? 44 : total > 9 ? 40 : 36
-        return L.divIcon({
-          className: 'ocorrencias-cluster',
-          html: `<span>${total > 999 ? '999+' : total}</span>`,
-          iconSize: [tamanho, tamanho],
-          iconAnchor: [tamanho / 2, tamanho / 2],
-        })
-      },
-    }).addTo(map)
-
+    const grupo = L.layerGroup().addTo(map)
+    let cancelado = false
+    let frameId: number | null = null
     const marcadores = ocorrencias
       .filter((ocorrencia) => !naturezasOcultas.has(ocorrencia.natureza))
       .map((ocorrencia) => {
@@ -694,8 +675,23 @@ function CamadaOcorrencias({
           ]
         }),
     )
-    grupo.addLayers(marcadores)
+
+    // Adiciona os ícones individuais em lotes para o primeiro toque e o
+    // navegador continuarem responsivos mesmo com muitas ocorrências.
+    let indice = 0
+    const adicionarLote = () => {
+      if (cancelado) return
+      const fim = Math.min(indice + 40, marcadores.length)
+      for (; indice < fim; indice += 1) grupo.addLayer(marcadores[indice])
+      if (indice < marcadores.length) {
+        frameId = window.requestAnimationFrame(adicionarLote)
+      }
+    }
+    frameId = window.requestAnimationFrame(adicionarLote)
+
     return () => {
+      cancelado = true
+      if (frameId !== null) window.cancelAnimationFrame(frameId)
       grupo.clearLayers()
       map.removeLayer(grupo)
       marcadoresRef.current.clear()
