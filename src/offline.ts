@@ -2,10 +2,12 @@
 // Guarda ocorrências pendentes quando offline e sincroniza quando voltar online
 
 const DB_NAME = 'defesacivil-db'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const PENDING_STORE = 'pending'
 const CACHE_STORE = 'ocorrencias-cache'
 const FOTOS_CAMPO_STORE = 'fotos-campo-pendentes'
+const RASCUNHO_STORE = 'rascunhos'
+const RASCUNHO_NOVA_OCORRENCIA = 'nova-ocorrencia'
 
 let _db: IDBDatabase | null = null
 
@@ -27,6 +29,10 @@ function getDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(FOTOS_CAMPO_STORE)) {
         const fotoStore = db.createObjectStore(FOTOS_CAMPO_STORE, { keyPath: 'localId', autoIncrement: true })
         fotoStore.createIndex('planoId', 'planoId', { unique: false })
+      }
+      // v3: rascunho completo da ocorrência, incluindo fotos em base64.
+      if (!db.objectStoreNames.contains(RASCUNHO_STORE)) {
+        db.createObjectStore(RASCUNHO_STORE, { keyPath: 'key' })
       }
     }
   })
@@ -116,6 +122,50 @@ export function countPending(): Promise<number> {
         const req = tx.objectStore(PENDING_STORE).count()
         req.onsuccess = () => resolve(req.result)
         req.onerror = () => reject(req.error)
+      })
+  )
+}
+
+// Rascunho completo da nova ocorrência. IndexedDB é usado para não perder
+// fotos em base64 quando o localStorage atingir o limite de armazenamento.
+export function saveRascunhoNovaOcorrencia(data: object): Promise<void> {
+  return getDB().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(RASCUNHO_STORE, 'readwrite')
+        tx.objectStore(RASCUNHO_STORE).put({
+          ...data,
+          key: RASCUNHO_NOVA_OCORRENCIA,
+          _savedAt: new Date().toISOString(),
+        })
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+        tx.onabort = () => reject(tx.error || new Error('Transação do rascunho abortada'))
+      })
+  )
+}
+
+export function getRascunhoNovaOcorrencia(): Promise<Record<string, unknown> | null> {
+  return getDB().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(RASCUNHO_STORE, 'readonly')
+        const req = tx.objectStore(RASCUNHO_STORE).get(RASCUNHO_NOVA_OCORRENCIA)
+        req.onsuccess = () => resolve((req.result as Record<string, unknown> | undefined) ?? null)
+        req.onerror = () => reject(req.error)
+      })
+  )
+}
+
+export function clearRascunhoNovaOcorrencia(): Promise<void> {
+  return getDB().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(RASCUNHO_STORE, 'readwrite')
+        tx.objectStore(RASCUNHO_STORE).delete(RASCUNHO_NOVA_OCORRENCIA)
+        tx.oncomplete = () => resolve()
+        tx.onerror = () => reject(tx.error)
+        tx.onabort = () => reject(tx.error || new Error('Transação do rascunho abortada'))
       })
   )
 }

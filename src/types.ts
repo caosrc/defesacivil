@@ -40,7 +40,7 @@ export interface Ocorrencia {
   _localId?: number
 }
 
-export const AGENTES = ['Moisés', 'Valteir', 'Arthur', 'Gustavo', 'Vânia', 'Graça', 'Talita', 'Cristiane', 'Dyonathan', 'Sócrates']
+export const AGENTES = ['Moisés', 'Valteir', 'Arthur', 'Gustavo', 'Maria', 'Talita', 'Cristiane', 'Dyonathan', 'Sócrates']
 
 export const AGENTE_SENHAS: Record<string, string> = {
   'Sócrates': '3004',
@@ -48,10 +48,9 @@ export const AGENTE_SENHAS: Record<string, string> = {
   'Arthur': '0620',
   'Gustavo': '8228',
   'Cristiane': '1950',
-  'Vânia': '1210',
   'Valteir': '1234',
   'Talita': '1234',
-  'Graça': '1122',
+  'Maria': '3110',
   'Dyonathan': '2806',
 }
 

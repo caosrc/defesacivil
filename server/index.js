@@ -31,6 +31,13 @@ const pool = new pg.Pool({
   ssl: process.env.SUPABASE_DB_URL ? { rejectUnauthorized: false } : false,
 })
 
+const RESPONSAVEIS_DESATIVADOS = new Set(['vânia', 'vania', 'graça', 'graca'])
+
+function normalizarResponsavelRegistro(nome) {
+  const valor = typeof nome === 'string' ? nome.trim() : ''
+  return RESPONSAVEIS_DESATIVADOS.has(valor.toLocaleLowerCase('pt-BR')) ? 'Sócrates' : (valor || null)
+}
+
 const supabasePushUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
 const supabasePushKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''
 const supabasePush = supabasePushUrl && supabasePushKey
@@ -771,6 +778,34 @@ async function initDb() {
   await query(`ALTER TABLE ocorrencias ADD COLUMN IF NOT EXISTS horas_total NUMERIC(5,2)`)
   await query(`ALTER TABLE ocorrencias ADD COLUMN IF NOT EXISTS horas_sobreaviso NUMERIC(5,2)`)
 
+  // Vânia e Graça não possuem mais acesso ao app. As ocorrências históricas
+  // passam a ser editáveis/excluíveis pelo Sócrates, que assumiu o registro.
+  const migracaoResponsaveis = await query(
+    `UPDATE ocorrencias
+        SET responsavel_registro = 'Sócrates'
+      WHERE LOWER(BTRIM(responsavel_registro)) IN ('vânia', 'vania', 'graça', 'graca')`
+  )
+  if (migracaoResponsaveis.rowCount > 0) {
+    console.log(`[migração] ${migracaoResponsaveis.rowCount} ocorrência(s) atribuída(s) a Sócrates`)
+  }
+  // Em ambientes que usam Supabase diretamente no navegador, a fonte de
+  // ocorrências pode ser diferente do PostgreSQL local do Replit.
+  if (supabasePush) {
+    try {
+      const { data, error } = await supabasePush
+        .from('ocorrencias')
+        .update({ responsavel_registro: 'Sócrates' })
+        .in('responsavel_registro', ['Vânia', 'Vania', 'Graça', 'Graca'])
+        .select('id')
+      if (error) console.warn('[migração] Supabase não atualizado:', error.message)
+      else if (Array.isArray(data) && data.length > 0) {
+        console.log(`[migração] ${data.length} ocorrência(s) do Supabase atribuída(s) a Sócrates`)
+      }
+    } catch (err) {
+      console.warn('[migração] falha ao atualizar Supabase:', err?.message || err)
+    }
+  }
+
   await query(`
     CREATE TABLE IF NOT EXISTS escala_estado (
       id INTEGER PRIMARY KEY,
@@ -1131,7 +1166,7 @@ app.post('/api/ocorrencias', async (req, res) => {
        situacao || null, recomendacao || null, conclusao || null,
        data_ocorrencia || null,
        JSON.stringify(Array.isArray(agentes) ? agentes : []),
-       responsavel_registro || null,
+       normalizarResponsavelRegistro(responsavel_registro),
        JSON.stringify(Array.isArray(vistorias) ? vistorias : []),
        Array.isArray(focos_incendio) && focos_incendio.length ? JSON.stringify(focos_incendio) : null,
        Array.isArray(poligono_area_queimada) && poligono_area_queimada.length ? JSON.stringify(poligono_area_queimada) : null]

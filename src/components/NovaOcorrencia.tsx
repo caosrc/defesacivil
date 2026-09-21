@@ -5,7 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import { TIPOS_OCORRENCIA, NATUREZAS, AGENTES } from '../types'
 import type { NivelRisco, StatusOc } from '../types'
 import { criarOcorrencia } from '../api'
-import { geocodificarEndereco } from '../offline'
+import { clearRascunhoNovaOcorrencia, geocodificarEndereco, getRascunhoNovaOcorrencia, saveRascunhoNovaOcorrencia } from '../offline'
 import { formatarCoordenadas, adicionarMarcaDagua, mensagemErroGps } from '../utils'
 import { calcularHorasTotal, calcularHorasOcorrenciaBanco, formatarHoras, carregarFeriadosCustom } from '../horasUtils'
 import PoligonoAreaQueimada, { type PontoPoligono } from './PoligonoAreaQueimada'
@@ -83,6 +83,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const cameraRef = useRef<HTMLInputElement>(null)
   const galeriaRef = useRef<HTMLInputElement>(null)
   const [rascunhoRestaurado, setRascunhoRestaurado] = useState(false)
+  const [rascunhoCarregado, setRascunhoCarregado] = useState(false)
 
   // ── Focos de incêndio (apenas para Incêndio em Área Urbana/Rural) ──────────
   const [focosIncendio, setFocosIncendio] = useState<FocoIncendio[]>([{ lat: null, lng: null, buscando: false }])
@@ -91,67 +92,77 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
 
   // ── Restaurar rascunho ao abrir o formulário ────────────────────────────────
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(RASCUNHO_KEY)
-      if (!raw) return
-      const d = JSON.parse(raw)
-      if (d.tipo) setTipo(d.tipo)
-      if (d.tipoOutro) setTipoOutro(d.tipoOutro)
-      if (d.natureza) setNatureza(d.natureza)
-      if (d.subnatureza) setSubnatureza(d.subnatureza)
-      if (d.nivelRisco) setNivelRisco(d.nivelRisco)
-      if (d.statusOc) setStatusOc(d.statusOc)
-      if (d.dataOcorrencia) setDataOcorrencia(d.dataOcorrencia)
-      if (d.horaInicio) setHoraInicio(d.horaInicio)
-      if (d.horaFim) setHoraFim(d.horaFim)
-      if (d.rua) setRua(d.rua)
-      if (d.numero) setNumero(d.numero)
-      if (d.bairro) setBairro(d.bairro)
-      if (d.lat != null) setLat(d.lat)
-      if (d.lng != null) setLng(d.lng)
-      if (d.proprietario) setProprietario(d.proprietario)
-      if (d.situacao) setSituacao(d.situacao)
-      if (d.recomendacao) setRecomendacao(d.recomendacao)
-      if (d.conclusao) setConclusao(d.conclusao)
-      if (Array.isArray(d.agentes) && d.agentes.length > 0) setAgentes(d.agentes)
-      if (Array.isArray(d.fotos) && d.fotos.length > 0) setFotos(d.fotos)
-      if (Array.isArray(d.focosIncendio) && d.focosIncendio.length > 0) setFocosIncendio(d.focosIncendio)
-      if (Array.isArray(d.poligonoArea) && d.poligonoArea.length > 0) setPoligonoArea(d.poligonoArea)
-      setRascunhoRestaurado(true)
-    } catch {
-      // rascunho corrompido — ignora
+    let ativo = true
+    async function restaurar() {
+      try {
+        let d = await getRascunhoNovaOcorrencia()
+        if (!d) {
+          const raw = localStorage.getItem(RASCUNHO_KEY)
+          d = raw ? JSON.parse(raw) : null
+        }
+        if (!d) return
+        if (d.tipo) setTipo(d.tipo as string)
+        if (d.tipoOutro) setTipoOutro(d.tipoOutro as string)
+        if (d.natureza) setNatureza(d.natureza as string)
+        if (d.subnatureza) setSubnatureza(d.subnatureza as string)
+        if (d.nivelRisco) setNivelRisco(d.nivelRisco as NivelRisco)
+        if (d.statusOc) setStatusOc(d.statusOc as StatusOc)
+        if (d.dataOcorrencia) setDataOcorrencia(d.dataOcorrencia as string)
+        if (d.horaInicio) setHoraInicio(d.horaInicio as string)
+        if (d.horaFim) setHoraFim(d.horaFim as string)
+        if (d.rua) setRua(d.rua as string)
+        if (d.numero) setNumero(d.numero as string)
+        if (d.bairro) setBairro(d.bairro as string)
+        if (d.lat != null) setLat(d.lat as number)
+        if (d.lng != null) setLng(d.lng as number)
+        if (d.proprietario) setProprietario(d.proprietario as string)
+        if (d.situacao) setSituacao(d.situacao as string)
+        if (d.recomendacao) setRecomendacao(d.recomendacao as string)
+        if (d.conclusao) setConclusao(d.conclusao as string)
+        if (Array.isArray(d.agentes) && d.agentes.length > 0) setAgentes(d.agentes as string[])
+        if (Array.isArray(d.fotos)) setFotos(d.fotos as string[])
+        if (Array.isArray(d.focosIncendio) && d.focosIncendio.length > 0) setFocosIncendio(d.focosIncendio as FocoIncendio[])
+        if (Array.isArray(d.poligonoArea) && d.poligonoArea.length > 0) setPoligonoArea(d.poligonoArea as PontoPoligono[])
+        if (ativo) setRascunhoRestaurado(true)
+      } catch {
+        // rascunho corrompido — ignora
+      } finally {
+        if (ativo) setRascunhoCarregado(true)
+      }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    void restaurar()
+    return () => { ativo = false }
   }, [])
+
+  const montarRascunho = useCallback(() => ({
+    tipo, tipoOutro, natureza, subnatureza, nivelRisco, statusOc,
+    dataOcorrencia, horaInicio, horaFim,
+    rua, numero, bairro, lat, lng,
+    proprietario, situacao, recomendacao, conclusao,
+    agentes, focosIncendio, fotos, poligonoArea,
+  }), [tipo, tipoOutro, natureza, subnatureza, nivelRisco, statusOc,
+    dataOcorrencia, horaInicio, horaFim, rua, numero, bairro, lat, lng,
+    proprietario, situacao, recomendacao, conclusao, agentes, focosIncendio, fotos, poligonoArea])
+
+  const persistirRascunho = useCallback(async () => {
+    const draft = montarRascunho()
+    await saveRascunhoNovaOcorrencia(draft)
+    // Mantém uma cópia leve para compatibilidade com versões antigas do app.
+    try {
+      localStorage.setItem(RASCUNHO_KEY, JSON.stringify({ ...draft, fotos: [] }))
+    } catch { /* IndexedDB continua sendo a cópia principal */ }
+  }, [montarRascunho])
 
   // ── Salvar rascunho automaticamente enquanto o agente preenche ──────────────
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const draft = {
-        tipo, tipoOutro, natureza, subnatureza, nivelRisco, statusOc,
-        dataOcorrencia, horaInicio, horaFim,
-        rua, numero, bairro, lat, lng,
-        proprietario, situacao, recomendacao, conclusao,
-        agentes, focosIncendio, fotos, poligonoArea,
-      }
-      try {
-        localStorage.setItem(RASCUNHO_KEY, JSON.stringify(draft))
-      } catch {
-        // quota excedida — tenta sem as fotos (que são as maiores)
-        try {
-          localStorage.setItem(RASCUNHO_KEY, JSON.stringify({ ...draft, fotos: [] }))
-        } catch { /* ignora se ainda assim falhar */ }
-      }
-    }, 800)
+    if (!rascunhoCarregado) return
+    const timer = setTimeout(() => { void persistirRascunho() }, 400)
     return () => clearTimeout(timer)
-  }, [tipo, tipoOutro, natureza, subnatureza, nivelRisco, statusOc,
-      dataOcorrencia, horaInicio, horaFim,
-      rua, numero, bairro, lat, lng,
-      proprietario, situacao, recomendacao, conclusao,
-      agentes, focosIncendio, fotos, poligonoArea])
+  }, [rascunhoCarregado, persistirRascunho])
 
   const descartarRascunho = useCallback(() => {
     localStorage.removeItem(RASCUNHO_KEY)
+    void clearRascunhoNovaOcorrencia()
     setTipo(''); setTipoOutro(''); setNatureza(''); setSubnatureza('')
     setNivelRisco('baixo'); setStatusOc('ativo')
     setDataOcorrencia(hoje); setHoraInicio(''); setHoraFim('')
@@ -166,6 +177,11 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     setRascunhoRestaurado(false)
     setErro('')
   }, [hoje])
+
+  const voltarComRascunho = useCallback(() => {
+    if (rascunhoCarregado) void persistirRascunho().finally(onVoltar)
+    else onVoltar()
+  }, [onVoltar, persistirRascunho, rascunhoCarregado])
 
   useEffect(() => {
     function fechar(e: MouseEvent) {
@@ -391,6 +407,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       }
 
       localStorage.removeItem(RASCUNHO_KEY)
+      await clearRascunhoNovaOcorrencia()
       onSalvo(foiOffline)
     } catch (e: any) {
       setSalvando(false)
@@ -401,7 +418,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   return (
     <div className="tela">
       <header className="header">
-        <button className="btn-voltar" onClick={onVoltar}>‹</button>
+        <button className="btn-voltar" onClick={voltarComRascunho}>‹</button>
         <div className="header-logo-mini">
           <img src="/logo-dc.jpg" alt="Defesa Civil" className="logo-img-mini" />
           <span className="header-titulo-texto">Nova Ocorrência</span>

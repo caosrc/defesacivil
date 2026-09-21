@@ -31,7 +31,8 @@ export function estaLogado(): boolean {
 }
 
 export function agenteEscolhido(): boolean {
-  return !!sessionStorage.getItem(AGENTE_SESSION_KEY)
+  const agente = sessionStorage.getItem(AGENTE_SESSION_KEY) || localStorage.getItem(AGENTE_NOME_KEY) || ''
+  return AGENTES.includes(agente)
 }
 
 export function fazerLogout() {
@@ -40,7 +41,8 @@ export function fazerLogout() {
 }
 
 export function getAgenteLogado(): string {
-  return sessionStorage.getItem(AGENTE_SESSION_KEY) || localStorage.getItem(AGENTE_NOME_KEY) || ''
+  const agente = sessionStorage.getItem(AGENTE_SESSION_KEY) || localStorage.getItem(AGENTE_NOME_KEY) || ''
+  return AGENTES.includes(agente) ? agente : ''
 }
 
 interface Props {
