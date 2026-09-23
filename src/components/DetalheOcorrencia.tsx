@@ -3,6 +3,7 @@ import JSZip from 'jszip'
 import type { Ocorrencia, NivelRisco, StatusOc, VistoriaAdicional } from '../types'
 import { exportarPastaOcorrencia, nomePastaOcorrencia } from '../exportarPasta'
 import { NATUREZA_ICONE, NATUREZA_COR, TIPOS_OCORRENCIA, NATUREZAS, AGENTES, getSenhaAgente } from '../types'
+import { getAgenteLogado } from './Login'
 import { deletarOcorrencia, atualizarOcorrencia, buscarOcorrenciaCompleta } from '../api'
 import { geocodificarEndereco, updatePending } from '../offline'
 import { exportarOcorrenciaExcel } from '../exportExcel'
@@ -120,12 +121,14 @@ export default function DetalheOcorrencia({ ocorrencia: oc, onFechar, onDeletado
   const galEditRef = useRef<HTMLInputElement>(null)
 
   // ── Permissão: somente quem registrou pode editar/excluir ──
-  const agenteLogado = (sessionStorage.getItem('defesacivil-agente-sessao') || '').trim()
-  const responsavel = (o.responsavel_registro || '').trim()
+  const normalizarNomeAgente = (nome: string) =>
+    nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('pt-BR')
+  const agenteLogado = normalizarNomeAgente(getAgenteLogado())
+  const responsavel = normalizarNomeAgente(o.responsavel_registro || '')
   // Se a ocorrência não tem responsável registrado (legado), libera para todos.
   const podeEditar = !responsavel || agenteLogado === responsavel
   // Senha individual do agente logado (null = sem senha, acesso direto)
-  const senhaAgenteLogado = getSenhaAgente(agenteLogado)
+  const senhaAgenteLogado = getSenhaAgente(getAgenteLogado())
 
   function solicitarOuExecutar(acao: 'editar' | 'deletar') {
     if (senhaAgenteLogado) {
