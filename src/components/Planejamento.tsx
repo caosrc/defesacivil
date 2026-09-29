@@ -633,15 +633,15 @@ function criarIconeFoto(thumb: string, numero: number): L.DivIcon {
   return L.divIcon({
     className: '',
     html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5))">
-      <div style="width:54px;height:54px;border-radius:8px;overflow:hidden;border:3px solid #1a4b8c;background:#e2e8f0;position:relative">
+      <span style="min-width:26px;height:23px;padding:0 5px;box-sizing:border-box;border:2px solid #fff;border-radius:999px;background:#dc2626;color:#fff;font:700 12px Arial,sans-serif;display:flex;align-items:center;justify-content:center;margin-bottom:4px;line-height:1">${numero}</span>
+      <div style="width:54px;height:54px;box-sizing:border-box;border-radius:8px;overflow:hidden;border:3px solid #1a4b8c;background:#e2e8f0">
         <img src="${thumb}" style="width:100%;height:100%;object-fit:cover"/>
-        <span style="position:absolute;top:3px;right:3px;min-width:23px;height:23px;padding:0 4px;box-sizing:border-box;border:2px solid #fff;border-radius:999px;background:#dc2626;color:#fff;font:700 12px Arial,sans-serif;display:flex;align-items:center;justify-content:center">${numero}</span>
       </div>
       <div style="width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-top:14px solid #1a4b8c;margin-top:-1px"></div>
     </div>`,
-    iconSize: [54, 70],
-    iconAnchor: [27, 70],
-    popupAnchor: [0, -74],
+    iconSize: [64, 94],
+    iconAnchor: [32, 94],
+    popupAnchor: [0, -98],
   })
 }
 
@@ -1966,8 +1966,8 @@ ${numerarFotosGeolocadas(plano.fotosEvento ?? [])
       const agente = foto.agente.replace(/'/g, "\\'")
       return `
   L.marker([${foto.lat},${foto.lng}], {icon: L.divIcon({
-    html:'<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.55))"><div style="width:46px;height:46px;border-radius:7px;overflow:hidden;border:3px solid #dc2626;background:#e2e8f0;position:relative"><img src="${imgSrc}" style="width:100%;height:100%;object-fit:cover"/><span style="position:absolute;top:2px;right:2px;min-width:21px;height:21px;padding:0 3px;box-sizing:border-box;border:2px solid white;border-radius:999px;background:#dc2626;color:white;font:bold 11px Arial,sans-serif;display:flex;align-items:center;justify-content:center">${f.numero}</span></div><div style="width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:12px solid #dc2626;margin-top:-1px"></div></div>',
-    className:'',iconSize:[46,60],iconAnchor:[23,60],popupAnchor:[0,-63]
+    html:'<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.55))"><span style="min-width:24px;height:21px;padding:0 4px;box-sizing:border-box;border:2px solid white;border-radius:999px;background:#dc2626;color:white;font:bold 11px Arial,sans-serif;display:flex;align-items:center;justify-content:center;margin-bottom:3px;line-height:1">${f.numero}</span><div style="width:46px;height:46px;box-sizing:border-box;border-radius:7px;overflow:hidden;border:3px solid #dc2626;background:#e2e8f0"><img src="${imgSrc}" style="width:100%;height:100%;object-fit:cover"/></div><div style="width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:12px solid #dc2626;margin-top:-1px"></div></div>',
+    className:'',iconSize:[56,82],iconAnchor:[28,82],popupAnchor:[0,-85]
   })}).addTo(map)
     .bindPopup('<b>&#128247; Foto ${f.numero}</b><br><span style="font-size:10px">&#129333; ${agente}</span><br><span style="font-family:monospace;font-size:10px">${gmsLat}<br>${gmsLng}</span>');
   bounds.push([${foto.lat},${foto.lng}]);
