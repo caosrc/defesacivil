@@ -175,6 +175,12 @@ interface FotoGeolocada {
   _localId?: number
 }
 
+interface FotoGeolocadaNumerada extends Omit<FotoGeolocada, 'lat' | 'lng'> {
+  lat: number
+  lng: number
+  numero: number
+}
+
 interface Plano {
   id: string
   tipo: TipoPlano
@@ -623,18 +629,26 @@ function criarIconeCone(): L.DivIcon {
   })
 }
 
-function criarIconeFoto(thumb: string): L.DivIcon {
+function criarIconeFoto(thumb: string, numero: number): L.DivIcon {
   return L.divIcon({
     className: '',
     html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.5))">
-      <div style="width:54px;height:54px;border-radius:8px;overflow:hidden;border:3px solid #1a4b8c;background:#e2e8f0">
+      <div style="width:54px;height:54px;border-radius:8px;overflow:hidden;border:3px solid #1a4b8c;background:#e2e8f0;position:relative">
         <img src="${thumb}" style="width:100%;height:100%;object-fit:cover"/>
+        <span style="position:absolute;top:3px;right:3px;min-width:23px;height:23px;padding:0 4px;box-sizing:border-box;border:2px solid #fff;border-radius:999px;background:#dc2626;color:#fff;font:700 12px Arial,sans-serif;display:flex;align-items:center;justify-content:center">${numero}</span>
       </div>
       <div style="width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;border-top:14px solid #1a4b8c;margin-top:-1px"></div>
     </div>`,
     iconSize: [54, 70],
     iconAnchor: [27, 70],
     popupAnchor: [0, -74],
+  })
+}
+
+function numerarFotosGeolocadas(fotos: (string | FotoGeolocada)[]): FotoGeolocadaNumerada[] {
+  return fotos.flatMap((foto, index): FotoGeolocadaNumerada[] => {
+    if (typeof foto === 'string' || foto.lat == null || foto.lng == null) return []
+    return [{ ...foto, lat: foto.lat, lng: foto.lng, numero: index + 1 }]
   })
 }
 
@@ -866,7 +880,7 @@ function MapaDetalhe({
   onRemoverItem: (id: string) => void
   posicaoPropria?: { lat: number; lng: number; precisao: number } | null
   nomeProprio?: string
-  fotosGeolocadas?: FotoGeolocada[]
+  fotosGeolocadas?: FotoGeolocadaNumerada[]
   onEditarFotoCoords?: (foto: FotoGeolocada) => void
   onViewChange?: (center: [number, number], zoom: number) => void
 }) {
@@ -1346,11 +1360,12 @@ function MapaDetalhe({
         )}
 
         {/* Marcadores de fotos geolocadas */}
-        {(fotosGeolocadas ?? []).filter(f => f.lat != null && f.lng != null).map(f => (
-          <Marker key={f.id} position={[f.lat!, f.lng!]} icon={criarIconeFoto(f.thumb || f.foto)}>
+        {(fotosGeolocadas ?? []).map(f => (
+          <Marker key={f.id} position={[f.lat, f.lng]} icon={criarIconeFoto(f.thumb || f.foto, f.numero)}>
             <Popup>
               <div style={{ textAlign: 'center', minWidth: 160 }}>
                 <img src={f.foto} alt="foto" style={{ width: 130, height: 130, objectFit: 'cover', borderRadius: 8, display: 'block', margin: '0 auto 6px' }} />
+                <div style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: 800, marginTop: 4 }}>Foto {f.numero}</div>
                 <div style={{ fontSize: '0.7rem', color: '#1a4b8c', fontWeight: 700, fontFamily: 'monospace', lineHeight: 1.5, marginTop: 4 }}>
                   📍 {formatarGMS(f.lat!, 'lat')}<br/>{'\u00A0\u00A0\u00A0'}{formatarGMS(f.lng!, 'lng')}
                 </div>
@@ -1744,20 +1759,19 @@ function exportarPDF(plano: Plano, mapCenter?: [number, number], mapZoom?: numbe
     const paginas: string[] = []
     for (let i = 0; i < todasFotos.length; i += 4) {
       const lote = todasFotos.slice(i, i + 4)
-      const numPag = Math.floor(i / 4) + 3
       paginas.push(`
-        <div style="page-break-before:always;padding:20px 24px">
+        <div class="report-photo-page" style="page-break-before:always;padding:20px 24px">
           <div style="border-bottom:3px solid #1a4b8c;padding-bottom:10px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between">
             <div>
-              <div style="font-size:16px;font-weight:800;color:#1a4b8c">📸 ${LABEL_FOTOS_TIPO[plano.tipo]} — Página ${numPag}</div>
+              <div style="font-size:16px;font-weight:800;color:#1a4b8c">📸 ${LABEL_FOTOS_TIPO[plano.tipo]} — Página de fotos ${Math.floor(i / 4) + 1}</div>
               <div style="font-size:11px;color:#6b7280">${plano.nome} — Defesa Civil Ouro Branco</div>
             </div>
             <div style="font-size:10px;color:#9ca3af">Fotos ${i + 1}–${Math.min(i + 4, todasFotos.length)} de ${todasFotos.length}</div>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
+          <div class="report-photo-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">
             ${lote.map((f, fi) => `
-              <div style="background:#f8fafc;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;break-inside:avoid">
-                <img src="${f.src}" style="width:100%;max-height:300px;object-fit:contain;display:block;background:#000"/>
+              <div class="report-photo-card" style="background:#f8fafc;border-radius:10px;overflow:hidden;border:1px solid #e5e7eb;break-inside:avoid">
+                <img class="report-photo-image" src="${f.src}" alt="Foto ${i + fi + 1}" style="width:100%;height:240px;object-fit:contain;display:block;background:#000"/>
                 <div style="padding:8px 10px;font-size:10px;color:#374151">
                   <div style="font-weight:700;margin-bottom:3px;font-size:11px">Foto ${i + fi + 1}</div>
                   ${f.agente ? `<div style="margin-bottom:1px">🧑‍🚒 ${f.agente}</div>` : ''}
@@ -1776,7 +1790,25 @@ function exportarPDF(plano: Plano, mapCenter?: [number, number], mapZoom?: numbe
   const html = `<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="UTF-8">
 <title>${plano.nome} — Defesa Civil Ouro Branco</title>
-<script>window.addEventListener('afterprint', function(){ setTimeout(function(){ window.close(); }, 300); });<\/script>
+<script>
+  window.addEventListener('afterprint', function(){ setTimeout(function(){ window.close(); }, 300); });
+  window._requestReportPrint = function(){
+    if(window.__reportPrintRequested) return;
+    window.__reportPrintRequested = true;
+    var images = Array.from(document.querySelectorAll('.report-photo-image'));
+    Promise.all(images.map(function(img){
+      var loaded = img.complete ? Promise.resolve() : new Promise(function(resolve){
+        img.addEventListener('load', resolve, {once:true});
+        img.addEventListener('error', resolve, {once:true});
+      });
+      return loaded.then(function(){
+        return img.decode ? img.decode().catch(function(){}) : undefined;
+      });
+    })).then(function(){
+      setTimeout(function(){ window.print(); }, 350);
+    });
+  };
+<\/script>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:Arial,sans-serif;font-size:12px;color:#1f2937;padding:28px 32px}
@@ -1802,7 +1834,9 @@ function exportarPDF(plano: Plano, mapCenter?: [number, number], mapZoom?: numbe
   .chip{display:inline-block;background:#dbeafe;color:#1e40af;border-radius:10px;padding:2px 8px;font-size:10px;font-weight:600;margin:2px 2px 2px 0}
   .obs{background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px;font-size:11px;color:#374151;white-space:pre-wrap}
   .footer{margin-top:24px;border-top:1px solid #e5e7eb;padding-top:8px;font-size:9px;color:#9ca3af;display:flex;justify-content:space-between}
-  @media print{body{padding:16px}@page{margin:12mm}}
+  .report-photo-page{break-before:page;page-break-before:always;break-inside:avoid-page;page-break-inside:avoid}
+  .report-photo-card{break-inside:avoid;page-break-inside:avoid}
+  @media print{body{padding:16px}@page{margin:12mm}.report-photo-grid{gap:10px}}
 </style></head><body>
 
 <div class="header">
@@ -1903,9 +1937,8 @@ ${(plano.lat && plano.lng) || plano.itensMapa.length > 0 || (plano.pontosExtras 
     .bindPopup('<b>${it.emoji} ${(it.obs || it.tipo).replace(/'/g, "\\'")}</b>');
   bounds.push([${it.lat},${it.lng}]);
   `).join('')}
-  ${(plano.fotosEvento ?? [])
-    .filter(f => typeof f !== 'string' && (f as FotoGeolocada).lat != null && (f as FotoGeolocada).lng != null)
-    .map((f, fi) => {
+${numerarFotosGeolocadas(plano.fotosEvento ?? [])
+    .map(f => {
       const foto = f as FotoGeolocada
       const imgSrc = foto.thumb || foto.foto
       const gmsLat = formatarGMS(foto.lat!, 'lat').replace(/'/g, '&#39;').replace(/"/g, '&#34;')
@@ -1913,10 +1946,10 @@ ${(plano.lat && plano.lng) || plano.itensMapa.length > 0 || (plano.pontosExtras 
       const agente = foto.agente.replace(/'/g, "\\'")
       return `
   L.marker([${foto.lat},${foto.lng}], {icon: L.divIcon({
-    html:'<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.55))"><div style="width:46px;height:46px;border-radius:7px;overflow:hidden;border:3px solid #dc2626;background:#e2e8f0"><img src="${imgSrc}" style="width:100%;height:100%;object-fit:cover"/></div><div style="width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:12px solid #dc2626;margin-top:-1px"></div></div>',
+    html:'<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.55))"><div style="width:46px;height:46px;border-radius:7px;overflow:hidden;border:3px solid #dc2626;background:#e2e8f0;position:relative"><img src="${imgSrc}" style="width:100%;height:100%;object-fit:cover"/><span style="position:absolute;top:2px;right:2px;min-width:21px;height:21px;padding:0 3px;box-sizing:border-box;border:2px solid white;border-radius:999px;background:#dc2626;color:white;font:bold 11px Arial,sans-serif;display:flex;align-items:center;justify-content:center">${f.numero}</span></div><div style="width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-top:12px solid #dc2626;margin-top:-1px"></div></div>',
     className:'',iconSize:[46,60],iconAnchor:[23,60],popupAnchor:[0,-63]
   })}).addTo(map)
-    .bindPopup('<b>&#128247; Foto ${fi + 1}</b><br><span style="font-size:10px">&#129333; ${agente}</span><br><span style="font-family:monospace;font-size:10px">${gmsLat}<br>${gmsLng}</span>');
+    .bindPopup('<b>&#128247; Foto ${f.numero}</b><br><span style="font-size:10px">&#129333; ${agente}</span><br><span style="font-family:monospace;font-size:10px">${gmsLat}<br>${gmsLng}</span>');
   bounds.push([${foto.lat},${foto.lng}]);
       `
     }).join('')}
@@ -1928,13 +1961,13 @@ ${(plano.lat && plano.lng) || plano.itensMapa.length > 0 || (plano.pontosExtras 
   } else { map.setView([-20.5195,-43.6983], 13); }`
   }
   var _printed = false;
-  function _doPrint() { if(_printed) return; _printed=true; setTimeout(function(){ window.print(); }, 600); }
+  function _doPrint() { if(_printed) return; _printed=true; setTimeout(function(){ window._requestReportPrint(); }, 600); }
   map.on('load', _doPrint);
   setTimeout(_doPrint, 4500);
 })();
 <\/script>
 </div>
-` : `<script>setTimeout(function(){window.print();},1800)<\/script>`}
+` : `<script>setTimeout(function(){window._requestReportPrint();},1800)<\/script>`}
 
 ${fotosPaginasHtml}
 
@@ -3507,9 +3540,7 @@ function DetalheP({
             onRemoverItem={removerItem}
             posicaoPropria={emProntidao && estadoGps.posicao ? estadoGps.posicao : null}
             nomeProprio={getNomeAgenteGlobal()}
-            fotosGeolocadas={(planoLocal.fotosEvento ?? []).filter(
-              (f): f is FotoGeolocada => typeof f === 'object' && f !== null && 'foto' in f && f.lat != null
-            )}
+            fotosGeolocadas={numerarFotosGeolocadas(planoLocal.fotosEvento ?? [])}
             onEditarFotoCoords={abrirEditarFoto}
             onViewChange={(center, zoom) => { mapCenterRef.current = center; mapZoomRef.current = zoom }}
           />
