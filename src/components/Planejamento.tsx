@@ -8,7 +8,7 @@ import { wsOn, wsSend } from '../wsClient'
 import { ativarGps, desativarGps, subscribeGps, getEstadoGps, getDispositivoIdGlobal, getNomeAgenteGlobal } from '../gpsService'
 import { supabase, supabaseDisponivel } from '../supabaseClient'
 import { saveFotoCampoPendente, getFotosCampoPendentes, removeFotoCampoPendente, clearFotosCampoPendentesPlano } from '../offline'
-import { salvarFotoNoDispositivo } from '../utils'
+import { adicionarMarcaDagua, salvarFotoNoDispositivo } from '../utils'
 import RadarDC from './RadarDC'
 
 const ORGAOS_EMPENHO: { categoria: string; emoji: string; orgaos: { emoji: string; nome: string }[] }[] = [
@@ -1705,7 +1705,11 @@ function OrgaosPanel({ selecionados, onChange }: { selecionados: string[]; onCha
 }
 
 // ── Exportação PDF ──────────────────────────────────────────────────────
-function exportarPDF(plano: Plano, mapCenter?: [number, number], mapZoom?: number) {
+async function exportarPDF(plano: Plano, mapCenter?: [number, number], mapZoom?: number) {
+  const w = window.open('', '_blank')
+  if (!w) { alert('Permita pop-ups para exportar o PDF'); return }
+  w.document.write('<!doctype html><html lang="pt-BR"><meta charset="UTF-8"><title>Preparando relatório</title><body style="font:16px Arial,sans-serif;padding:32px;color:#1a4b8c">Preparando o relatório e aplicando a marca d’água nas fotos…</body></html>')
+
   const cfg = TIPOS_CONFIG[plano.tipo]
   const sc = STATUS_CONFIG[plano.status]
   const rc = RISCO_CONFIG[plano.risco]
@@ -1747,12 +1751,28 @@ function exportarPDF(plano: Plano, mapCenter?: [number, number], mapZoom?: numbe
     ? `${plano.lat.toFixed(5)}, ${plano.lng.toFixed(5)}`
     : plano.local || '—'
 
-  const todasFotos = (plano.fotosEvento ?? []).map(f => ({
-    src: typeof f === 'string' ? f : f.foto,
-    lat: typeof f !== 'string' ? f.lat : null,
-    lng: typeof f !== 'string' ? f.lng : null,
-    agente: typeof f !== 'string' ? f.agente : null,
-    timestamp: typeof f !== 'string' ? f.timestamp : null,
+  const todasFotos = await Promise.all((plano.fotosEvento ?? []).map(async fotoItem => {
+    const original = typeof fotoItem === 'string' ? null : fotoItem
+    const originalSrc = original?.foto ?? fotoItem as string
+    const lat = original?.lat ?? null
+    const lng = original?.lng ?? null
+    const timestamp = original?.timestamp ?? null
+    const src = await adicionarMarcaDagua(
+      originalSrc,
+      lat,
+      lng,
+      1280,
+      0.78,
+      true,
+      { dataHora: timestamp == null ? null : new Date(timestamp), buscarGpsSeAusente: false },
+    )
+    return {
+      src,
+      lat,
+      lng,
+      agente: original?.agente ?? null,
+      timestamp,
+    }
   }))
 
   const fotosPaginasHtml = todasFotos.length === 0 ? '' : (() => {
@@ -1973,8 +1993,7 @@ ${fotosPaginasHtml}
 
 </body></html>`
 
-  const w = window.open('', '_blank')
-  if (!w) { alert('Permita pop-ups para exportar o PDF'); return }
+  w.document.open()
   w.document.write(html)
   w.document.close()
 }

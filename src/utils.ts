@@ -73,11 +73,12 @@ export async function adicionarMarcaDagua(
   maxWidth = 1280,
   qualidade = 0.70,
   comMarca = true,
+  opcoes: { dataHora?: Date | null; buscarGpsSeAusente?: boolean } = {},
 ): Promise<string> {
   let useLat = lat ?? null
   let useLng = lng ?? null
 
-  if (comMarca && (useLat == null || useLng == null)) {
+  if (comMarca && opcoes.buscarGpsSeAusente !== false && (useLat == null || useLng == null)) {
     const gps = await obterGpsAtual()
     if (gps) { useLat = gps.lat; useLng = gps.lng }
   }
@@ -85,56 +86,62 @@ export async function adicionarMarcaDagua(
   return new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
-      let drawW = img.width
-      let drawH = img.height
-      if (drawW > maxWidth) {
-        drawH = Math.round(drawH * maxWidth / drawW)
-        drawW = maxWidth
-      }
-      const canvas = document.createElement('canvas')
-      canvas.width = drawW
-      canvas.height = drawH
-      const ctx = canvas.getContext('2d')!
-
-      ctx.drawImage(img, 0, 0, drawW, drawH)
-
-      if (comMarca) {
-        const agora = new Date()
-        const dia = agora.getDate().toString().padStart(2, '0')
-        const mes = MESES_ABR[agora.getMonth()]
-        const ano = agora.getFullYear()
-        const hora = agora.toTimeString().slice(0, 8)
-        const dataHora = `${dia} de ${mes}. de ${ano} ${hora}`
-
-        const linhas: string[] = [dataHora]
-        if (useLat != null && useLng != null) {
-          linhas.push(`${gmsCompacto(useLat, 'N', 'S')} ${gmsCompacto(useLng, 'L', 'O')}`)
+      try {
+        let drawW = img.width
+        let drawH = img.height
+        if (drawW > maxWidth) {
+          drawH = Math.round(drawH * maxWidth / drawW)
+          drawW = maxWidth
         }
-        linhas.push('DEFESA CIVIL - OURO BRANCO')
+        const canvas = document.createElement('canvas')
+        canvas.width = drawW
+        canvas.height = drawH
+        const ctx = canvas.getContext('2d')
+        if (!ctx) { resolve(dataUrl); return }
 
-        const fontSize = Math.max(14, Math.round(drawW * 0.022))
-        const lineHeight = fontSize * 1.45
-        const margem = Math.round(drawW * 0.022)
+        ctx.drawImage(img, 0, 0, drawW, drawH)
 
-        ctx.font = `bold ${fontSize}px Arial, sans-serif`
-        ctx.textAlign = 'right'
-        ctx.shadowColor = 'rgba(0,0,0,1)'
-        ctx.shadowBlur = 8
-        ctx.shadowOffsetX = 1
-        ctx.shadowOffsetY = 1
-        ctx.fillStyle = '#ffffff'
+        if (comMarca) {
+          const dataHora = opcoes.dataHora === undefined ? new Date() : opcoes.dataHora
+          const linhas: string[] = []
+          if (dataHora) {
+            const dia = dataHora.getDate().toString().padStart(2, '0')
+            const mes = MESES_ABR[dataHora.getMonth()]
+            const ano = dataHora.getFullYear()
+            const hora = dataHora.toTimeString().slice(0, 8)
+            linhas.push(`${dia} de ${mes}. de ${ano} ${hora}`)
+          }
+          if (useLat != null && useLng != null) {
+            linhas.push(`${gmsCompacto(useLat, 'N', 'S')} ${gmsCompacto(useLng, 'L', 'O')}`)
+          }
+          linhas.push('DEFESA CIVIL - OURO BRANCO')
 
-        const baseY = drawH - margem - (linhas.length - 1) * lineHeight
-        const baseX = drawW - margem
+          const fontSize = Math.max(14, Math.round(drawW * 0.022))
+          const lineHeight = fontSize * 1.45
+          const margem = Math.round(drawW * 0.022)
 
-        linhas.forEach((linha, i) => {
-          ctx.fillText(linha, baseX, baseY + i * lineHeight)
-        })
+          ctx.font = `bold ${fontSize}px Arial, sans-serif`
+          ctx.textAlign = 'right'
+          ctx.shadowColor = 'rgba(0,0,0,1)'
+          ctx.shadowBlur = 8
+          ctx.shadowOffsetX = 1
+          ctx.shadowOffsetY = 1
+          ctx.fillStyle = '#ffffff'
+
+          const baseY = drawH - margem - (linhas.length - 1) * lineHeight
+          const baseX = drawW - margem
+
+          linhas.forEach((linha, i) => {
+            ctx.fillText(linha, baseX, baseY + i * lineHeight)
+          })
+        }
+
+        const result = canvas.toDataURL('image/jpeg', qualidade)
+        canvas.width = 0; canvas.height = 0
+        resolve(result)
+      } catch {
+        resolve(dataUrl)
       }
-
-      const result = canvas.toDataURL('image/jpeg', qualidade)
-      canvas.width = 0; canvas.height = 0
-      resolve(result)
     }
     img.onerror = () => resolve(dataUrl)
     img.src = dataUrl
