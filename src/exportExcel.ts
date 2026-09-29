@@ -1195,6 +1195,10 @@ export async function exportarChecklistExcel(checklists: ChecklistExportData[], 
     ['motOleoFreio', 'Óleo Freio', 'sn'],
     ['motOleoMoto', 'Óleo Motor', 'sn'],
     ['motTanquePartida', 'Tanque/Partida', 'sn'],
+    ['emergenciaIluminacaoGiroflex', 'Iluminação Giroflex', 'sn'],
+    ['emergenciaMultimidia', 'Multimídia', 'sn'],
+    ['emergenciaSirene', 'Sirene', 'sn'],
+    ['emergenciaStrobo', 'Strobo', 'sn'],
   ]
 
   const fotosFixas = ['Foto Esquerda', 'Foto Frontal', 'Foto Traseira', 'Foto Direita']

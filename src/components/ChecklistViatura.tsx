@@ -87,6 +87,8 @@ interface Itens {
   motAcelerador: OpcSN; motAguaLimpador: OpcSN; motAguaRadiador: OpcSN
   motEmbreagem: OpcSN; motFreio: OpcSN; motFreioMao: OpcSN
   motOleoFreio: OpcSN; motOleoMoto: OpcSN; motTanquePartida: OpcSN
+  emergenciaIluminacaoGiroflex: OpcSN; emergenciaMultimidia: OpcSN
+  emergenciaSirene: OpcSN; emergenciaStrobo: OpcSN
   nivelCombustivel?: NivelCombustivel
   _fotosCarregadas?: FotoVeiculo[]
 }
@@ -104,6 +106,7 @@ function itensIniciais(): Itens {
     segTravas: '', segTriangulo: '',
     motAcelerador: '', motAguaLimpador: '', motAguaRadiador: '', motEmbreagem: '',
     motFreio: '', motFreioMao: '', motOleoFreio: '', motOleoMoto: '', motTanquePartida: '',
+    emergenciaIluminacaoGiroflex: '', emergenciaMultimidia: '', emergenciaSirene: '', emergenciaStrobo: '',
     nivelCombustivel: '',
   }
 }
@@ -188,6 +191,10 @@ const ITENS_PDF: [keyof Itens, string, 'bmr' | 'sn'][] = [
   ['motOleoFreio', 'Óleo Freio', 'sn'],
   ['motOleoMoto', 'Óleo Motor', 'sn'],
   ['motTanquePartida', 'Tanque/Partida', 'sn'],
+  ['emergenciaIluminacaoGiroflex', 'Iluminação Giroflex', 'sn'],
+  ['emergenciaMultimidia', 'Multimídia', 'sn'],
+  ['emergenciaSirene', 'Sirene', 'sn'],
+  ['emergenciaStrobo', 'Strobo', 'sn'],
 ]
 
 
@@ -743,6 +750,7 @@ export default function ChecklistViatura({ abrirId }: { abrirId?: number | null 
       { titulo: 'Luzes Traseiras e Dianteiras', opcoes: ['sim', 'nao', 'na'], labels: ['Sim', 'Não', 'N/A'], campos: ITENS_PDF.filter(([campo]) => String(campo).startsWith('ltz') || String(campo).startsWith('ldz')) },
       { titulo: 'Segurança', opcoes: ['sim', 'nao', 'na'], labels: ['Sim', 'Não', 'N/A'], campos: ITENS_PDF.filter(([campo]) => String(campo).startsWith('seg')) },
       { titulo: 'Motor', opcoes: ['sim', 'nao', 'na'], labels: ['Sim', 'Não', 'N/A'], campos: ITENS_PDF.filter(([campo]) => String(campo).startsWith('mot')) },
+      { titulo: 'Emergência', opcoes: ['sim', 'nao', 'na'], labels: ['Sim', 'Não', 'N/A'], campos: ITENS_PDF.filter(([campo]) => String(campo).startsWith('emergencia')) },
     ]
     const tabelasItens = gruposPdf.map((grupo) => `
       <h2>${htmlEscape(grupo.titulo)}</h2>
@@ -1120,6 +1128,16 @@ export default function ChecklistViatura({ abrirId }: { abrirId?: number | null 
               </div>
             </div>
 
+            {/* ── Emergência ── */}
+            <div className="ck-table-wrap ck-table-emergencia" style={{ marginTop: '0.75rem' }}>
+              <div className="ck-emergencia-title">EMERGÊNCIA</div>
+              <CkHeader cols={['Sim', 'Não', 'N/A']} />
+              <CkRow label="Iluminação Giroflex" campo="emergenciaIluminacaoGiroflex" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+              <CkRow label="Multimídia" campo="emergenciaMultimidia" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+              <CkRow label="Sirene" campo="emergenciaSirene" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+              <CkRow label="Strobo" campo="emergenciaStrobo" itens={itens} onChange={setItem} opcoes={OPT_SN} />
+            </div>
+
             {/* ── Observações ── */}
             <div className="campo" style={{ marginTop: '0.75rem' }}>
               <label className="campo-label">📝 Observações</label>
@@ -1323,6 +1341,15 @@ export default function ChecklistViatura({ abrirId }: { abrirId?: number | null 
                   })}
                 </div>
               </div>
+            </div>
+
+            <div className="ck-table-wrap ck-table-emergencia" style={{ marginTop: '0.75rem' }}>
+              <div className="ck-emergencia-title">EMERGÊNCIA</div>
+              <CkHeader cols={['S', 'N', 'N/A']} />
+              <CkRowRO label="Iluminação Giroflex" valor={it.emergenciaIluminacaoGiroflex} opcoes={OPT_SN} />
+              <CkRowRO label="Multimídia" valor={it.emergenciaMultimidia} opcoes={OPT_SN} />
+              <CkRowRO label="Sirene" valor={it.emergenciaSirene} opcoes={OPT_SN} />
+              <CkRowRO label="Strobo" valor={it.emergenciaStrobo} opcoes={OPT_SN} />
             </div>
 
             {c.observacoes && (

@@ -3929,6 +3929,12 @@ input, select, textarea { font-family: inherit; }
   text-align: center; padding: 0.3rem 0.5rem;
   border-radius: 4px; margin-bottom: 0.4rem;
 }
+.ck-table-emergencia { overflow: hidden; }
+.ck-emergencia-title {
+  background: #1a4b8c; color: #fff;
+  font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em;
+  text-align: center; padding: 0.32rem 0.5rem;
+}
 
 /* 4-column photo grid */
 .ck-fotos-4col {
