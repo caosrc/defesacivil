@@ -1,0 +1,860 @@
+usa:
+
+OpenStreetMap como mapa base;
+RainViewer para a camada colorida de chuva;
+NOAA/GOES para visualizar as nuvens;
+botão 🌧️ Chuva;
+controle de opacidade;
+marcadores coloridos de estações, caso você tenha dados do CEMADEN;
+atualização automática a cada 5 minutos.
+1. Dependências
+No outro app:
+
+npm install leaflet react-leaflet
+No arquivo principal ou no componente:
+
+import 'leaflet/dist/leaflet.css'
+2. Rota do servidor para o radar
+Coloque esta rota no servidor Express do outro app, antes do app.listen:
+
+let radarChuvaCache = null
+let radarChuvaCacheTs = 0
+const RADAR_CHUVA_TTL_MS = 2 * 60 * 1000
+app.get('/api/radar-chuva', async (_req, res) => {
+  try {
+    const agora = Date.now()
+    if (
+      radarChuvaCache &&
+      agora - radarChuvaCacheTs < RADAR_CHUVA_TTL_MS
+    ) {
+      return res.json({
+        ...radarChuvaCache,
+        cache: true,
+      })
+    }
+    const resposta = await fetch(
+      'https://api.rainviewer.com/public/weather-maps.json',
+      {
+        headers: {
+          Accept: 'application/json',
+        },
+        signal: AbortSignal.timeout(10000),
+      },
+    )
+    if (!resposta.ok) {
+      throw new Error(`RainViewer respondeu ${resposta.status}`)
+    }
+    const dados = await resposta.json()
+    const host =
+      typeof dados?.host === 'string'
+        ? dados.host.replace(/\/$/, '')
+        : ''
+    const quadrosObservados = (
+      Array.isArray(dados?.radar?.past)
+        ? dados.radar.past
+        : []
+    ).filter((quadro) => {
+      return (
+        Number.isFinite(Number(quadro?.time)) &&
+        typeof quadro?.path === 'string' &&
+        quadro.path.startsWith('/v2/')
+      )
+    })
+    const ultimoQuadro = quadrosObservados.at(-1)
+    if (!host || !ultimoQuadro) {
+      throw new Error('RainViewer não retornou quadro de radar')
+    }
+    radarChuvaCache = {
+      host,
+      path: ultimoQuadro.path,
+      tileUrl: `${host}${ultimoQuadro.path}/256/{z}/{x}/{y}/2/1_0.png`,
+      frameTime: Number(ultimoQuadro.time),
+      atualizadoEm: new Date(
+        Number(ultimoQuadro.time) * 1000,
+      ).toISOString(),
+      fonte: 'RainViewer',
+      tipoQuadro: 'observado',
+    }
+    radarChuvaCacheTs = agora
+    return res.json(radarChuvaCache)
+  } catch (erro) {
+    console.error(
+      'Erro ao carregar radar de chuva:',
+      erro?.message || erro,
+    )
+    if (radarChuvaCache) {
+      return res.json({
+        ...radarChuvaCache,
+        cache: true,
+        erroAtualizacao: true,
+      })
+    }
+    return res.status(503).json({
+      erro: 'Radar de chuva indisponível',
+    })
+  }
+})
+Esse endpoint retorna a URL do último quadro colorido do radar.
+
+3. Componente React ChuvaMapa.tsx
+Crie um arquivo:
+
+src/components/ChuvaMapa.tsx
+Cole o código abaixo:
+
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from 'react'
+import {
+  Circle,
+  CircleMarker,
+  MapContainer,
+  Pane,
+  Popup,
+  TileLayer,
+  Tooltip,
+} from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
+type DadosRadar = {
+  host: string
+  path: string
+  tileUrl?: string
+  frameTime: number
+  atualizadoEm: string
+  fonte: string
+  cache?: boolean
+  erroAtualizacao?: boolean
+}
+export type EstacaoChuva = {
+  id: number | string
+  nome?: string
+  latitude: number
+  longitude: number
+  precipitacaoAtual: number | null
+}
+type ChuvaMapaProps = {
+  centro?: [number, number]
+  zoom?: number
+  estacoes?: EstacaoChuva[]
+}
+const URL_NUVENS_GOES =
+  'https://gis.nnvl.noaa.gov/arcgis/rest/services/GOES/GOES_current/ImageServer/tile/{z}/{y}/{x}'
+const RAIO_AREA_CHUVA_METROS = 10_000
+function intensidadeChuva(valor: number | null) {
+  if (valor == null || !Number.isFinite(valor) || valor <= 0) {
+    return {
+      cor: '#38bdf8',
+      opacidade: 0,
+      nome: 'Sem chuva',
+    }
+  }
+  if (valor <= 2) {
+    return {
+      cor: '#67e8f9',
+      opacidade: 0.45,
+      nome: 'Chuva fraca',
+    }
+  }
+  if (valor <= 10) {
+    return {
+      cor: '#22c55e',
+      opacidade: 0.5,
+      nome: 'Chuva moderada',
+    }
+  }
+  if (valor <= 30) {
+    return {
+      cor: '#facc15',
+      opacidade: 0.55,
+      nome: 'Chuva forte',
+    }
+  }
+  if (valor <= 50) {
+    return {
+      cor: '#f97316',
+      opacidade: 0.6,
+      nome: 'Chuva muito forte',
+    }
+  }
+  if (valor <= 80) {
+    return {
+      cor: '#ef4444',
+      opacidade: 0.65,
+      nome: 'Chuva intensa',
+    }
+  }
+  return {
+    cor: '#c026d3',
+    opacidade: 0.7,
+    nome: 'Chuva extrema',
+  }
+}
+function formatarHora(valor?: string) {
+  if (!valor) return '—'
+  const data = new Date(valor)
+  if (Number.isNaN(data.getTime())) {
+    return '—'
+  }
+  return data.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+function formatarMilimetros(valor: number | null) {
+  if (valor == null || !Number.isFinite(valor)) {
+    return 'Sem leitura'
+  }
+  return `${valor.toLocaleString('pt-BR', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })} mm`
+}
+function urlDeTilesValida(url: string) {
+  return (
+    url.startsWith('https://') &&
+    url.includes('{z}') &&
+    url.includes('{x}') &&
+    url.includes('{y}')
+  )
+}
+export default function ChuvaMapa({
+  centro = [-20.6604, -43.7863],
+  zoom = 11,
+  estacoes = [],
+}: ChuvaMapaProps) {
+  const [chuvaAtiva, setChuvaAtiva] = useState(false)
+  const [painelAberto, setPainelAberto] = useState(false)
+  const [nuvensAtivas, setNuvensAtivas] = useState(false)
+  const [radar, setRadar] = useState<DadosRadar | null>(null)
+  const [carregandoRadar, setCarregandoRadar] = useState(false)
+  const [erroRadar, setErroRadar] = useState<string | null>(null)
+  const [opacidadeNuvens, setOpacidadeNuvens] = useState(0.5)
+  const [opacidadeRadar, setOpacidadeRadar] = useState(0.72)
+  const carregarRadar = useCallback(async () => {
+    setCarregandoRadar(true)
+    setErroRadar(null)
+    try {
+      const resposta = await fetch(
+        `/api/radar-chuva?_ts=${Date.now()}`,
+        {
+          cache: 'no-store',
+        },
+      )
+      const dados = await resposta.json()
+      if (!resposta.ok || !dados?.tileUrl) {
+        throw new Error('Radar indisponível')
+      }
+      setRadar({
+        host: dados.host,
+        path: dados.path,
+        tileUrl: dados.tileUrl,
+        frameTime: Number(dados.frameTime),
+        atualizadoEm: dados.atualizadoEm,
+        fonte: dados.fonte || 'RainViewer',
+        cache: dados.cache === true,
+        erroAtualizacao: dados.erroAtualizacao === true,
+      })
+    } catch {
+      setErroRadar(
+        'Não foi possível atualizar o radar agora.',
+      )
+    } finally {
+      setCarregandoRadar(false)
+    }
+  }, [])
+  useEffect(() => {
+    if (!chuvaAtiva) return
+    carregarRadar()
+    const intervalo = window.setInterval(
+      carregarRadar,
+      5 * 60 * 1000,
+    )
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === 'visible') {
+        carregarRadar()
+      }
+    }
+    document.addEventListener(
+      'visibilitychange',
+      atualizarAoVoltar,
+    )
+    return () => {
+      window.clearInterval(intervalo)
+      document.removeEventListener(
+        'visibilitychange',
+        atualizarAoVoltar,
+      )
+    }
+  }, [chuvaAtiva, carregarRadar])
+  const maiorLeitura =
+    estacoes.length > 0
+      ? Math.max(
+          ...estacoes
+            .map((estacao) => estacao.precipitacaoAtual)
+            .filter(
+              (valor): valor is number =>
+                Number.isFinite(valor),
+            ),
+        )
+      : null
+  return (
+    <div className="chuva-mapa">
+      <MapContainer
+        center={centro}
+        zoom={zoom}
+        style={{
+          width: '100%',
+          height: '100%',
+          minHeight: 520,
+        }}
+        zoomControl
+      >
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; OpenStreetMap'
+        />
+        {nuvensAtivas &&
+          urlDeTilesValida(URL_NUVENS_GOES) && (
+            <Pane
+              name="nuvens-goes"
+              style={{ zIndex: 410 }}
+            >
+              <TileLayer
+                url={URL_NUVENS_GOES}
+                opacity={opacidadeNuvens}
+                maxNativeZoom={8}
+                maxZoom={19}
+                attribution='Imagens de nuvens &copy; NOAA / GOES'
+              />
+            </Pane>
+          )}
+        {chuvaAtiva && radar && (
+          <Pane
+            name="radar-chuva"
+            style={{ zIndex: 420 }}
+          >
+            <TileLayer
+              key={radar.frameTime}
+              url={
+                radar.tileUrl ||
+                `${radar.host}${radar.path}/256/{z}/{x}/{y}/2/1_0.png`
+              }
+              opacity={opacidadeRadar}
+              maxNativeZoom={7}
+              maxZoom={19}
+              attribution='Weather data by RainViewer'
+            />
+          </Pane>
+        )}
+        {chuvaAtiva &&
+          estacoes.map((estacao) => {
+            const intensidade = intensidadeChuva(
+              estacao.precipitacaoAtual,
+            )
+            return (
+              <CircleMarker
+                key={estacao.id}
+                center={[
+                  estacao.latitude,
+                  estacao.longitude,
+                ]}
+                radius={9}
+                pathOptions={{
+                  color: '#ffffff',
+                  weight: 2,
+                  fillColor: intensidade.cor,
+                  fillOpacity: 0.95,
+                }}
+              >
+                <Tooltip permanent direction="top">
+                  {formatarMilimetros(
+                    estacao.precipitacaoAtual,
+                  )}
+                </Tooltip>
+                <Popup>
+                  <strong>
+                    🌧️ {estacao.nome || 'Estação de chuva'}
+                  </strong>
+                  <br />
+                  <span>
+                    Última hora:{' '}
+                    {formatarMilimetros(
+                      estacao.precipitacaoAtual,
+                    )}
+                  </span>
+                  <br />
+                  <span>
+                    {intensidade.nome}
+                  </span>
+                </Popup>
+              </CircleMarker>
+            )
+          })}
+        {chuvaAtiva && (
+          <Circle
+            center={centro}
+            radius={RAIO_AREA_CHUVA_METROS}
+            pathOptions={{
+              color: '#1d4ed8',
+              weight: 2,
+              opacity: 0.95,
+              dashArray: '7 5',
+              fillColor: '#60a5fa',
+              fillOpacity: 0.04,
+            }}
+          />
+        )}
+      </MapContainer>
+      <div className="chuva-mapa-controles">
+        <button
+          type="button"
+          className={
+            chuvaAtiva
+              ? 'chuva-botao ativo'
+              : 'chuva-botao'
+          }
+          onClick={() => {
+            const proximoEstado = !chuvaAtiva
+            setChuvaAtiva(proximoEstado)
+            setPainelAberto(proximoEstado)
+            if (proximoEstado) {
+              setNuvensAtivas(true)
+            }
+          }}
+        >
+          🌧️ Chuva
+        </button>
+        {painelAberto && (
+          <div className="chuva-painel">
+            <div className="chuva-painel-cabecalho">
+              <div>
+                <strong>🌧️ Chuva ao vivo</strong>
+                <span>
+                  Radar e imagens de nuvens
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPainelAberto(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="chuva-linha">
+              <button
+                type="button"
+                className={
+                  nuvensAtivas
+                    ? 'chuva-fonte ativo'
+                    : 'chuva-fonte'
+                }
+                onClick={() =>
+                  setNuvensAtivas((valor) => !valor)
+                }
+              >
+                ☁️ Nuvens GOES
+              </button>
+              <span>
+                Imagem atual das nuvens
+              </span>
+            </div>
+            <div className="chuva-linha">
+              <button
+                type="button"
+                className={
+                  chuvaAtiva
+                    ? 'chuva-fonte ativo'
+                    : 'chuva-fonte'
+                }
+                onClick={() =>
+                  setChuvaAtiva((valor) => !valor)
+                }
+              >
+                🌧️ Radar RainViewer
+              </button>
+              <span>
+                Chuva observada
+              </span>
+            </div>
+            <div className="chuva-opacidades">
+              <label>
+                Nuvens
+                <input
+                  type="range"
+                  min="0.2"
+                  max="0.9"
+                  step="0.05"
+                  value={opacidadeNuvens}
+                  onChange={(evento) =>
+                    setOpacidadeNuvens(
+                      Number(evento.target.value),
+                    )
+                  }
+                />
+                <output>
+                  {Math.round(opacidadeNuvens * 100)}%
+                </output>
+              </label>
+              <label>
+                Radar
+                <input
+                  type="range"
+                  min="0.2"
+                  max="0.95"
+                  step="0.05"
+                  value={opacidadeRadar}
+                  onChange={(evento) =>
+                    setOpacidadeRadar(
+                      Number(evento.target.value),
+                    )
+                  }
+                />
+                <output>
+                  {Math.round(opacidadeRadar * 100)}%
+                </output>
+              </label>
+            </div>
+            {carregandoRadar && !radar && (
+              <div className="chuva-status">
+                Carregando radar...
+              </div>
+            )}
+            {erroRadar && (
+              <div className="chuva-status erro">
+                {erroRadar}
+              </div>
+            )}
+            <div className="chuva-resumo">
+              <div>
+                <small>Radar</small>
+                <strong>
+                  {radar
+                    ? formatarHora(radar.atualizadoEm)
+                    : '—'}
+                </strong>
+              </div>
+              <div>
+                <small>Maior leitura</small>
+                <strong>
+                  {formatarMilimetros(maiorLeitura)}
+                </strong>
+              </div>
+            </div>
+            <div className="chuva-legenda">
+              <span>
+                <i className="cor fraca" />
+                Fraca
+              </span>
+              <span>
+                <i className="cor moderada" />
+                Moderada
+              </span>
+              <span>
+                <i className="cor forte" />
+                Forte
+              </span>
+              <span>
+                <i className="cor intensa" />
+                Intensa
+              </span>
+              <span>
+                <i className="cor extrema" />
+                Extrema
+              </span>
+            </div>
+            <p className="chuva-ajuda">
+              As cores do radar mostram chuva observada
+              deslocando-se na região. Elas não representam
+              um horário exato de chegada.
+            </p>
+            <div className="chuva-rodape">
+              <span>
+                {radar?.erroAtualizacao
+                  ? 'Último radar armazenado'
+                  : 'Fonte: RainViewer'}
+              </span>
+              <button
+                type="button"
+                disabled={carregandoRadar}
+                onClick={carregarRadar}
+              >
+                Atualizar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+4. CSS do componente
+Crie ou adicione ao CSS global:
+
+.chuva-mapa {
+  position: relative;
+  width: 100%;
+  height: 600px;
+  overflow: hidden;
+}
+.chuva-mapa-controles {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1000;
+}
+.chuva-botao {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 9px 13px;
+  background: #ffffff;
+  color: #075985;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+}
+.chuva-botao:hover {
+  background: #f0f9ff;
+}
+.chuva-botao.ativo {
+  background: #0369a1;
+  border-color: #0369a1;
+  color: white;
+}
+.chuva-painel {
+  position: absolute;
+  top: 48px;
+  left: 0;
+  width: 290px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: white;
+  color: #1f2937;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+}
+.chuva-painel-cabecalho {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  color: white;
+  background: linear-gradient(135deg, #075985, #0284c7);
+}
+.chuva-painel-cabecalho strong,
+.chuva-painel-cabecalho span {
+  display: block;
+}
+.chuva-painel-cabecalho strong {
+  font-size: 14px;
+}
+.chuva-painel-cabecalho span {
+  margin-top: 3px;
+  font-size: 11px;
+  opacity: 0.9;
+}
+.chuva-painel-cabecalho button {
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 7px;
+  color: white;
+  background: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+}
+.chuva-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+.chuva-fonte {
+  border: 1px solid #bae6fd;
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #075985;
+  background: white;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chuva-fonte.ativo {
+  color: white;
+  background: #075985;
+}
+.chuva-linha span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chuva-opacidades {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.chuva-opacidades label {
+  display: grid;
+  grid-template-columns: 48px 1fr 38px;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-size: 11px;
+}
+.chuva-opacidades input {
+  width: 100%;
+  accent-color: #0369a1;
+}
+.chuva-opacidades output {
+  text-align: right;
+  color: #64748b;
+}
+.chuva-status {
+  padding: 10px;
+  color: #475569;
+  font-size: 12px;
+  text-align: center;
+}
+.chuva-status.erro {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+.chuva-resumo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: #e5e7eb;
+}
+.chuva-resumo div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  background: white;
+}
+.chuva-resumo small {
+  color: #64748b;
+  font-size: 10px;
+}
+.chuva-resumo strong {
+  color: #334155;
+  font-size: 13px;
+}
+.chuva-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  color: #475569;
+  font-size: 10px;
+}
+.chuva-legenda span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.chuva-legenda .cor {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+.cor.fraca {
+  background: #67e8f9;
+}
+.cor.moderada {
+  background: #22c55e;
+}
+.cor.forte {
+  background: #facc15;
+}
+.cor.intensa {
+  background: #ef4444;
+}
+.cor.extrema {
+  background: #c026d3;
+}
+.chuva-ajuda {
+  margin: 0;
+  padding: 0 10px 10px;
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.chuva-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border-top: 1px solid #e5e7eb;
+  color: #94a3b8;
+  font-size: 10px;
+}
+.chuva-rodape button {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: #0369a1;
+  background: white;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+@media (max-width: 600px) {
+  .chuva-painel {
+    width: calc(100vw - 24px);
+    max-width: 290px;
+  }
+}
+5. Como chamar dentro da tela Mapa
+import ChuvaMapa from './components/ChuvaMapa'
+export default function Mapa() {
+  return (
+    <div>
+      <h1>Mapa</h1>
+      <ChuvaMapa
+        centro={[-20.6604, -43.7863]}
+        zoom={11}
+      />
+    </div>
+  )
+}
+Se tiver estações de chuva, envie os dados assim:
+
+const estacoes = [
+  {
+    id: 1,
+    nome: 'Estação Central',
+    latitude: -20.6604,
+    longitude: -43.7863,
+    precipitacaoAtual: 12.5,
+  },
+  {
+    id: 2,
+    nome: 'Estação Norte',
+    latitude: -20.625,
+    longitude: -43.77,
+    precipitacaoAtual: 3.2,
+  },
+]
+<ChuvaMapa
+  centro={[-20.6604, -43.7863]}
+  zoom={11}
+  estacoes={estacoes}
+/>
+A coloração funciona assim:
+
+Chuva	Cor
+Até 2 mm	Azul claro
+2 a 10 mm	Verde
+10 a 30 mm	Amarelo
+30 a 50 mm	Laranja
+50 a 80 mm	Vermelho
+Acima de 80 mm	Roxo
+O radar mostra a chuva observada se deslocando. Ele não calcula sozinho o horário exato em que a chuva chegará ao local.
