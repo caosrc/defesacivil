@@ -209,8 +209,9 @@
 .radar-empty { padding: .7rem; border: 1px dashed #3a6988; border-radius: 8px; color: #9bb8d0; background: #0d2a46; font-size: .7rem; text-align: center; }
 .radar-ferramental-resumos { display: grid; gap: .45rem; }
 .radar-ferramental-resumo { padding: .55rem; border: 1px solid #376886; border-radius: 8px; background: #123652; }
-.radar-ferramental-cabecalho { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; color: #e9f5ff; font-size: .72rem; }
+.radar-ferramental-cabecalho { display: flex; align-items: flex-start; justify-content: space-between; gap: .5rem; color: #e9f5ff; font-size: .72rem; }
 .radar-ferramental-cabecalho strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.radar-ferramental-cabecalho .radar-ferramental-agentes { flex: 1; min-width: 0; overflow: visible; line-height: 1.35; text-overflow: clip; white-space: normal; }
 .radar-ferramental-cabecalho b { flex-shrink: 0; color: #b8eaff; font-size: .68rem; }
 .radar-ferramental-itens { display: flex; flex-wrap: wrap; gap: .25rem .5rem; margin-top: .4rem; }
 .radar-ferramental-itens span { font-size: .64rem; font-weight: 800; }

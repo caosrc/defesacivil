@@ -27,7 +27,7 @@ type AtividadeFerramenta = {
 }
 type FerramentaCatalogo = { id: string; nome: string; quantidade: number }
 type ResumoFerramental = {
-  agente: string; tiposVerificados: number; totalTipos: number
+  agentes: string[]; tiposVerificados: number; totalTipos: number
   itensConferidos: number; itensCadastrados: number
   boa: number; media: number; ruim: number
   ferramentasRuins: string[]; faltantes: string[]; semChecklist: string[]; serragemAlertas: string[]; litrosAlertas: string[]
@@ -98,83 +98,85 @@ function eControlePorQuantidade(nome: string) {
 function resumirFerramental(
   registros: AtividadeFerramenta[],
   catalogo: FerramentaCatalogo[],
-): ResumoFerramental[] {
+): ResumoFerramental | null {
+  if (registros.length === 0) return null
+
   const catalogoComCondicao = catalogo.filter(item => !eControlePorQuantidade(item.nome))
-  const totalTipos = catalogoComCondicao.length || new Set(
-    registros.filter(item => !eControlePorQuantidade(item.ferramentaNome)).map(item => item.ferramentaId).filter(Boolean),
-  ).size
   const catalogoPorId = new Map(catalogo.map(item => [item.id, item]))
-  const porAgente = new Map<string, Map<string, AtividadeFerramenta>>()
+  const agentes = new Set<string>()
+  const registroMaisRecentePorFerramenta = new Map<string, AtividadeFerramenta>()
 
   registros.forEach(registro => {
     const nomeAgente = registro.agente || 'Agente não informado'
+    agentes.add(nomeAgente)
     const ferramentaId = registro.ferramentaId || `registro-${registro.id}`
-    const registrosDoAgente = porAgente.get(nomeAgente) || new Map<string, AtividadeFerramenta>()
-    const anterior = registrosDoAgente.get(ferramentaId)
+    const anterior = registroMaisRecentePorFerramenta.get(ferramentaId)
     if (!anterior || new Date(registro.created_at || registro.data_checklist).getTime() >= new Date(anterior.created_at || anterior.data_checklist).getTime()) {
-      registrosDoAgente.set(ferramentaId, registro)
+      registroMaisRecentePorFerramenta.set(ferramentaId, registro)
     }
-    porAgente.set(nomeAgente, registrosDoAgente)
   })
 
-  return Array.from(porAgente.entries()).map(([agente, registrosMap]) => {
-    const registrosAgente = Array.from(registrosMap.values())
-    const idsVerificados = new Set(registrosAgente.filter(item => !eControlePorQuantidade(item.ferramentaNome)).map(item => item.ferramentaId))
-    const boa = registrosAgente.filter(item => !eControlePorQuantidade(item.ferramentaNome) && item.condicao === 'boa').length
-    const media = registrosAgente.filter(item => !eControlePorQuantidade(item.ferramentaNome) && item.condicao === 'media').length
-    const ruim = registrosAgente.filter(item => !eControlePorQuantidade(item.ferramentaNome) && item.condicao === 'ruim').length
-    let itensCadastrados = 0
-    let itensConferidos = 0
-    const ferramentasRuins: string[] = []
-    const faltantes: string[] = []
-    const serragemAlertas: string[] = []
-    const litrosAlertas: string[] = []
+  const registrosUnicos = Array.from(registroMaisRecentePorFerramenta.values())
+  const idsVerificados = new Set(
+    registrosUnicos
+      .filter(item => !eControlePorQuantidade(item.ferramentaNome))
+      .map(item => item.ferramentaId)
+      .filter(Boolean),
+  )
+  const totalTipos = Math.max(catalogoComCondicao.length, idsVerificados.size)
+  const boa = registrosUnicos.filter(item => !eControlePorQuantidade(item.ferramentaNome) && item.condicao === 'boa').length
+  const media = registrosUnicos.filter(item => !eControlePorQuantidade(item.ferramentaNome) && item.condicao === 'media').length
+  const ruim = registrosUnicos.filter(item => !eControlePorQuantidade(item.ferramentaNome) && item.condicao === 'ruim').length
+  let itensCadastrados = 0
+  let itensConferidos = 0
+  const ferramentasRuins: string[] = []
+  const faltantes: string[] = []
+  const serragemAlertas: string[] = []
+  const litrosAlertas: string[] = []
 
-    registrosAgente.forEach(registro => {
-      const catalogoItem = catalogoPorId.get(registro.ferramentaId)
-      const cadastrada = Number(registro.quantidadeCadastrada) > 0
-        ? Number(registro.quantidadeCadastrada)
-        : Math.max(1, catalogoItem?.quantidade || 1)
-      const conferida = registro.quantidadeConferida == null
-        ? cadastrada
-        : Math.max(0, Number(registro.quantidadeConferida))
-      const quantidadeFaltante = Math.max(0, cadastrada - conferida)
-      itensCadastrados += cadastrada
-      itensConferidos += Math.min(cadastrada, conferida)
-      if (ehFerramentalPorLitro(registro.ferramentaNome)) {
-        if (conferida < 10) {
-          litrosAlertas.push(`${conferida} litro(s) de ${registro.ferramentaNome} — Repor estoque`)
-        }
-        return
+  registrosUnicos.forEach(registro => {
+    const catalogoItem = catalogoPorId.get(registro.ferramentaId)
+    const cadastrada = Number(registro.quantidadeCadastrada) > 0
+      ? Number(registro.quantidadeCadastrada)
+      : Math.max(1, catalogoItem?.quantidade || 1)
+    const conferida = registro.quantidadeConferida == null
+      ? cadastrada
+      : Math.max(0, Number(registro.quantidadeConferida))
+    const quantidadeFaltante = Math.max(0, cadastrada - conferida)
+    itensCadastrados += cadastrada
+    itensConferidos += Math.min(cadastrada, conferida)
+    if (ehFerramentalPorLitro(registro.ferramentaNome)) {
+      if (conferida < 10) {
+        litrosAlertas.push(`${conferida} litro(s) de ${registro.ferramentaNome} — Repor estoque`)
       }
-      if (eSerragem(registro.ferramentaNome)) {
-        if (conferida <= 2) serragemAlertas.push(`${conferida} saco(s) de serragem — Repor serragem`)
-        return
-      }
-      if (registro.condicao === 'ruim') ferramentasRuins.push(registro.ferramentaNome)
-      if (quantidadeFaltante > 0) {
-        const nomeItem = String(registro.ferramentaNome || 'ferramental').trim()
-        const ondeEsta = String(registro.itemFaltante || '').trim()
-        const justificativa = String(registro.justificativa || '').trim()
-        const explicacao = ondeEsta
-          ? `Onde está: ${ondeEsta}`
-          : `Justificativa: ${justificativa || 'não informada'}`
-        faltantes.push(
-          `${quantidadeFaltante} ${nomeItem} — ${explicacao}`,
-        )
-      }
-    })
-
-    const semChecklist = catalogoComCondicao
-      .filter(item => !idsVerificados.has(item.id))
-      .map(item => item.nome)
-    return {
-      agente, tiposVerificados: idsVerificados.size, totalTipos, itensConferidos, itensCadastrados,
-      boa, media, ruim, ferramentasRuins: [...new Set(ferramentasRuins)],
-      faltantes, semChecklist, serragemAlertas: [...new Set(serragemAlertas)],
-      litrosAlertas: [...new Set(litrosAlertas)],
+      return
     }
-  }).sort((a, b) => a.agente.localeCompare(b.agente))
+    if (eSerragem(registro.ferramentaNome)) {
+      if (conferida <= 2) serragemAlertas.push(`${conferida} saco(s) de serragem — Repor serragem`)
+      return
+    }
+    if (registro.condicao === 'ruim') ferramentasRuins.push(registro.ferramentaNome)
+    if (quantidadeFaltante > 0) {
+      const nomeItem = String(registro.ferramentaNome || 'ferramental').trim()
+      const ondeEsta = String(registro.itemFaltante || '').trim()
+      const justificativa = String(registro.justificativa || '').trim()
+      const explicacao = ondeEsta
+        ? `Onde está: ${ondeEsta}`
+        : `Justificativa: ${justificativa || 'não informada'}`
+      faltantes.push(`${quantidadeFaltante} ${nomeItem} — ${explicacao}`)
+    }
+  })
+
+  const semChecklist = catalogoComCondicao
+    .filter(item => !idsVerificados.has(item.id))
+    .map(item => item.nome)
+  return {
+    agentes: Array.from(agentes).sort((a, b) => a.localeCompare(b)),
+    tiposVerificados: idsVerificados.size, totalTipos, itensConferidos, itensCadastrados,
+    boa, media, ruim, ferramentasRuins: [...new Set(ferramentasRuins)],
+    faltantes, semChecklist, serragemAlertas: [...new Set(serragemAlertas)],
+    litrosAlertas: [...new Set(litrosAlertas)],
+  }
 }
 
 function temFotoCarregada(itens: unknown) {
@@ -754,54 +756,52 @@ export default function RadarDC() {
         <div className="radar-activity-columns">
           <div><h3>🚗 Checklists do dia</h3>{atividades.checklists.length === 0 ? <div className="radar-empty">Nenhum checklist de viatura registrado.</div> : atividades.checklists.map(c => <button className="radar-activity" key={c.id} onClick={() => disparar('dc:abrir-checklist', { id: c.id })}><b>{c.agente}{c.fotoCarregada && <strong className="radar-foto-carregada">Foto Carregada</strong>}</b><span className="radar-checklist-resumo">{c.hora} - {c.placa || 'Placa não informada'} - KM {c.km || 'não informado'} - ⛽ {c.nivelCombustivel || 'não informado'}</span><em>abrir ›</em></button>)}
           <h3 className="radar-subtitulo-ferramentas">🧰 Checklists de ferramentas</h3>
-          {resumosFerramental.length === 0 ? (
+           {!resumosFerramental ? (
             <div className="radar-empty">Nenhum checklist de ferramenta registrado.</div>
           ) : (
             <div className="radar-ferramental-resumos">
-              {resumosFerramental.map(resumo => (
-                <article className="radar-ferramental-resumo" key={resumo.agente}>
+                  <article className="radar-ferramental-resumo">
                   <div className="radar-ferramental-cabecalho">
-                    <strong>{resumo.agente}</strong>
-                    <b>Ferramental {resumo.tiposVerificados}/{resumo.totalTipos}</b>
+                      <strong className="radar-ferramental-agentes">{resumosFerramental.agentes.join(' · ')}</strong>
+                     <b>Ferramental {resumosFerramental.tiposVerificados}/{resumosFerramental.totalTipos}</b>
                   </div>
-                   {(resumo.boa + resumo.media + resumo.ruim) > 0 && (
+                    {(resumosFerramental.boa + resumosFerramental.media + resumosFerramental.ruim) > 0 && (
                      <div className="radar-ferramental-itens">
-                       <span className="radar-ferramental-boa">Boa - {percentual(resumo.boa, resumo.totalTipos)}%</span>
-                       <span className="radar-ferramental-media">Média - {percentual(resumo.media, resumo.totalTipos)}%</span>
-                       <span className="radar-ferramental-ruim">Ruim - {percentual(resumo.ruim, resumo.totalTipos)}%</span>
+                        <span className="radar-ferramental-boa">Boa - {percentual(resumosFerramental.boa, resumosFerramental.totalTipos)}%</span>
+                        <span className="radar-ferramental-media">Média - {percentual(resumosFerramental.media, resumosFerramental.totalTipos)}%</span>
+                        <span className="radar-ferramental-ruim">Ruim - {percentual(resumosFerramental.ruim, resumosFerramental.totalTipos)}%</span>
                      </div>
                    )}
                   <div className="radar-ferramental-quantidade">
-                     Itens/litros conferidos: {resumo.itensConferidos}/{resumo.itensCadastrados}
+                      Itens/litros conferidos: {resumosFerramental.itensConferidos}/{resumosFerramental.itensCadastrados}
                   </div>
-                  {resumo.ferramentasRuins.length > 0 && (
+                   {resumosFerramental.ferramentasRuins.length > 0 && (
                     <div className="radar-ferramental-alerta radar-ferramental-alerta-ruim">
-                      <strong>Ruim:</strong> {resumo.ferramentasRuins.join(', ')}
+                       <strong>Ruim:</strong> {resumosFerramental.ferramentasRuins.join(', ')}
                     </div>
                   )}
-                  {resumo.faltantes.length > 0 && (
+                   {resumosFerramental.faltantes.length > 0 && (
                     <div className="radar-ferramental-alerta radar-ferramental-alerta-falta">
-                      <strong>Faltando:</strong> {resumo.faltantes.join(', ')}
+                       <strong>Faltando:</strong> {resumosFerramental.faltantes.join(', ')}
                     </div>
                   )}
-                  {resumo.serragemAlertas.length > 0 && (
+                   {resumosFerramental.serragemAlertas.length > 0 && (
                     <div className="radar-ferramental-alerta radar-ferramental-alerta-serragem">
-                      <strong>⚠️ Serragem:</strong> {resumo.serragemAlertas.join(', ')}
+                       <strong>⚠️ Serragem:</strong> {resumosFerramental.serragemAlertas.join(', ')}
                     </div>
                   )}
-                   {resumo.litrosAlertas.length > 0 && (
+                    {resumosFerramental.litrosAlertas.length > 0 && (
                      <div className="radar-ferramental-alerta radar-ferramental-alerta-serragem">
-                       <strong>⚠️ Estoque baixo:</strong> {resumo.litrosAlertas.join(', ')}
+                        <strong>⚠️ Estoque baixo:</strong> {resumosFerramental.litrosAlertas.join(', ')}
                      </div>
                    )}
-                  {resumo.semChecklist.length > 0 && (
+                   {resumosFerramental.semChecklist.length > 0 && (
                     <div className="radar-ferramental-alerta radar-ferramental-alerta-pendente">
-                      <strong>Sem checklist:</strong> {resumo.semChecklist.slice(0, 3).join(', ')}
-                      {resumo.semChecklist.length > 3 ? ` e mais ${resumo.semChecklist.length - 3}` : ''}
+                       <strong>Sem checklist:</strong> {resumosFerramental.semChecklist.slice(0, 3).join(', ')}
+                       {resumosFerramental.semChecklist.length > 3 ? ` e mais ${resumosFerramental.semChecklist.length - 3}` : ''}
                     </div>
                   )}
                 </article>
-              ))}
             </div>
           )}
           </div>
