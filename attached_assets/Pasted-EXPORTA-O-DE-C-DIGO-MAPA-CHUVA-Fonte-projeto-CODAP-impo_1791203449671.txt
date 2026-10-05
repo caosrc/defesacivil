@@ -1,0 +1,3272 @@
+EXPORTAÇÃO DE CÓDIGO — MAPA / CHUVA
+Fonte: projeto CODAP importado nesta workspace. Trechos extraídos da implementação existente.
+Gerado em: 05/10/2026
+
+O QUE ESTÁ INCLUÍDO
+• Radar observado do RainViewer (tiles) e endpoint servidor que entrega o quadro mais recente.
+• Leituras de pluviômetros CEMADEN, atualização periódica e marcadores do mapa.
+• Superfície interpolada de chuva CEMADEN (IDW), limitada a 10 km e a leituras recentes.
+• Camada opcional de nuvens GOES (imagem de nuvens; não é medição de precipitação).
+• Previsão Open-Meteo, consenso de trovoadas e alertas do INMET.
+• Controles e estilos principais da camada Chuva.
+
+O painel original também mostra previsão do tempo, previsão de trovoadas/raios e avisos do INMET. O código completo dessas funções e rotas está incluído na seção 10.
+
+IMPORTANTE PARA REUTILIZAR
+Este é um pacote de trechos-fonte, não um componente autônomo pronto para colar. No projeto de destino:
+1. Instale React, Leaflet e react-leaflet e importe leaflet/dist/leaflet.css.
+2. Tenha um MapContainer React-Leaflet já renderizado e insira as camadas dentro dele.
+3. Adicione os endpoints Express deste arquivo no servidor do destino. Eles usam fetch global/AbortSignal.timeout (Node.js moderno, Node 18+ recomendado).
+4. Copie o hook CEMADEN e os trechos de estado/efeitos para o componente do mapa; declare os estados indicados no mesmo componente.
+5. Ajuste o centro, município, filtro de estações, raio e URLs para a área do app de destino. A implementação atual está configurada para Conselheiro Lafaiete/MG.
+6. O RainViewer fornece precipitação observada. CEMADEN são medições pontuais; a superfície interpolada é uma estimativa espacial local e não um radar. GOES mostra nuvens, não confirma chuva no solo.
+
+Não é necessária chave para os endpoints públicos usados neste pacote. O backend atua como proxy dos serviços RainViewer, CEMADEN, Open-Meteo e INMET para evitar chamadas externas diretas do navegador.
+
+============================================================
+1) DEPENDÊNCIAS E IMPORTS DO FRONTEND
+============================================================
+
+Pacotes usados pelas camadas: leaflet, react-leaflet, react.
+Imports React/Leaflet no componente (ajuste ao modo como seu app organiza imports):
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import L from 'leaflet'
+import { MapContainer, TileLayer, Pane, Circle, CircleMarker, Marker, Popup, Tooltip, useMap } from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
+
+Importe no componente o hook e tipo CEMADEN da seção 3. O app original também usa MapContainer, TileLayer, Pane, Circle, CircleMarker, Popup e Tooltip do react-leaflet.
+
+============================================================
+2) TIPOS, CONFIGURAÇÃO E FUNÇÕES DA CAMADA DE CHUVA
+============================================================
+
+interface DadosRadarChuva {
+  host: string
+  path: string
+  tileUrl?: string
+  frameTime: number
+  atualizadoEm: string
+  fonte: string
+  tipoQuadro?: 'observado'
+  cache?: boolean
+  erroAtualizacao?: boolean
+}
+
+const ESTIMATIVA_CEMADEN_RAIO_METROS = 10_000
+const ESTACOES_CEMADEN_VAZIAS: EstacaoCemadenMg[] = []
+const GOES_CLOUD_TILE_URL = String(
+  import.meta.env.VITE_GOES_CLOUD_TILES_URL
+    || 'https://gis.nnvl.noaa.gov/arcgis/rest/services/GOES/GOES_current/ImageServer/tile/{z}/{y}/{x}',
+)
+
+function templateTilesHttpsValido(url: string) {
+  return /^https:\/\//i.test(url) && ['{z}', '{x}', '{y}'].every(token => url.includes(token))
+}
+
+function intensidadeCemaden(valor: number): { cor: string; alpha: number } {
+  if (!Number.isFinite(valor) || valor <= 0) return { cor: '#38bdf8', alpha: 0 }
+  if (valor <= 2) return { cor: '#38bdf8', alpha: 0.46 }
+  if (valor <= 10) return { cor: '#22c55e', alpha: 0.48 }
+  if (valor <= 30) return { cor: '#facc15', alpha: 0.5 }
+  if (valor <= 50) return { cor: '#f97316', alpha: 0.54 }
+  if (valor <= 80) return { cor: '#ef4444', alpha: 0.58 }
+  return { cor: '#a855f7', alpha: 0.62 }
+}
+
+function valorChuvaFormatado(valor: number | null): string {
+  return valor == null || !Number.isFinite(valor)
+    ? 'Sem leitura'
+    : `${valor.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mm`
+}
+
+function valorChuvaMarcadorFormatado(valor: number | null): string {
+  if (valor == null || !Number.isFinite(valor)) return '—'
+  return `${valor.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mm`
+}
+
+// Centro de Conselheiro Lafaiete; zoom 12 enquadra a cidade e suas ruas.
+const CONSELHEIRO_LAFAIETE: [number, number] = [-20.6604, -43.7863]
+// Posição elevada para exibir a temperatura junto ao bairro Jardim dos Cristais,
+// sem cobrir o centro municipal usado pelas outras camadas meteorológicas.
+const POSICAO_TEMPERATURA_LAFAIETE: [number, number] = [-20.635, -43.7869]
+const RAIO_RADAR_CHUVA_METROS = 10_000
+
+function distanciaMetros(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const raioTerra = 6_371_000
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) ** 2
+  return 2 * raioTerra * Math.asin(Math.sqrt(a))
+}
+
+function situacaoChuva(valor: number | null): string {
+  if (valor == null || !Number.isFinite(valor) || valor <= 0) return 'Sem chuva'
+  if (valor <= 2) return 'Fraca'
+  if (valor <= 10) return 'Moderada'
+  if (valor <= 30) return 'Forte'
+  if (valor <= 80) return 'Muito forte'
+  return 'Extrema'
+}
+
+function horaChuva(iso?: string | null): string {
+  if (!iso) return '—'
+  const data = new Date(iso)
+  return Number.isNaN(data.getTime())
+    ? '—'
+    : data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function dataCemadenMapa(valor?: string | null): Date | null {
+  const texto = String(valor || '').trim()
+  if (!texto) return null
+  const brasileiro = texto.match(/^(\d{2})\/(\d{2})\/(\d{2,4})\s+(\d{2}):(\d{2})(?::(\d{2}))?$/)
+  if (brasileiro) {
+    const ano = Number(brasileiro[3].length === 2 ? `20${brasileiro[3]}` : brasileiro[3])
+    const data = new Date(Date.UTC(
+      ano,
+      Number(brasileiro[2]) - 1,
+      Number(brasileiro[1]),
+      Number(brasileiro[4]),
+      Number(brasileiro[5]),
+      Number(brasileiro[6] || 0),
+    ))
+    return Number.isNaN(data.getTime()) ? null : data
+  }
+  const isoSemFuso = texto.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2})?)/)
+  const data = new Date(isoSemFuso ? `${isoSemFuso[1]}T${isoSemFuso[2]}Z` : texto)
+  return Number.isNaN(data.getTime()) ? null : data
+}
+
+function idadeLeituraCemadenHoras(valor?: string | null): number | null {
+  const data = dataCemadenMapa(valor)
+  if (!data) return null
+  return Math.max(0, (Date.now() - data.getTime()) / (60 * 60 * 1000))
+}
+
+function statusLeituraCemaden(valor?: string | null): 'atualizada' | 'atrasada' | 'sem-dados' {
+  const idade = idadeLeituraCemadenHoras(valor)
+  if (idade == null) return 'sem-dados'
+  if (idade <= 1) return 'atualizada'
+  if (idade <= 24) return 'atrasada'
+  return 'sem-dados'
+}
+
+function dataHoraCemadenFormatada(valor?: string | null): string {
+  const data = dataCemadenMapa(valor)
+  return data
+    ? data.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })
+    : valor || 'Sem horário'
+}
+
+function CemadenIntensityLayer({
+  estacoes,
+  opacidade,
+}: {
+  estacoes: EstacaoCemadenMg[]
+  opacidade: number
+}) {
+  const map = useMap()
+
+  useEffect(() => {
+    const canvas = document.createElement('canvas')
+    canvas.className = 'mapa-cemaden-superficie'
+    canvas.setAttribute('aria-hidden', 'true')
+    Object.assign(canvas.style, {
+      position: 'absolute',
+      inset: '0',
+      width: '100%',
+      height: '100%',
+      pointerEvents: 'none',
+      zIndex: '430',
+      opacity: String(opacidade),
+    })
+    map.getContainer().appendChild(canvas)
+    const contexto = canvas.getContext('2d')
+    if (!contexto) return () => canvas.remove()
+
+    const centro = CONSELHEIRO_LAFAIETE
+    const raio = ESTIMATIVA_CEMADEN_RAIO_METROS
+    const pontos = estacoes
+      .filter((estacao) =>
+        Number.isFinite(estacao.latitude) &&
+        Number.isFinite(estacao.longitude) &&
+        Number.isFinite(estacao.precipitacaoAtual) &&
+        (estacao.precipitacaoAtual || 0) >= 0 &&
+        distanciaMetros(
+          centro[0],
+          centro[1],
+          estacao.latitude as number,
+          estacao.longitude as number,
+        ) <= raio &&
+        statusLeituraCemaden(estacao.precipitacaoDataHora) === 'atualizada',
+      )
+      .map((estacao) => ({
+        lat: estacao.latitude as number,
+        lng: estacao.longitude as number,
+        valor: estacao.precipitacaoAtual as number,
+      }))
+    const passos = 72
+
+    const desenhar = () => {
+      const tamanho = map.getSize()
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      canvas.width = Math.max(1, Math.round(tamanho.x * dpr))
+      canvas.height = Math.max(1, Math.round(tamanho.y * dpr))
+      contexto.setTransform(dpr, 0, 0, dpr, 0, 0)
+      contexto.clearRect(0, 0, tamanho.x, tamanho.y)
+      // Não invente uma superfície contínua com menos de três leituras atuais.
+      if (pontos.length < 3) return
+
+      const deltaLat = raio / 111_320
+      const deltaLng = raio / (111_320 * Math.cos(centro[0] * Math.PI / 180))
+      const noroeste = map.latLngToContainerPoint([centro[0] + deltaLat, centro[1] - deltaLng])
+      const sudeste = map.latLngToContainerPoint([centro[0] - deltaLat, centro[1] + deltaLng])
+      const largura = sudeste.x - noroeste.x
+      const altura = sudeste.y - noroeste.y
+      if (largura <= 0 || altura <= 0) return
+
+      const centroTela = map.latLngToContainerPoint(centro)
+      const bordaTela = map.latLngToContainerPoint([centro[0] + deltaLat, centro[1]])
+      const raioTela = Math.abs(centroTela.y - bordaTela.y)
+      contexto.save()
+      contexto.beginPath()
+      contexto.arc(centroTela.x, centroTela.y, raioTela, 0, Math.PI * 2)
+      contexto.clip()
+
+      const larguraCelula = largura / passos + 1
+      const alturaCelula = altura / passos + 1
+      for (let y = 0; y < passos; y += 1) {
+        for (let x = 0; x < passos; x += 1) {
+          const lat = centro[0] + deltaLat * (1 - (y + 0.5) * 2 / passos)
+          const lng = centro[1] + deltaLng * ((x + 0.5) * 2 / passos - 1)
+          let numerador = 0
+          let denominador = 0
+          for (const ponto of pontos) {
+            const distancia = distanciaMetros(lat, lng, ponto.lat, ponto.lng)
+            if (distancia < 1) {
+              numerador = ponto.valor
+              denominador = 1
+              break
+            }
+            const peso = 1 / (distancia * distancia)
+            numerador += ponto.valor * peso
+            denominador += peso
+          }
+          const valor = denominador > 0 ? numerador / denominador : 0
+          const estilo = intensidadeCemaden(valor)
+          if (estilo.alpha === 0) continue
+          contexto.globalAlpha = estilo.alpha
+          contexto.fillStyle = estilo.cor
+          contexto.fillRect(
+            noroeste.x + x * largura / passos,
+            noroeste.y + y * altura / passos,
+            larguraCelula,
+            alturaCelula,
+          )
+        }
+      }
+      contexto.restore()
+      contexto.globalAlpha = 1
+    }
+
+    let frame = 0
+    const agendarDesenho = () => {
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(desenhar)
+    }
+    map.on('move zoom resize', agendarDesenho)
+    agendarDesenho()
+    return () => {
+      window.cancelAnimationFrame(frame)
+      map.off('move zoom resize', agendarDesenho)
+      canvas.remove()
+    }
+  }, [estacoes, map, opacidade])
+
+  return null
+}
+
+============================================================
+3) HOOK FRONTEND PARA ESTAÇÕES CEMADEN
+Arquivo original: src/meteorologiaMapa.tsx
+============================================================
+
+import { useCallback, useEffect, useState } from 'react'
+import { useMap, useMapEvents } from 'react-leaflet'
+import type { Map as LeafletMap } from 'leaflet'
+
+export const MINAS_GERAIS_BOUNDS: [[number, number], [number, number]] = [
+  [-22.92, -51.05],
+  [-14.22, -39.85],
+]
+
+export interface EstacaoCemadenMg {
+  id: number
+  nome: string
+  municipio: string
+  codigo: string
+  latitude: number | null
+  longitude: number | null
+  precipitacaoAtual: number | null
+  precipitacaoDataHora: string
+}
+
+export interface DadosCemadenMg {
+  sucesso: true
+  estacoes: EstacaoCemadenMg[]
+  totalEstacoes: number
+  estacoesGeorreferenciadas: number
+  estacoesSemCoordenadas: number
+  atualizadoEm: string
+  fonte: string
+}
+
+function numeroOuNulo(valor: unknown): number | null {
+  if (valor == null || valor === '') return null
+  const numero = Number(valor)
+  return Number.isFinite(numero) ? numero : null
+}
+
+export function useEstacoesCemadenMg(habilitado: boolean) {
+  const [dados, setDados] = useState<DadosCemadenMg | null>(null)
+  const [carregando, setCarregando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  const carregar = useCallback(async () => {
+    if (!habilitado) return
+    setCarregando(true)
+    try {
+      const resposta = await fetch(`/api/monitoramento-mg?_ts=${Date.now()}`, { cache: 'no-store' })
+      const corpo = await resposta.json().catch(() => ({}))
+      if (!resposta.ok || corpo?.sucesso !== true || !Array.isArray(corpo?.estacoes)) {
+        throw new Error(typeof corpo?.erro === 'string' ? corpo.erro : 'Estações CEMADEN de Minas Gerais indisponíveis')
+      }
+      const estacoes = corpo.estacoes.map((estacao: Record<string, unknown>) => ({
+        id: Number(estacao.id),
+        nome: String(estacao.nome || ''),
+        municipio: String(estacao.municipio || ''),
+        codigo: String(estacao.codigo || ''),
+        latitude: numeroOuNulo(estacao.latitude),
+        longitude: numeroOuNulo(estacao.longitude),
+        precipitacaoAtual: numeroOuNulo(estacao.precipitacaoAtual),
+        precipitacaoDataHora: String(estacao.precipitacaoDataHora || ''),
+      })).filter((estacao: EstacaoCemadenMg) => Number.isFinite(estacao.id))
+
+      setDados({
+        sucesso: true,
+        estacoes,
+        totalEstacoes: Number(corpo.totalEstacoes) || estacoes.length,
+        estacoesGeorreferenciadas: Number(corpo.estacoesGeorreferenciadas) || estacoes.filter(
+          estacao => estacao.latitude != null && estacao.longitude != null,
+        ).length,
+        estacoesSemCoordenadas: Number(corpo.estacoesSemCoordenadas) || 0,
+        atualizadoEm: String(corpo.atualizadoEm || ''),
+        fonte: String(corpo.fonte || 'CEMADEN'),
+      })
+      setErro('')
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : 'Estações CEMADEN de Minas Gerais indisponíveis')
+    } finally {
+      setCarregando(false)
+    }
+  }, [habilitado])
+
+  useEffect(() => {
+    if (!habilitado) return
+    void carregar()
+    const intervalo = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void carregar()
+    }, 5 * 60 * 1000)
+    return () => window.clearInterval(intervalo)
+  }, [habilitado, carregar])
+
+  return { dados, carregando, erro, atualizar: carregar }
+}
+
+export function CapturaEstadoMapa({
+  referencia,
+  aoMudarZoom,
+}: {
+  referencia: { current: LeafletMap | null }
+  aoMudarZoom: (zoom: number) => void
+}) {
+  const mapaAtual = useMap()
+  useMapEvents({
+    zoomend: () => aoMudarZoom(mapaAtual.getZoom()),
+  })
+
+  useEffect(() => {
+    referencia.current = mapaAtual
+    return () => {
+      if (referencia.current === mapaAtual) referencia.current = null
+    }
+  }, [mapaAtual, referencia])
+
+  return null
+}
+
+============================================================
+4) ESTADO, FILTRO DE ESTAÇÕES, CONSULTA DO RADAR E ESTIMATIVA
+Coloque dentro do componente React do mapa. Inclua os imports de React citados acima.
+============================================================
+
+// Estados relacionados à camada (extraídos do componente original):
+  const [mostrarChuva, setMostrarChuva] = useState(false)
+  const [mostrarNuvens, setMostrarNuvens] = useState(false)
+  const [painelChuvaAberto, setPainelChuvaAberto] = useState(false)
+  const [radarChuva, setRadarChuva] = useState<DadosRadarChuva | null>(null)
+  const [radarChuvaCarregando, setRadarChuvaCarregando] = useState(false)
+  const [radarChuvaErro, setRadarChuvaErro] = useState<string | null>(null)
+  const [mostrarIntensidadeCemaden, setMostrarIntensidadeCemaden] = useState(false)
+  const [opacidadeRadar, setOpacidadeRadar] = useState(0.72)
+  const [opacidadeCemaden, setOpacidadeCemaden] = useState(0.52)
+  const [zoomMapa, setZoomMapa] = useState(12)
+  const mapaLeafletRef = useRef<L.Map | null>(null)
+
+// Consulta CEMADEN e filtra as estações locais georreferenciadas:
+  const cemadenMg = useEstacoesCemadenMg(mostrarChuva || mostrarIntensidadeCemaden || painelChuvaAberto)
+  const estacoesCemaden = cemadenMg.dados?.estacoes ?? ESTACOES_CEMADEN_VAZIAS
+  const estacoesCemadenLafaiete = useMemo(
+    () => estacoesCemaden.filter(estacao => /conselheiro\s+lafaiete/i.test(estacao.municipio)),
+    [estacoesCemaden],
+  )
+  const estacoesCemadenLafaieteGeorreferenciadas = useMemo(
+    () => estacoesCemadenLafaiete.filter(estacao => estacao.latitude != null && estacao.longitude != null),
+    [estacoesCemadenLafaiete],
+  )
+  const estacoesCemadenLafaieteSemCoordenadas = estacoesCemadenLafaiete.length - estacoesCemadenLafaieteGeorreferenciadas.length
+  const cemadenAtualizadoEm = cemadenMg.dados?.atualizadoEm || null
+  const cemadenCarregando = cemadenMg.carregando
+  const cemadenErro = cemadenMg.erro || null
+
+// Consulta RainViewer e atualiza a cada 3 min enquanto a camada está ativa:
+  // ── Chuva ao vivo — RainViewer + estimativa interpolada CEMADEN ──
+  const buscarRadarChuva = useCallback(async () => {
+    setRadarChuvaCarregando(true)
+    setRadarChuvaErro(null)
+    try {
+      const respostaRadar = await fetch(`/api/radar-chuva?_ts=${Date.now()}`, { cache: 'no-store' })
+      if (!respostaRadar.ok) throw new Error('Radar indisponível')
+
+      const dadosRadar = await respostaRadar.json()
+      setRadarChuva({
+        host: typeof dadosRadar?.host === 'string' ? dadosRadar.host : '',
+        path: typeof dadosRadar?.path === 'string' ? dadosRadar.path : '',
+        tileUrl: typeof dadosRadar?.tileUrl === 'string' ? dadosRadar.tileUrl : undefined,
+        frameTime: Number(dadosRadar?.frameTime),
+        atualizadoEm: typeof dadosRadar?.atualizadoEm === 'string' ? dadosRadar.atualizadoEm : '',
+        fonte: typeof dadosRadar?.fonte === 'string' ? dadosRadar.fonte : 'RainViewer',
+         tipoQuadro: 'observado',
+        cache: dadosRadar?.cache === true,
+        erroAtualizacao: dadosRadar?.erroAtualizacao === true,
+      })
+
+    } catch {
+      setRadarChuvaErro('Não foi possível atualizar o radar agora.')
+    } finally {
+      setRadarChuvaCarregando(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!mostrarChuva) return
+    buscarRadarChuva()
+    const intervalo = setInterval(buscarRadarChuva, 3 * 60 * 1000)
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === 'visible') buscarRadarChuva()
+    }
+    document.addEventListener('visibilitychange', atualizarAoVoltar)
+    return () => {
+      clearInterval(intervalo)
+      document.removeEventListener('visibilitychange', atualizarAoVoltar)
+    }
+  }, [mostrarChuva, buscarRadarChuva])
+
+// Maior leitura recente dentro do raio local, para o resumo da UI:
+  const intensidadeEstimada = useMemo(() => {
+    const valores = estacoesCemadenLafaiete
+      .filter(estacao =>
+        estacao.latitude != null &&
+        estacao.longitude != null &&
+        distanciaMetros(
+          CONSELHEIRO_LAFAIETE[0],
+          CONSELHEIRO_LAFAIETE[1],
+          estacao.latitude,
+          estacao.longitude,
+        ) <= ESTIMATIVA_CEMADEN_RAIO_METROS &&
+        statusLeituraCemaden(estacao.precipitacaoDataHora) === 'atualizada',
+      )
+      .map(estacao => estacao.precipitacaoAtual)
+      .filter((valor): valor is number => Number.isFinite(valor))
+    return valores.length > 0 ? Math.max(...valores) : null
+  }, [estacoesCemadenLafaiete])
+
+============================================================
+5) BOTÃO E CONTROLES DA CAMADA CHUVA
+Trechos para a barra de camadas e o painel de configuração.
+============================================================
+
+// Botão para alternar a camada e abrir o painel; o wrapper fecha depois do painel:
+        <div className="mapa-chuva-wrap">
+          <button
+            className={`mapa-camada-btn mapa-chuva-btn ${mostrarChuva ? 'ativo' : ''}`}
+            onClick={() => {
+              const proximoEstado = !mostrarChuva
+              setMostrarChuva(proximoEstado)
+              setPainelChuvaAberto(proximoEstado)
+            }}
+            aria-pressed={mostrarChuva}
+            title="Mostrar radar de chuva ao vivo em Conselheiro Lafaiete"
+          >
+            🌧️ Chuva
+          </button>
+
+// Seleção RainViewer, GOES e CEMADEN:
+              <div className="mapa-chuva-fontes">
+                <button
+                  className={`mapa-chuva-fonte-btn ${mostrarNuvens ? 'ativo' : ''}`}
+                  onClick={() => setMostrarNuvens(v => !v)}
+                  aria-pressed={mostrarNuvens}
+                  disabled={!templateTilesHttpsValido(GOES_CLOUD_TILE_URL)}
+                  title="Imagem infravermelha de nuvens do satélite NOAA GOES; não mede chuva"
+                >
+                  ☁️ Nuvens GOES
+                </button>
+                <span>NOAA · imagem infravermelha com resolução aproximada de 5 km; mostra nuvens, não confirma precipitação</span>
+              </div>
+              <div className="mapa-chuva-fontes">
+                <button
+                  className={`mapa-chuva-fonte-btn ${mostrarIntensidadeCemaden ? 'ativo' : ''}`}
+                  onClick={() => setMostrarIntensidadeCemaden(v => !v)}
+                  aria-pressed={mostrarIntensidadeCemaden}
+                >
+                  🌧️ CEMADEN · Lafaiete
+                </button>
+                <span>
+                  {cemadenMg.dados
+                    ? `${estacoesCemadenLafaieteGeorreferenciadas.length} estação(ões) do município · acumulado na última hora`
+                    : 'Leituras oficiais de Conselheiro Lafaiete · acumulado na última hora (mm)'}
+                </span>
+              </div>
+
+// Carregamento/erro e resumo Radar/CEMADEN:
+              {radarChuvaCarregando && !radarChuva && (
+                <div className="mapa-chuva-status">⏳ Carregando o último quadro do radar…</div>
+              )}
+              {radarChuvaErro && (
+                <div className="mapa-chuva-status mapa-chuva-status--erro">{radarChuvaErro}</div>
+              )}
+              <div className="mapa-chuva-resumo">
+                <div>
+                  <span className="mapa-chuva-resumo-label">Radar</span>
+                  <strong>
+                    {radarChuva ? horaChuva(radarChuva.atualizadoEm) : '—'}
+                    <small className="mapa-chuva-quadro-tipo">RainViewer · horário de geração do quadro</small>
+                  </strong>
+                </div>
+                <div>
+                  <span className="mapa-chuva-resumo-label">CEMADEN</span>
+                  <strong>
+                    {horaChuva(cemadenAtualizadoEm)}
+                    <small className="mapa-chuva-quadro-tipo">última atualização</small>
+                  </strong>
+                </div>
+                
+                <div>
+                  <span className="mapa-chuva-resumo-label">Maior leitura (1h)</span>
+                  <strong className={intensidadeEstimada && intensidadeEstimada > 0 ? 'chovendo' : ''}>
+                    {valorChuvaFormatado(intensidadeEstimada)}
+                    <small className="mapa-chuva-quadro-tipo">{situacaoChuva(intensidadeEstimada)}</small>
+                  </strong>
+                </div>
+              </div>
+
+// Legenda de intensidade (usa as classes CSS da seção 7):
+<div className="mapa-chuva-legenda">
+  <span><i className="chuva-cor chuva-cor--fraca" /> fraca</span>
+  <span><i className="chuva-cor chuva-cor--moderada" /> moderada</span>
+  <span><i className="chuva-cor chuva-cor--forte" /> forte</span>
+  <span><i className="chuva-cor chuva-cor--muito-forte" /> muito forte</span>
+  <span><i className="chuva-cor chuva-cor--intensa" /> intensa</span>
+  <span><i className="chuva-cor chuva-cor--extrema" /> extrema</span>
+</div>
+
+============================================================
+6) CAMADAS PARA INSERIR DENTRO DO <MapContainer>
+============================================================
+
+// GOES: imagem infravermelha de nuvens (opcional, não é precipitação medida):
+        {mostrarNuvens && templateTilesHttpsValido(GOES_CLOUD_TILE_URL) && (
+          <Pane name="mapaGoesNuvens" style={{ zIndex: 410 }}>
+            <TileLayer
+              key={`mapa-goes-nuvens-${GOES_CLOUD_TILE_URL}`}
+              url={GOES_CLOUD_TILE_URL}
+              opacity={0.5}
+              maxNativeZoom={8}
+              maxZoom={19}
+              attribution='Cloud imagery &copy; <a href="https://gis.nnvl.noaa.gov/arcgis/rest/services/GOES/GOES_current/ImageServer" target="_blank" rel="noreferrer">NOAA GOES</a>'
+              updateWhenZooming={false}
+              updateWhenIdle={true}
+            />
+          </Pane>
+        )}
+
+// Radar RainViewer, superfície interpolada CEMADEN e marcadores das estações:
+        {mostrarChuva && radarChuva && (
+          <Pane name="radarRainViewerPane" style={{ zIndex: 420 }}>
+            <TileLayer
+              key={`radar-chuva-${radarChuva.frameTime}`}
+              url={radarChuva.tileUrl || `${radarChuva.host}${radarChuva.path}/256/{z}/{x}/{y}/2/1_0.png`}
+              opacity={opacidadeRadar}
+              attribution='Weather data by <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">RainViewer</a>'
+              maxNativeZoom={7}
+              maxZoom={19}
+              tileSize={256}
+              updateWhenZooming={false}
+              updateWhenIdle={true}
+            />
+          </Pane>
+        )}
+        {mostrarIntensidadeCemaden && zoomMapa >= 9 && (
+          <CemadenIntensityLayer estacoes={estacoesCemadenLafaiete} opacidade={opacidadeCemaden} />
+        )}
+        {mostrarChuva && (
+          <Pane name="mapaEstacoesCemaden" style={{ zIndex: 450 }}>
+            {estacoesCemadenLafaieteGeorreferenciadas.map(estacao => {
+                const estadoLeitura = statusLeituraCemaden(estacao.precipitacaoDataHora)
+                const cor = estadoLeitura === 'atualizada'
+                  ? intensidadeCemaden(estacao.precipitacaoAtual ?? 0).cor
+                  : '#94a3b8'
+                return (
+                  <CircleMarker
+                    key={`cemaden-estacao-${estacao.id}`}
+                    center={[estacao.latitude!, estacao.longitude!]}
+                    radius={zoomMapa < 8 ? 2.5 : zoomMapa < 11 ? 4 : 8}
+                    pathOptions={{
+                      color: '#ffffff',
+                      weight: 2,
+                      fillColor: cor,
+                      fillOpacity: 0.95,
+                    }}
+                  >
+                    {zoomMapa >= 11 && (
+                      <Tooltip
+                        permanent
+                        direction="top"
+                        offset={[0, -7]}
+                        opacity={0.96}
+                        className="mapa-cemaden-mg-tooltip"
+                      >
+                        {valorChuvaMarcadorFormatado(estacao.precipitacaoAtual ?? 0)}
+                      </Tooltip>
+                    )}
+                    <Popup>
+                      <div style={{ minWidth: 190, fontFamily: 'inherit' }}>
+                        <strong style={{ display: 'block', marginBottom: 4 }}>
+                          🌧️ {estacao.nome || 'Estação CEMADEN'}
+                        </strong>
+                        {estacao.municipio && (
+                          <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: 3 }}>
+                            {estacao.municipio} · Minas Gerais
+                          </div>
+                        )}
+                        <div style={{ fontSize: '0.8rem', color: '#374151', marginBottom: 3 }}>
+                          <strong>Última hora:</strong> {valorChuvaFormatado(estacao.precipitacaoAtual)}
+                        </div>
+                        <div style={{ fontSize: '0.76rem', color: estadoLeitura === 'atualizada' ? '#166534' : '#b45309', marginBottom: 3 }}>
+                          {estadoLeitura === 'atualizada'
+                            ? situacaoChuva(estacao.precipitacaoAtual)
+                            : estadoLeitura === 'atrasada' ? 'Leitura atrasada' : 'Sem dados recentes'}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#6b7280' }}>
+                          Leitura: {dataHoraCemadenFormatada(estacao.precipitacaoDataHora)} · CEMADEN
+                        </div>
+                        {estacao.codigo && (
+                          <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: 3 }}>
+                            Estação {estacao.codigo}
+                          </div>
+                        )}
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                )
+            })}
+          </Pane>
+        )}
+
+// Círculo de observação local de 10 km e seu marcador central:
+        {mostrarChuva && zoomMapa >= 9 && (
+          <Circle
+            center={CONSELHEIRO_LAFAIETE}
+            radius={RAIO_RADAR_CHUVA_METROS}
+            pathOptions={{
+              color: '#1d4ed8',
+              weight: 2,
+              opacity: 0.95,
+              dashArray: '7 5',
+              fillColor: '#60a5fa',
+              fillOpacity: 0.04,
+            }}
+          >
+            <Popup>
+              <strong>Área de observação da chuva</strong>
+              <br />
+              Raio de 10 km a partir do centro de Conselheiro Lafaiete
+            </Popup>
+          </Circle>
+        )}
+        {mostrarChuva && zoomMapa >= 9 && (
+          <CircleMarker
+            center={CONSELHEIRO_LAFAIETE}
+            radius={5}
+            pathOptions={{
+              color: '#0f172a',
+              weight: 2,
+              fillColor: '#f8fafc',
+              fillOpacity: 1,
+            }}
+          >
+            <Popup>
+              <strong>Centro da área de observação</strong>
+              <br />
+              Conselheiro Lafaiete — raio de 10 km
+            </Popup>
+          </CircleMarker>
+        )}
+
+============================================================
+7) ESTILOS DA INTERFACE E MARCADORES
+============================================================
+
+.mapa-camadas .mapa-camada-btn {
+  padding: 0.28rem 0.46rem;
+  font-size: 0.68rem;
+}
+
+.mapa-camada-btn {
+  border: none;
+  border-radius: 18px;
+  background: transparent;
+  color: #374151;
+  padding: 0.34rem 0.7rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mapa-camada-btn.ativo {
+  background: #1a4b8c;
+  color: white;
+}
+
+.mapa-camada-btn:not(.ativo):hover {
+  background: #f3f4f6;
+}
+
+.mapa-chuva-wrap {
+  position: relative;
+}
+
+.mapa-chuva-btn.ativo {
+  background: #0369a1;
+}
+
+.mapa-chuva-painel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(330px, calc(100vw - 18px));
+  background: white;
+  border-radius: 11px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.25);
+  max-height: calc(100vh - 110px);
+  max-height: calc(100dvh - 110px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: #1f2937;
+  z-index: 800;
+}
+
+.mapa-chuva-painel-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.48rem 0.58rem;
+  color: white;
+  background: linear-gradient(135deg, #075985, #0284c7);
+}
+
+.mapa-chuva-painel-header strong,
+.mapa-chuva-painel-header span {
+  display: block;
+}
+
+.mapa-chuva-painel-header strong {
+  font-size: 0.72rem;
+}
+
+.mapa-chuva-painel-header span {
+  margin-top: 2px;
+  font-size: 0.5rem;
+  opacity: 0.88;
+}
+
+.mapa-chuva-painel-header button {
+  flex-shrink: 0;
+  border: none;
+  background: rgba(255,255,255,0.18);
+  color: white;
+  border-radius: 6px;
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
+}
+
+.mapa-raios-painel-header .mapa-chuva-fonte-btn {
+  flex-shrink: 0;
+  padding: 0.18rem 0.3rem;
+  font-size: 0.5rem;
+}
+
+.mapa-chuva-fontes {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+.mapa-chuva-fonte-btn {
+  border: 1px solid #bae6fd;
+  border-radius: 5px;
+  padding: 0.2rem 0.35rem;
+  background: white;
+  color: #075985;
+  font-size: 0.58rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mapa-chuva-fonte-btn.ativo {
+  background: #075985;
+  color: white;
+}
+
+.mapa-chuva-fonte-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.mapa-chuva-fontes > span {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 0.52rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mapa-chuva-opacidades {
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.35rem 0.5rem 0.25rem;
+  border-top: 1px solid #f1f5f9;
+  color: #475569;
+  font-size: 0.5rem;
+}
+
+.mapa-chuva-opacidades label {
+  display: grid;
+  grid-template-columns: 54px 1fr 30px;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.mapa-chuva-opacidades input[type="range"] {
+  width: 100%;
+  accent-color: #0369a1;
+}
+
+.mapa-chuva-opacidades output {
+  text-align: right;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.mapa-chuva-status {
+  padding: 0.58rem;
+  font-size: 0.62rem;
+  color: #475569;
+  text-align: center;
+}
+
+.mapa-chuva-status--erro {
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.mapa-chuva-resumo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: #e5e7eb;
+}
+
+.mapa-chuva-resumo > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.48rem 0.5rem;
+  background: white;
+}
+
+.mapa-chuva-resumo-label {
+  color: #64748b;
+  font-size: 0.52rem;
+}
+
+.mapa-chuva-resumo strong {
+  color: #334155;
+  font-size: 0.65rem;
+}
+
+.mapa-chuva-resumo strong.chovendo {
+  color: #0369a1;
+}
+
+.mapa-cemaden-superficie {
+  mix-blend-mode: multiply;
+}
+
+.mapa-chuva-estacao-tooltip {
+  border: 1px solid rgba(15, 23, 42, 0.12) !important;
+  border-radius: 999px !important;
+  padding: 0.16rem 0.34rem !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+  box-shadow: 0 1px 5px rgba(15, 23, 42, 0.3) !important;
+  color: #0f172a !important;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1.15;
+  text-shadow: none;
+  white-space: nowrap;
+}
+
+.mapa-chuva-estacao-tooltip::before {
+  display: none;
+}
+
+.mapa-chuva-estacao-tooltip--indisponivel {
+  background: #f1f5f9 !important;
+  color: #64748b !important;
+  font-size: 0.58rem;
+}
+
+.mapa-cemaden-mg-tooltip {
+  border: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #f97316 !important;
+  font-size: 0.62rem;
+  font-weight: 900;
+  line-height: 1.1;
+  text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
+  white-space: nowrap;
+}
+
+.mapa-cemaden-mg-tooltip::before {
+  display: none;
+}
+
+.mapa-chuva-ponto-fonte {
+  color: #94a3b8;
+  font-size: 0.44rem;
+  line-height: 1.1;
+}
+
+.mapa-chuva-quadro-tipo {
+  display: block;
+  margin-top: 0.1rem;
+  color: #64748b;
+  font-size: 0.44rem;
+  font-weight: 500;
+}
+
+.mapa-chuva-legenda {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.4rem;
+  padding: 0.38rem 0.5rem 0.2rem;
+  font-size: 0.54rem;
+  color: #475569;
+}
+
+.mapa-chuva-legenda span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+}
+
+.chuva-cor {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+}
+
+.chuva-cor--fraca { background: #67e8f9; }
+
+.chuva-cor--moderada { background: #22c55e; }
+
+.chuva-cor--forte { background: #facc15; }
+
+.chuva-cor--muito-forte { background: #f97316; }
+
+.chuva-cor--intensa { background: #ef4444; }
+
+.chuva-cor--extrema { background: #c026d3; }
+
+.mapa-chuva-ajuda {
+  margin: 0.25rem 0.5rem 0.35rem;
+  color: #64748b;
+  font-size: 0.54rem;
+  line-height: 1.35;
+}
+
+.mapa-chuva-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem;
+  border-top: 1px solid #e5e7eb;
+  color: #94a3b8;
+  font-size: 0.5rem;
+}
+
+.mapa-chuva-rodape button {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0.2rem 0.32rem;
+  background: white;
+  color: #0369a1;
+  font-size: 0.54rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mapa-chuva-rodape button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.mapa-camadas > .mapa-camada-btn,
+  .mapa-camadas > .mapa-chuva-wrap,
+  .mapa-camadas > .mapa-ocorr-wrap,
+  .mapa-camadas > .mapa-incendios-wrap {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+.mapa-camadas .mapa-camada-btn {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0.22rem 0.1rem;
+    font-size: 0.55rem;
+    letter-spacing: -0.01em;
+  }
+
+.mapa-camadas .mapa-chuva-wrap,
+  .mapa-camadas .mapa-ocorr-wrap,
+  .mapa-camadas .mapa-incendios-wrap {
+    display: flex;
+  }
+
+.mapa-camadas .mapa-chuva-wrap > .mapa-camada-btn,
+  .mapa-camadas .mapa-ocorr-wrap > .mapa-camada-btn,
+  .mapa-camadas .mapa-incendios-wrap > .mapa-camada-btn {
+    flex: 1;
+  }
+
+.mapa-chuva-painel {
+    position: fixed;
+    top: 94px;
+    top: calc(env(safe-area-inset-top, 0px) + 94px);
+    left: auto;
+    right: 10px;
+    transform: none;
+    width: min(340px, calc(100vw - 20px));
+    max-height: min(50vh, calc(100vh - 116px));
+    max-height: min(
+      50dvh,
+      calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 116px)
+    );
+  }
+
+============================================================
+8) BACKEND EXPRESS — CEMADEN E RAINVIEWER
+============================================================
+
+Cole as constantes, funções auxiliares e rotas no servidor Express já existente. O objeto app deve ser uma instância de express() e o runtime deve fornecer fetch e AbortSignal.timeout.
+
+const CNL_CATALOGO_URL = 'https://resources.cemaden.gov.br/graficos/interativo/getJson2.php?uf=MG'
+const CNL_RECURSOS_URL = 'https://mapservices.cemaden.gov.br/MapaInterativoWS/resources'
+const CNL_GEOGRAFIA_MG_URL = 'https://observatorio.infraestrutura.mg.gov.br/server/rest/services/00_PUBLICACOES/cemaden_estacoes_pluviometricas/MapServer/1/query?where=uf%3D%27MG%27&outFields=idestacao%2Ccodestacao%2Clatitude%2Clongitude%2Ccidade%2Cnomeestacao&returnGeometry=false&resultRecordCount=2000&f=json'
+let monitoramentoMgCache = null
+let monitoramentoMgCacheTs = 0
+const MONITORAMENTO_MG_TTL_MS = 5 * 60 * 1000
+
+function numeroCemaden(valor) {
+  if (valor == null || valor === '') return null
+  const numero = Number(valor)
+  return Number.isFinite(numero) && valor !== '-' ? numero : null
+}
+
+function horaCemadenParaNumero(valor) {
+  const match = String(valor || '').match(/^(\d{1,2})h$/)
+  return match ? Number(match[1]) : null
+}
+
+function extrairPontosChuvaCnl(payload) {
+  const horarios = Array.isArray(payload?.horarios) ? payload.horarios : []
+  const datas = Array.isArray(payload?.datas) ? payload.datas : []
+  const acumulados = Array.isArray(payload?.acumulados) ? payload.acumulados : []
+  const pontos = []
+
+  acumulados.forEach((linha, indiceData) => {
+    if (!Array.isArray(linha)) return
+    linha.forEach((valor, indiceHora) => {
+      const numero = numeroCemaden(valor)
+      const data = String(datas[indiceData] || '')
+      const hora = String(horarios[indiceHora] || '')
+      const horaNumero = horaCemadenParaNumero(hora)
+      if (numero == null || !data || horaNumero == null) return
+      pontos.push({
+        data,
+        hora,
+        valor: numero,
+        dataHora: `${data} ${hora}`,
+        dataHoraMs: dataCemadenParaMs(`${data} ${String(horaNumero).padStart(2, '0')}:00`),
+      })
+    })
+  })
+  return pontos.sort((a, b) => a.dataHoraMs - b.dataHoraMs)
+}
+
+function dataHoraPontoChuvaCnl(ponto) {
+  if (!ponto) return ''
+  const hora = horaCemadenParaNumero(ponto.hora)
+  if (hora == null || !/^\d{2}\/\d{2}\/\d{4}$/.test(String(ponto.data || ''))) return ''
+  return `${ponto.data} ${String(hora).padStart(2, '0')}:00`
+}
+
+function dataCemadenParaMs(valor) {
+  const texto = String(valor || '').trim()
+  const brasileiro = texto.match(/^(\d{2})\/(\d{2})\/(\d{2,4})\s+(\d{2}):(\d{2})/)
+  if (brasileiro) {
+    const ano = Number(brasileiro[3].length === 2 ? `20${brasileiro[3]}` : brasileiro[3])
+    return Date.UTC(ano, Number(brasileiro[2]) - 1, Number(brasileiro[1]), Number(brasileiro[4]), Number(brasileiro[5]))
+  }
+  const isoSemFuso = texto.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2})?)/)
+  if (isoSemFuso) return Date.parse(`${isoSemFuso[1]}T${isoSemFuso[2]}Z`)
+  return Date.parse(texto)
+}
+
+app.get('/api/monitoramento-mg', async (_req, res) => {
+  const agora = Date.now()
+  if (monitoramentoMgCache && agora - monitoramentoMgCacheTs < MONITORAMENTO_MG_TTL_MS) {
+    return res.json({ ...monitoramentoMgCache, cache: true })
+  }
+
+  const controlador = new AbortController()
+  const timeout = setTimeout(() => controlador.abort(), 15000)
+  try {
+    const [catalogoResposta, geografiaResposta] = await Promise.all([
+      fetch(CNL_CATALOGO_URL, {
+        signal: controlador.signal,
+        headers: { 'User-Agent': 'CODAP/1.0 (Minas Gerais)' },
+      }),
+      fetch(CNL_GEOGRAFIA_MG_URL, {
+        signal: controlador.signal,
+        headers: { 'User-Agent': 'CODAP/1.0 (Minas Gerais)', Accept: 'application/json' },
+      }),
+    ])
+    if (!catalogoResposta.ok) throw new Error(`CEMADEN respondeu ${catalogoResposta.status}`)
+    if (!geografiaResposta.ok) throw new Error(`Localização das estações respondeu ${geografiaResposta.status}`)
+
+    const [catalogo, geografia] = await Promise.all([
+      catalogoResposta.json(),
+      geografiaResposta.json(),
+    ])
+    if (!Array.isArray(catalogo) || !Array.isArray(geografia?.features)) {
+      throw new Error('Formato inesperado no catálogo de estações de Minas Gerais')
+    }
+
+    const coordenadasPorId = new Map(
+      geografia.features.map((feature) => {
+        const item = feature?.attributes || {}
+        return [Number(item.idestacao), item]
+      }).filter(([id]) => Number.isFinite(id)),
+    )
+    const catalogoMg = catalogo.filter((item) => String(item?.uf || '').toUpperCase() === 'MG')
+    const estacoesLafaiete = catalogoMg.filter((item) =>
+      /conselheiro\s+lafaiete/i.test(String(item?.cidade || '')),
+    )
+    const respostasChuva = await Promise.allSettled(
+      estacoesLafaiete.map(async (item) => {
+        const id = Number(item?.idestacao)
+        const resposta = await fetch(`${CNL_RECURSOS_URL}/horario/${id}/96`, {
+          signal: controlador.signal,
+          headers: { 'User-Agent': 'CODAP/1.0 (Conselheiro Lafaiete, MG)' },
+        })
+        if (!resposta.ok) throw new Error(`estação ${id} respondeu ${resposta.status}`)
+        const payload = await resposta.json()
+        return { id, ultimaLeitura: extrairPontosChuvaCnl(payload).at(-1) || null }
+      }),
+    )
+    const chuvaPorEstacao = new Map()
+    respostasChuva.forEach((resultado) => {
+      if (resultado.status === 'fulfilled') {
+        chuvaPorEstacao.set(resultado.value.id, resultado.value.ultimaLeitura)
+      }
+    })
+    const estacoes = catalogoMg.map((item) => {
+      const localizacao = coordenadasPorId.get(Number(item?.idestacao)) || {}
+      const chuvaCatalogo = numeroCemaden(item?.acc1hr)
+      const ultimaChuva = chuvaPorEstacao.get(Number(item?.idestacao))
+      return {
+        id: Number(item?.idestacao),
+        nome: String(item?.nomeestacao || localizacao.nomeestacao || ''),
+        municipio: String(item?.cidade || localizacao.cidade || ''),
+        codigo: String(localizacao.codestacao || ''),
+        latitude: numeroCemaden(localizacao.latitude),
+        longitude: numeroCemaden(localizacao.longitude),
+        precipitacaoAtual: chuvaCatalogo ?? ultimaChuva?.valor ?? null,
+        precipitacaoDataHora: chuvaCatalogo != null
+          ? String(item?.datahoraUltimovalor || '')
+          : dataHoraPontoChuvaCnl(ultimaChuva) || String(item?.datahoraUltimovalor || ''),
+      }
+    })
+    const estacoesGeorreferenciadas = estacoes.filter(
+      (estacao) => estacao.latitude != null && estacao.longitude != null,
+    ).length
+    if (estacoesGeorreferenciadas === 0) {
+      throw new Error('Nenhuma estação do catálogo atual pôde ser posicionada no mapa')
+    }
+
+    monitoramentoMgCache = {
+      sucesso: true,
+      estacoes,
+      totalEstacoes: estacoes.length,
+      estacoesGeorreferenciadas,
+      estacoesSemCoordenadas: estacoes.length - estacoesGeorreferenciadas,
+      atualizadoEm: new Date().toISOString(),
+      fonte: 'CEMADEN · posições: Observatório de Infraestrutura de Minas Gerais',
+    }
+    monitoramentoMgCacheTs = agora
+    res.set('Cache-Control', 'no-store')
+    return res.json(monitoramentoMgCache)
+  } catch (erro) {
+    console.error('[CEMADEN MG] Falha ao consultar pluviômetros:', erro?.message || erro)
+    if (monitoramentoMgCache) {
+      return res.json({ ...monitoramentoMgCache, cache: true, erroAtualizacao: true })
+    }
+    return res.status(503).json({
+      sucesso: false,
+      erro: 'Não foi possível consultar as estações CEMADEN de Minas Gerais.',
+    })
+  } finally {
+    clearTimeout(timeout)
+  }
+})
+
+// ── Radar de chuva ao vivo (RainViewer) ─────────────────────────────────────
+// O RainViewer fornece os tiles de radar sem chave. O servidor busca apenas os
+// metadados e o navegador solicita os tiles diretamente ao host informado pela
+// própria API, sempre usando o último quadro disponível.
+let radarChuvaCache = null
+let radarChuvaCacheTs = 0
+const RADAR_CHUVA_TTL_MS = 60 * 1000
+
+app.get('/api/radar-chuva', async (_req, res) => {
+  try {
+    const agora = Date.now()
+    if (radarChuvaCache && (agora - radarChuvaCacheTs) < RADAR_CHUVA_TTL_MS) {
+      return res.json({ ...radarChuvaCache, cache: true })
+    }
+
+    const resposta = await fetch('https://api.rainviewer.com/public/weather-maps.json', {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!resposta.ok) throw new Error(`RainViewer: ${resposta.status}`)
+
+    const dados = await resposta.json()
+    const host = typeof dados?.host === 'string' ? dados.host.replace(/\/$/, '') : ''
+    const validarQuadro = quadro => (
+      Number.isFinite(Number(quadro?.time)) &&
+      typeof quadro?.path === 'string' &&
+      quadro.path.startsWith('/v2/')
+    )
+    const quadrosObservados = (Array.isArray(dados?.radar?.past) ? dados.radar.past : [])
+      .filter(validarQuadro)
+    const ultimo = quadrosObservados.reduce((maisRecente, quadro) => (
+      !maisRecente || Number(quadro.time) > Number(maisRecente.time) ? quadro : maisRecente
+    ), null)
+
+    if (!host || !ultimo) throw new Error('RainViewer não retornou quadros de radar')
+
+    radarChuvaCache = {
+      host,
+      path: ultimo.path,
+      tileUrl: `${host}${ultimo.path}/256/{z}/{x}/{y}/2/1_0.png`,
+      frameTime: Number(ultimo.time),
+      atualizadoEm: new Date(Number(ultimo.time) * 1000).toISOString(),
+      fonte: 'RainViewer',
+      tipoQuadro: 'observado',
+    }
+    radarChuvaCacheTs = agora
+    return res.json(radarChuvaCache)
+  } catch (err) {
+    console.error('Erro no radar de chuva:', err?.message || err)
+    if (radarChuvaCache) {
+      return res.json({ ...radarChuvaCache, cache: true, erroAtualizacao: true })
+    }
+    return res.status(503).json({ erro: 'Radar de chuva indisponível' })
+  }
+})
+
+============================================================
+9) CONTRATO DAS RESPOSTAS / ENDPOINTS
+============================================================
+
+GET /api/radar-chuva
+Devolve host, path, tileUrl, frameTime (Unix em segundos), atualizadoEm (ISO), fonte e indicadores de cache. Em erro sem cache disponível responde HTTP 503.
+O navegador solicita os tiles usando o tileUrl recebido.
+
+GET /api/monitoramento-mg
+Devolve { sucesso, estacoes, totalEstacoes, estacoesGeorreferenciadas, estacoesSemCoordenadas, atualizadoEm, fonte }. Cada estação contém id, nome, municipio, codigo, latitude, longitude, precipitacaoAtual (mm na última hora) e precipitacaoDataHora.
+
+A lista retornada contém estações de MG; no componente atual só marcadores de Conselheiro Lafaiete são desenhados, e a superfície é limitada a 10 km do centro.
+
+============================================================
+FIM DAS SEÇÕES PRINCIPAIS
+============================================================
+
+
+============================================================
+10) CÓDIGO COMPLEMENTAR DO PAINEL ORIGINAL: PREVISÃO, RAIOS E INMET
+============================================================
+
+Esta seção completa a interface Chuva do app original. Inclui os dados meteorológicos atuais/horários (Open-Meteo), consenso de previsão de trovoadas em modelos numéricos, alertas ativos do INMET, os tipos/helpers/estados e a renderização do painel. Use a renderização completa abaixo no lugar dos snippets parciais das seções 5 e 6 quando quiser reproduzir o painel exatamente.
+
+--- Tipos e helpers de tempo/raios/INMET ---
+interface TempoMapa {
+  atualizadoEm?: string
+  atual?: {
+    time?: string
+    temperatura?: number | null
+    umidade?: number | null
+    dia?: number | boolean | null
+    precipitacao?: number | null
+    chuva?: number | null
+    codigoTempo?: number | null
+    vento?: number | null
+    rajada?: number | null
+  } | null
+  horas?: Array<{
+    time: string
+    temperatura?: number | null
+    umidade?: number | null
+    dia?: number | boolean | null
+    precipitacao?: number | null
+    probabilidadeChuva?: number | null
+    codigoTempo?: number | null
+    vento?: number | null
+    rajada?: number | null
+  }>
+  fonte?: string
+  cache?: boolean
+  erroAtualizacao?: boolean
+}
+
+interface PrevisaoRaiosMapa {
+  atualizadoEm?: string
+  atual?: {
+    time?: string
+    modelosComTrovoada?: number
+    maiorProbabilidadeChuva?: number
+    codigoMaisGrave?: number
+    risco?: 'baixo' | 'atenção' | 'alto' | string
+  } | null
+  modelos?: Array<{
+    id: string
+    nome: string
+    horas?: Array<{
+      time: string
+      codigoTempo?: number | null
+      probabilidadeChuva?: number | null
+    }>
+    primeiraTrovoada?: string | null
+    maiorCodigo?: number
+  }>
+  consenso?: Array<{
+    time: string
+    modelosComTrovoada?: number
+    maiorProbabilidadeChuva?: number
+    codigoMaisGrave?: number
+    risco?: string
+  }>
+  pontos?: Array<{
+    id: string
+    nome: string
+    latitude: number
+    longitude: number
+    primeiraTrovoada: string
+    modelosComTrovoada: number
+    codigoMaisGrave: number
+    intensidade: string
+    intensidadeNivel: number
+    probabilidadeChuva: number
+    precipitacao: number
+    chuva: number
+    risco: string
+  }>
+  proximaTrovoada?: string | null
+  riscoAtual?: string
+  fonte?: string
+  observacao?: string
+  cache?: boolean
+  erroAtualizacao?: boolean
+}
+
+const PREVISAO_RAIOS_MAPA_CACHE_KEY = 'mapa-previsao-raios-cache-v1'
+const PREVISAO_RAIOS_MAPA_CACHE_TTL_MS = 60 * 60 * 1000
+
+function lerCachePrevisaoRaiosMapa(): PrevisaoRaiosMapa | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const serializado = window.localStorage.getItem(PREVISAO_RAIOS_MAPA_CACHE_KEY)
+    if (!serializado) return null
+    const dados = JSON.parse(serializado) as PrevisaoRaiosMapa
+    const atualizadoEm = Date.parse(dados?.atualizadoEm || '')
+    if (!dados?.atual || !Number.isFinite(atualizadoEm) || Date.now() - atualizadoEm > PREVISAO_RAIOS_MAPA_CACHE_TTL_MS) {
+      window.localStorage.removeItem(PREVISAO_RAIOS_MAPA_CACHE_KEY)
+      return null
+    }
+    return dados
+  } catch {
+    return null
+  }
+}
+
+function salvarCachePrevisaoRaiosMapa(dados: PrevisaoRaiosMapa) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(PREVISAO_RAIOS_MAPA_CACHE_KEY, JSON.stringify(dados))
+  } catch {
+    // A previsão continua disponível em memória se o navegador bloquear o armazenamento.
+  }
+}
+
+interface AlertaTempoMapa {
+  id: number
+  titulo: string
+  nivel: 'vermelho' | 'amarelo' | 'informativo' | string
+  inicio?: string | null
+  fim?: string | null
+  horaInicio?: string | null
+  horaFim?: string | null
+  fonte?: string
+  url?: string
+}
+
+const ESTIMATIVA_CEMADEN_RAIO_METROS = 10_000
+const ESTACOES_CEMADEN_VAZIAS: EstacaoCemadenMg[] = []
+const GOES_CLOUD_TILE_URL = String(
+  import.meta.env.VITE_GOES_CLOUD_TILES_URL
+    || 'https://gis.nnvl.noaa.gov/arcgis/rest/services/GOES/GOES_current/ImageServer/tile/{z}/{y}/{x}',
+)
+
+function templateTilesHttpsValido(url: string) {
+  return /^https:\/\//i.test(url) && ['{z}', '{x}', '{y}'].every(token => url.includes(token))
+}
+
+function intensidadeCemaden(valor: number): { cor: string; alpha: number } {
+  if (!Number.isFinite(valor) || valor <= 0) return { cor: '#38bdf8', alpha: 0 }
+  if (valor <= 2) return { cor: '#38bdf8', alpha: 0.46 }
+  if (valor <= 10) return { cor: '#22c55e', alpha: 0.48 }
+  if (valor <= 30) return { cor: '#facc15', alpha: 0.5 }
+  if (valor <= 50) return { cor: '#f97316', alpha: 0.54 }
+  if (valor <= 80) return { cor: '#ef4444', alpha: 0.58 }
+  return { cor: '#a855f7', alpha: 0.62 }
+}
+
+function valorChuvaFormatado(valor: number | null): string {
+  return valor == null || !Number.isFinite(valor)
+    ? 'Sem leitura'
+    : `${valor.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mm`
+}
+
+function valorChuvaMarcadorFormatado(valor: number | null): string {
+  if (valor == null || !Number.isFinite(valor)) return '—'
+  return `${valor.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mm`
+}
+
+function codigoTempoMapa(codigo: number | null | undefined): string {
+  const valor = Number(codigo)
+  if (valor === 0) return 'Céu limpo'
+  if (valor === 1) return 'Predominantemente limpo'
+  if (valor === 2) return 'Parcialmente nublado'
+  if (valor === 3) return 'Nublado'
+  if (valor === 45 || valor === 48) return 'Neblina'
+  if (valor >= 51 && valor <= 57) return 'Garoa'
+  if (valor >= 61 && valor <= 67) return 'Chuva'
+  if (valor >= 71 && valor <= 77) return 'Neve'
+  if (valor >= 80 && valor <= 82) return 'Pancadas de chuva'
+  if (valor === 85 || valor === 86) return 'Pancadas de neve'
+  if (valor >= 95) return valor >= 96 ? 'Trovoada com granizo' : 'Trovoada'
+  return 'Condição indisponível'
+}
+
+function ehDiaTempoMapa(isDay?: number | boolean | null, time?: string | null): boolean {
+  if (isDay !== null && isDay !== undefined) {
+    return typeof isDay === 'boolean' ? isDay : Number(isDay) === 1
+  }
+
+  const horarioLocal = String(time || '').match(/T(\d{2}):\d{2}/)
+  if (horarioLocal) {
+    const temFuso = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(String(time))
+    const hora = temFuso
+      ? Number(new Date(String(time)).toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        hourCycle: 'h23',
+        timeZone: 'America/Sao_Paulo',
+      }))
+      : Number(horarioLocal[1])
+    return hora >= 6 && hora < 18
+  }
+
+  return true
+}
+
+function iconeTempoMapa(
+  codigo: number | null | undefined,
+  isDay?: number | boolean | null,
+  time?: string | null,
+): string {
+  const valor = Number(codigo)
+  const duranteDia = ehDiaTempoMapa(isDay, time)
+
+  if (valor === 0) return duranteDia ? '☀️' : '🌙'
+  if (valor === 1) return duranteDia ? '🌤️' : '🌙☁️'
+  if (valor === 2) return duranteDia ? '⛅' : '☁️🌙'
+  if (valor === 3) return '☁️'
+  if (valor === 45 || valor === 48) return '🌫️'
+  if (valor === 56 || valor === 57 || valor === 66 || valor === 67) return '🌧️❄️'
+  if (valor >= 71 && valor <= 77 || valor === 85 || valor === 86) return '🌨️'
+  if (valor >= 95) return '⛈️'
+  if (valor >= 80 && valor <= 82 || valor >= 51 && valor <= 55 || valor >= 61 && valor <= 65) {
+    return duranteDia && (valor <= 55 || valor >= 80) ? '🌦️' : '🌧️'
+  }
+  return '☁️'
+}
+
+function estadoTempoMapa(tempo: TempoMapa | null): {
+  nome: string
+  cor: string
+  detalhe: string
+} {
+  const atual = tempo?.atual
+  const horas = proximasHorasTempoMapa(tempo)
+  const temperatura = Number(atual?.temperatura)
+  const umidade = Number(atual?.umidade)
+  const temTrovoada = Number(atual?.codigoTempo) >= 95
+    || horas.some(hora => Number(hora.codigoTempo) >= 95)
+  const probabilidadeChuva = Math.max(
+    ...horas.map(hora => Number(hora.probabilidadeChuva) || 0),
+    0,
+  )
+  const temChuva = Number(atual?.chuva) > 0.1
+    || Number(atual?.precipitacao) > 0.1
+    || Number(atual?.codigoTempo) >= 51
+    || probabilidadeChuva >= 60
+
+  if (temTrovoada) return { nome: 'Trovoada', cor: '#7c3aed', detalhe: 'Risco de raios na previsão' }
+  if (temperatura >= 30) return { nome: 'Calor', cor: '#dc2626', detalhe: 'Temperatura elevada' }
+  if (temperatura <= 17) return { nome: 'Frio', cor: '#2563eb', detalhe: 'Temperatura baixa' }
+  if (!temChuva && temperatura >= 28 && umidade <= 45) {
+    return { nome: 'Tempo seco', cor: '#d97706', detalhe: 'Calor com umidade baixa' }
+  }
+  if (temChuva) return { nome: 'Chuva', cor: '#0369a1', detalhe: 'Chuva ou pancadas previstas' }
+  if (umidade <= 45) return { nome: 'Umidade baixa', cor: '#b45309', detalhe: 'Atenção à baixa umidade' }
+  return { nome: 'Condição normal', cor: '#15803d', detalhe: 'Sem condição crítica detectada' }
+}
+
+function proximasHorasTempoMapa(tempo: TempoMapa | null): NonNullable<TempoMapa['horas']> {
+  const horas = tempo?.horas || []
+  const horarioAtual = tempo?.atual?.time
+  if (!horas.length || !horarioAtual) return horas.slice(0, 6)
+
+  const indiceAtual = horas.findIndex(hora => hora.time >= horarioAtual)
+  return (indiceAtual >= 0 ? horas.slice(indiceAtual) : horas.slice(-6)).slice(0, 6)
+}
+
+function criarIconeTempoMapa(tempo: TempoMapa) {
+  const atual = tempo.atual
+  const estado = estadoTempoMapa(tempo)
+  const temperatura = Number.isFinite(Number(atual?.temperatura))
+    ? `${Math.round(Number(atual?.temperatura))}°`
+    : '—'
+  const quente = Number(atual?.temperatura) >= 30
+  const icone = iconeTempoMapa(atual?.codigoTempo, atual?.dia, atual?.time)
+  return L.divIcon({
+    className: 'mapa-tempo-marker',
+    html: `
+      <div class="mapa-tempo-marker-balao" style="--tempo-cor:${estado.cor}">
+        <span class="mapa-tempo-marker-icone">${icone}</span>
+        <strong>${temperatura}</strong>
+        ${quente ? '<small>Calor</small>' : ''}
+      </div>
+    `,
+    iconSize: [78, 30],
+    iconAnchor: [39, 15],
+    popupAnchor: [0, -18],
+  })
+}
+
+function nomeRiscoRaiosMapa(risco?: string): string {
+  if (risco === 'alto') return 'Alto'
+  if (risco === 'atenção') return 'Atenção'
+  return 'Baixo'
+}
+
+function corRiscoRaiosMapa(risco?: string): string {
+  if (risco === 'alto') return '#dc2626'
+  if (risco === 'atenção') return '#d97706'
+  return '#15803d'
+}
+
+function criarIconeRaiosMapa(
+  ponto: NonNullable<PrevisaoRaiosMapa['pontos']>[number],
+) {
+  const quantidadeRaios = Math.max(1, Math.min(3, Math.round(Number(ponto.modelosComTrovoada) || 1)))
+  const descricaoRaios = `${quantidadeRaios}/3 modelos com trovoada`
+  const largura = quantidadeRaios * 20
+  return L.divIcon({
+    className: 'mapa-raios-marker',
+    html: `
+      <div class="mapa-raios-marker-icones" role="img" aria-label="${descricaoRaios}">
+        ${Array.from({ length: quantidadeRaios }, () => '<span aria-hidden="true">⚡</span>').join('')}
+      </div>
+    `,
+    iconSize: [largura, 28],
+    iconAnchor: [largura / 2, 14],
+    popupAnchor: [0, -18],
+  })
+}
+
+function dataHoraTempoMapa(valor?: string | null): string {
+  if (!valor) return '—'
+  const texto = String(valor)
+  const horarioLocal = texto.match(/^\d{4}-\d{2}-\d{2}T(\d{2}):(\d{2})/)
+  const temFuso = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(texto)
+  if (horarioLocal && !temFuso) return `${horarioLocal[1]}:${horarioLocal[2]}`
+
+  const data = new Date(texto)
+  return Number.isNaN(data.getTime())
+    ? '—'
+    : data.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZone: 'America/Sao_Paulo',
+    })
+}
+
+function RaiosMapaBounds({
+  pontos,
+  token,
+}: {
+  pontos: NonNullable<PrevisaoRaiosMapa['pontos']>
+  token: number
+}) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (token <= 0 || pontos.length === 0) return
+    const bounds = L.latLngBounds(pontos.map(ponto => [ponto.latitude, ponto.longitude] as [number, number]))
+    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 8, animate: true })
+  }, [map, pontos, token])
+
+  return null
+}
+
+--- Estados usados pelo painel (dentro do componente React) ---
+  const [tempoMapa, setTempoMapa] = useState<TempoMapa | null>(null)
+  const [tempoMapaCarregando, setTempoMapaCarregando] = useState(false)
+  const [tempoMapaErro, setTempoMapaErro] = useState<string | null>(null)
+  const [previsaoRaiosMapa, setPrevisaoRaiosMapa] = useState<PrevisaoRaiosMapa | null>(lerCachePrevisaoRaiosMapa)
+  const [previsaoRaiosCarregando, setPrevisaoRaiosCarregando] = useState(false)
+  const [previsaoRaiosErro, setPrevisaoRaiosErro] = useState<string | null>(null)
+  const [mostrarPrevisaoRaios, setMostrarPrevisaoRaios] = useState(true)
+  const [enquadrarRaiosMapa, setEnquadrarRaiosMapa] = useState(0)
+  const [alertasTempoMapa, setAlertasTempoMapa] = useState<AlertaTempoMapa[]>([])
+  const [alertasTempoCarregando, setAlertasTempoCarregando] = useState(false)
+  const [alertasTempoErro, setAlertasTempoErro] = useState<string | null>(null)
+
+--- Consultas do navegador: /api/tempo, /api/tempo-raios e /api/alertas-tempo ---
+  const buscarTempoMapa = useCallback(async () => {
+    setTempoMapaCarregando(true)
+    setTempoMapaErro(null)
+    try {
+      const resposta = await fetch(`/api/tempo?_ts=${Date.now()}`, { cache: 'no-store' })
+      const dados = await resposta.json().catch(() => ({}))
+      if (!resposta.ok || !dados?.atual) throw new Error('Previsão indisponível')
+      setTempoMapa(dados)
+    } catch (erro) {
+      setTempoMapaErro(erro instanceof Error ? erro.message : 'Previsão indisponível')
+    } finally {
+      setTempoMapaCarregando(false)
+    }
+  }, [])
+
+  const buscarPrevisaoRaiosMapa = useCallback(async () => {
+    setPrevisaoRaiosCarregando(true)
+    setPrevisaoRaiosErro(null)
+    try {
+      const resposta = await fetch(`/api/tempo-raios?_ts=${Date.now()}`, { cache: 'no-store' })
+      const dados = await resposta.json().catch(() => ({}))
+      if (!resposta.ok || !dados?.atual) {
+        const erroBase = typeof dados?.erro === 'string'
+          ? dados.erro
+          : 'Previsão de raios indisponível'
+        const erro = !resposta.ok ? `${erroBase} (HTTP ${resposta.status})` : erroBase
+        const detalhe = typeof dados?.detalhe === 'string' ? dados.detalhe.trim() : ''
+        throw new Error(detalhe ? `${erro}: ${detalhe}` : erro)
+      }
+      setPrevisaoRaiosMapa(dados)
+      salvarCachePrevisaoRaiosMapa(dados)
+    } catch (erro) {
+      setPrevisaoRaiosErro(erro instanceof Error ? erro.message : 'Previsão de raios indisponível')
+    } finally {
+      setPrevisaoRaiosCarregando(false)
+    }
+  }, [])
+
+  const buscarAlertasTempoMapa = useCallback(async () => {
+    setAlertasTempoCarregando(true)
+    setAlertasTempoErro(null)
+    try {
+      const resposta = await fetch(`/api/alertas-tempo?_ts=${Date.now()}`, { cache: 'no-store' })
+      const dados = await resposta.json().catch(() => ({}))
+      if (!resposta.ok) throw new Error(typeof dados?.erro === 'string' ? dados.erro : 'Alertas indisponíveis')
+      setAlertasTempoMapa(Array.isArray(dados?.alertas) ? dados.alertas : [])
+    } catch (erro) {
+      setAlertasTempoErro(erro instanceof Error ? erro.message : 'Alertas indisponíveis')
+    } finally {
+      setAlertasTempoCarregando(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    buscarTempoMapa()
+    buscarPrevisaoRaiosMapa()
+    buscarAlertasTempoMapa()
+    const intervalo = setInterval(() => {
+      buscarTempoMapa()
+      buscarPrevisaoRaiosMapa()
+      buscarAlertasTempoMapa()
+    }, 10 * 60 * 1000)
+    return () => clearInterval(intervalo)
+  }, [buscarTempoMapa, buscarPrevisaoRaiosMapa, buscarAlertasTempoMapa])
+
+--- Painel JSX original completo ---
+Cole dentro do contêiner .mapa-chuva-wrap, logo após o botão Chuva da seção 5:
+          {painelChuvaAberto && (
+            <div className="mapa-chuva-painel">
+              <div className="mapa-chuva-painel-header">
+                <div>
+                  <strong>🌧️ Chuva ao vivo</strong>
+                  <span>Conselheiro Lafaiete, MG · área tracejada = raio de observação de 10 km</span>
+                </div>
+                <button
+                  onClick={() => setPainelChuvaAberto(false)}
+                  aria-label="Fechar painel de chuva"
+                >✕</button>
+              </div>
+              {tempoMapa && (
+                <div className="mapa-tempo-painel">
+                  <div className="mapa-tempo-painel-atual">
+                    <span className="mapa-tempo-painel-icone">
+                      {iconeTempoMapa(tempoMapa.atual?.codigoTempo, tempoMapa.atual?.dia, tempoMapa.atual?.time)}
+                    </span>
+                    <div>
+                      <strong>
+                        {Number.isFinite(Number(tempoMapa.atual?.temperatura))
+                          ? `${Math.round(Number(tempoMapa.atual?.temperatura))} °C`
+                          : '—'}
+                      </strong>
+                      <span>{codigoTempoMapa(tempoMapa.atual?.codigoTempo)}</span>
+                    </div>
+                    <div className="mapa-tempo-painel-metricas">
+                      <span>💧 {tempoMapa.atual?.umidade ?? '—'}%</span>
+                      <span>💨 {tempoMapa.atual?.vento ?? '—'} km/h</span>
+                    </div>
+                  </div>
+                  <div className="mapa-tempo-painel-estado" style={{ color: estadoTempoMapa(tempoMapa).cor }}>
+                    <b>{estadoTempoMapa(tempoMapa).nome}</b>
+                    <span>{estadoTempoMapa(tempoMapa).detalhe}</span>
+                  </div>
+                  <div className="mapa-tempo-painel-previsao">
+                    {proximasHorasTempoMapa(tempoMapa).map(hora => (
+                      <span key={hora.time}>
+                        <b>{dataHoraTempoMapa(hora.time)}</b>
+                        <strong>{iconeTempoMapa(hora.codigoTempo, hora.dia, hora.time)}</strong>
+                        <small>{Math.round(Number(hora.temperatura) || 0)}° · {Math.round(Number(hora.probabilidadeChuva) || 0)}%</small>
+                      </span>
+                    ))}
+                  </div>
+                  {tempoMapaErro && <div className="mapa-chuva-status mapa-chuva-status--erro">{tempoMapaErro}</div>}
+                </div>
+              )}
+              <div className="mapa-raios-painel">
+                <div className="mapa-raios-painel-header">
+                  <div>
+                    <strong>⚡ Previsão de raios e trovoadas</strong>
+                    <span>Locais com previsão de trovoada em Minas Gerais</span>
+                  </div>
+                  <div className="mapa-raios-painel-acoes">
+                    <button
+                      className={`mapa-chuva-fonte-btn ${mostrarPrevisaoRaios ? 'ativo' : ''}`}
+                      onClick={() => setMostrarPrevisaoRaios(v => !v)}
+                      aria-pressed={mostrarPrevisaoRaios}
+                    >
+                      {mostrarPrevisaoRaios ? 'Raios' : 'Painel'}
+                    </button>
+                    <button
+                      className="mapa-chuva-fonte-btn"
+                      onClick={() => setEnquadrarRaiosMapa(v => v + 1)}
+                      disabled={!previsaoRaiosMapa?.pontos?.length}
+                    >
+                      Ver MG
+                    </button>
+                  </div>
+                </div>
+                {previsaoRaiosMapa?.atual && previsaoRaiosErro && (
+                  <div className="mapa-chuva-status mapa-chuva-status--erro">
+                    Atualização indisponível; exibindo a última previsão válida
+                    {previsaoRaiosMapa.atualizadoEm
+                      ? ` de ${new Date(previsaoRaiosMapa.atualizadoEm).toLocaleString('pt-BR')}`
+                      : ''}. {previsaoRaiosErro}
+                  </div>
+                )}
+                {previsaoRaiosMapa?.atual ? (
+                  <>
+                    <div className="mapa-raios-resumo">
+                      <div>
+                        <span>Risco agora</span>
+                        <strong style={{ color: corRiscoRaiosMapa(previsaoRaiosMapa.atual.risco) }}>
+                          {nomeRiscoRaiosMapa(previsaoRaiosMapa.atual.risco)}
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Consenso</span>
+                        <strong>{previsaoRaiosMapa.atual.modelosComTrovoada || 0}/3 modelos</strong>
+                      </div>
+                      <div>
+                        <span>Próxima indicação</span>
+                        <strong>{previsaoRaiosMapa.proximaTrovoada
+                          ? dataHoraTempoMapa(previsaoRaiosMapa.proximaTrovoada)
+                          : 'Sem trovoada'}</strong>
+                      </div>
+                    </div>
+                    <div className="mapa-raios-modelos">
+                      {(previsaoRaiosMapa.modelos || []).map(modelo => (
+                        <div key={modelo.id} className="mapa-raios-modelo">
+                          <span>{modelo.nome}</span>
+                          <b className={modelo.maiorCodigo && modelo.maiorCodigo >= 95 ? 'indica-trovoada' : ''}>
+                            {modelo.primeiraTrovoada ? `⚡ ${dataHoraTempoMapa(modelo.primeiraTrovoada)}` : 'Sem trovoada'}
+                          </b>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mapa-raios-pontos-resumo">
+                      {previsaoRaiosMapa.pontos?.length
+                        ? `${previsaoRaiosMapa.pontos.length} local(is) com trovoada prevista nas próximas 36 horas`
+                        : 'Nenhum local com trovoada prevista nas próximas 36 horas'}
+                    </div>
+                    <div className="mapa-raios-horarios">
+                      {(previsaoRaiosMapa.consenso || []).slice(0, 6).map(hora => (
+                        <span key={hora.time} className={hora.modelosComTrovoada ? 'tem-raios' : ''}>
+                          <b>{dataHoraTempoMapa(hora.time)}</b>
+                          <strong>{hora.modelosComTrovoada ? '⚡' : '·'}</strong>
+                          <small>{hora.modelosComTrovoada || 0}/3</small>
+                        </span>
+                      ))}
+                    </div>
+                    <p className="mapa-raios-nota">
+                      Atualização automática a cada 10 min. Esta é uma previsão de trovoadas:
+                      o Open‑Meteo não detecta a posição de descargas elétricas já ocorridas.
+                      Cada símbolo representa a previsão para a localidade consultada, não a posição exata de um raio.
+                    </p>
+                  </>
+                ) : (
+                  <div className={`mapa-chuva-status ${previsaoRaiosErro ? 'mapa-chuva-status--erro' : ''}`}>
+                    {previsaoRaiosCarregando ? '⏳ Consultando ECMWF, GFS e ICON…' : (previsaoRaiosErro || 'Previsão de raios indisponível')}
+                  </div>
+                )}
+              </div>
+              <div className="mapa-tempo-alertas">
+                <div className="mapa-tempo-alertas-titulo">
+                  <strong>⚠️ Alertas e condições</strong>
+                  <span>
+                    {alertasTempoCarregando ? 'consultando INMET…' : `${alertasTempoMapa.length} aviso(s) do INMET`}
+                  </span>
+                </div>
+                {alertasTempoMapa.length > 0 ? alertasTempoMapa.slice(0, 3).map(alerta => (
+                  <a
+                    key={alerta.id}
+                    href={alerta.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`mapa-tempo-alerta mapa-tempo-alerta--${alerta.nivel}`}
+                  >
+                    <b>{alerta.titulo}</b>
+                    <span>{alerta.inicio ? `Início: ${dataHoraTempoMapa(alerta.inicio)}` : 'Aviso vigente'}</span>
+                  </a>
+                )) : (
+                  <span className="mapa-tempo-sem-alerta">
+                    Nenhum aviso oficial do INMET encontrado para o município.
+                  </span>
+                )}
+                {alertasTempoErro && <span className="mapa-tempo-alerta-erro">{alertasTempoErro}</span>}
+              </div>
+              <div className="mapa-chuva-fontes">
+                <button
+                  className="mapa-chuva-fonte-btn"
+                  onClick={() => mapaLeafletRef.current?.fitBounds(MINAS_GERAIS_BOUNDS, { padding: [24, 24], maxZoom: 7, animate: true })}
+                  title="Enquadrar Minas Gerais; os tiles de chuva e nuvens cobrem a área visível"
+                >
+                  🗺️ Toda MG
+                </button>
+                <button
+                  className="mapa-chuva-fonte-btn"
+                  onClick={() => mapaLeafletRef.current?.setView(CONSELHEIRO_LAFAIETE, 12, { animate: true })}
+                  title="Voltar ao enquadramento local de Conselheiro Lafaiete"
+                >
+                  📍 Lafaiete
+                </button>
+                <span>Enquadramento local continua sendo o padrão</span>
+              </div>
+              <div className="mapa-chuva-fontes">
+                <button
+                  className={`mapa-chuva-fonte-btn ${mostrarChuva ? 'ativo' : ''}`}
+                  onClick={() => setMostrarChuva(v => !v)}
+                  aria-pressed={mostrarChuva}
+                >
+                  🌧️ Radar RainViewer
+                </button>
+                <span>Precipitação observada · consulta a cada 3 min; quadros da fonte em intervalos de 10 min</span>
+              </div>
+              <div className="mapa-chuva-fontes">
+                <button
+                  className={`mapa-chuva-fonte-btn ${mostrarNuvens ? 'ativo' : ''}`}
+                  onClick={() => setMostrarNuvens(v => !v)}
+                  aria-pressed={mostrarNuvens}
+                  disabled={!templateTilesHttpsValido(GOES_CLOUD_TILE_URL)}
+                  title="Imagem infravermelha de nuvens do satélite NOAA GOES; não mede chuva"
+                >
+                  ☁️ Nuvens GOES
+                </button>
+                <span>NOAA · imagem infravermelha com resolução aproximada de 5 km; mostra nuvens, não confirma precipitação</span>
+              </div>
+              <div className="mapa-chuva-fontes">
+                <button
+                  className={`mapa-chuva-fonte-btn ${mostrarIntensidadeCemaden ? 'ativo' : ''}`}
+                  onClick={() => setMostrarIntensidadeCemaden(v => !v)}
+                  aria-pressed={mostrarIntensidadeCemaden}
+                >
+                  🌧️ CEMADEN · Lafaiete
+                </button>
+                <span>
+                  {cemadenMg.dados
+                    ? `${estacoesCemadenLafaieteGeorreferenciadas.length} estação(ões) do município · acumulado na última hora`
+                    : 'Leituras oficiais de Conselheiro Lafaiete · acumulado na última hora (mm)'}
+                </span>
+              </div>
+              <div className="mapa-chuva-opacidades">
+                <label>
+                  Radar <input type="range" min="0.35" max="0.90" step="0.05" value={opacidadeRadar} onChange={e => setOpacidadeRadar(Number(e.target.value))} />
+                  <output>{Math.round(opacidadeRadar * 100)}%</output>
+                </label>
+                <label>
+                   Superfície <input type="range" min="0.35" max="0.70" step="0.05" value={opacidadeCemaden} onChange={e => setOpacidadeCemaden(Number(e.target.value))} />
+                  <output>{Math.round(opacidadeCemaden * 100)}%</output>
+                </label>
+              </div>
+              {radarChuvaCarregando && !radarChuva && (
+                <div className="mapa-chuva-status">⏳ Carregando o último quadro do radar…</div>
+              )}
+              {radarChuvaErro && (
+                <div className="mapa-chuva-status mapa-chuva-status--erro">{radarChuvaErro}</div>
+              )}
+              <div className="mapa-chuva-resumo">
+                <div>
+                  <span className="mapa-chuva-resumo-label">Radar</span>
+                  <strong>
+                    {radarChuva ? horaChuva(radarChuva.atualizadoEm) : '—'}
+                    <small className="mapa-chuva-quadro-tipo">RainViewer · horário de geração do quadro</small>
+                  </strong>
+                </div>
+                <div>
+                  <span className="mapa-chuva-resumo-label">CEMADEN</span>
+                  <strong>
+                    {horaChuva(cemadenAtualizadoEm)}
+                    <small className="mapa-chuva-quadro-tipo">última atualização</small>
+                  </strong>
+                </div>
+                <div>
+                  <span className="mapa-chuva-resumo-label">Raios</span>
+                  <strong>
+                    {previsaoRaiosMapa?.pontos?.length ?? '—'} locais
+                    <small className="mapa-chuva-quadro-tipo">Open‑Meteo · previsto</small>
+                  </strong>
+                </div>
+                <div>
+                  <span className="mapa-chuva-resumo-label">Maior leitura (1h)</span>
+                  <strong className={intensidadeEstimada && intensidadeEstimada > 0 ? 'chovendo' : ''}>
+                    {valorChuvaFormatado(intensidadeEstimada)}
+                    <small className="mapa-chuva-quadro-tipo">{situacaoChuva(intensidadeEstimada)}</small>
+                  </strong>
+                </div>
+              </div>
+              <div className="mapa-chuva-legenda">
+                <span><i className="chuva-cor chuva-cor--fraca" /> fraca</span>
+                <span><i className="chuva-cor chuva-cor--moderada" /> moderada</span>
+                <span><i className="chuva-cor chuva-cor--forte" /> forte</span>
+                <span><i className="chuva-cor chuva-cor--muito-forte" /> muito forte</span>
+                <span><i className="chuva-cor chuva-cor--intensa" /> intensa</span>
+                <span><i className="chuva-cor chuva-cor--extrema" /> extrema</span>
+              </div>
+              <p className="mapa-chuva-ajuda">
+                RainViewer mostra precipitação observada nos tiles da área visível; a imagem GOES mostra nuvens e não confirma chuva no solo. Ao ativar Chuva, o mapa mostra as leituras mais recentes das estações CEMADEN de Conselheiro Lafaiete; a superfície interpolada abaixo continua restrita ao município.
+                A previsão de trovoadas continua cobrindo localidades de Minas Gerais, mas os valores de precipitação prevista são exibidos somente para Lafaiete. A superfície interpolada permanece limitada a 10 km do centro de Lafaiete e só aparece com pelo menos três leituras válidas da última hora; não equivale a radar nem a uma medição estadual.
+              </p>
+              {cemadenCarregando && <div className="mapa-chuva-status">⏳ Atualizando estações CEMADEN…</div>}
+              {cemadenErro && <div className="mapa-chuva-status mapa-chuva-status--erro">{cemadenErro}. O mapa continua disponível.</div>}
+              {cemadenMg.dados && estacoesCemadenLafaieteSemCoordenadas > 0 && (
+                <div className="mapa-chuva-status">
+                  {estacoesCemadenLafaieteSemCoordenadas} estação(ões) de Conselheiro Lafaiete sem posição disponível no mapa.
+                </div>
+              )}
+              <div className="mapa-chuva-rodape">
+                <span>{radarChuva?.erroAtualizacao ? 'Último radar salvo' : 'Weather data by RainViewer'}</span>
+                <button
+                  onClick={() => {
+                    buscarRadarChuva()
+                    cemadenMg.atualizar()
+                  }}
+                  disabled={radarChuvaCarregando || cemadenCarregando}
+                >
+                  {radarChuvaCarregando || cemadenCarregando ? '⏳' : '↻'} Atualizar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+--- Conexão do mapa e camadas meteorológicas completas ---
+Dentro do MapContainer, registre o mapa/zoom uma vez. Mantenha também a camada GOES opcional da seção 6; use o bloco abaixo no lugar dos trechos RainViewer/CEMADEN parciais da seção 6.
+
+<CapturaEstadoMapa referencia={mapaLeafletRef} aoMudarZoom={setZoomMapa} />
+<RaiosMapaBounds
+  pontos={previsaoRaiosMapa?.pontos || []}
+  token={enquadrarRaiosMapa}
+/>
+
+// O bloco seguinte inclui temperatura atual, previsão de trovoadas, radar RainViewer, CEMADEN e a área local.
+        {mostrarChuva && zoomMapa >= 9 && tempoMapa?.atual && (
+          <Marker
+            position={POSICAO_TEMPERATURA_LAFAIETE}
+            icon={criarIconeTempoMapa(tempoMapa)}
+            zIndexOffset={800}
+          >
+            <Popup>
+              <div className="mapa-tempo-popup">
+                <strong>🌡️ Conselheiro Lafaiete</strong>
+                <div className="mapa-tempo-popup-temperatura">
+                  {Number.isFinite(Number(tempoMapa.atual.temperatura))
+                    ? `${Math.round(Number(tempoMapa.atual.temperatura))} °C`
+                    : 'Temperatura indisponível'}
+                </div>
+                <div>{codigoTempoMapa(tempoMapa.atual.codigoTempo)}</div>
+                <div>Umidade: {tempoMapa.atual.umidade ?? '—'}%</div>
+                <div>Vento: {tempoMapa.atual.vento ?? '—'} km/h</div>
+                <div>Rajada: {tempoMapa.atual.rajada ?? '—'} km/h</div>
+                <small>Fonte: {tempoMapa.fonte || 'Open-Meteo'}</small>
+              </div>
+            </Popup>
+          </Marker>
+        )}
+        {mostrarChuva && zoomMapa >= 9 && mostrarPrevisaoRaios && (previsaoRaiosMapa?.pontos || []).map(ponto => (
+          <Marker
+            key={`raios-${ponto.id}`}
+            position={[ponto.latitude, ponto.longitude]}
+            icon={criarIconeRaiosMapa(ponto)}
+            zIndexOffset={700}
+          >
+            <Popup>
+              <div className="mapa-raios-popup">
+                <strong>⚡ {ponto.nome}</strong>
+                <b style={{ color: corRiscoRaiosMapa(ponto.risco) }}>
+                  {ponto.intensidade} · {ponto.modelosComTrovoada}/3 modelos
+                </b>
+                <span>Previsão a partir de {dataHoraTempoMapa(ponto.primeiraTrovoada)}</span>
+                {ponto.id === 'conselheiro-lafaiete' && (
+                  <span>Chuva prevista: {ponto.probabilidadeChuva}% · até {ponto.precipitacao.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mm</span>
+                )}
+                {ponto.id === 'conselheiro-lafaiete' && tempoMapa?.atual?.temperatura != null && (
+                  <span>Temperatura atual em Conselheiro Lafaiete: {Math.round(Number(tempoMapa.atual.temperatura))} °C</span>
+                )}
+                <small>Open‑Meteo · previsão numérica</small>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+        <RaiosMapaBounds
+          pontos={previsaoRaiosMapa?.pontos || []}
+          token={enquadrarRaiosMapa}
+        />
+        {mostrarChuva && radarChuva && (
+          <Pane name="radarRainViewerPane" style={{ zIndex: 420 }}>
+            <TileLayer
+              key={`radar-chuva-${radarChuva.frameTime}`}
+              url={radarChuva.tileUrl || `${radarChuva.host}${radarChuva.path}/256/{z}/{x}/{y}/2/1_0.png`}
+              opacity={opacidadeRadar}
+              attribution='Weather data by <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">RainViewer</a>'
+              maxNativeZoom={7}
+              maxZoom={19}
+              tileSize={256}
+              updateWhenZooming={false}
+              updateWhenIdle={true}
+            />
+          </Pane>
+        )}
+        {mostrarIntensidadeCemaden && zoomMapa >= 9 && (
+          <CemadenIntensityLayer estacoes={estacoesCemadenLafaiete} opacidade={opacidadeCemaden} />
+        )}
+        {mostrarChuva && (
+          <Pane name="mapaEstacoesCemaden" style={{ zIndex: 450 }}>
+            {estacoesCemadenLafaieteGeorreferenciadas.map(estacao => {
+                const estadoLeitura = statusLeituraCemaden(estacao.precipitacaoDataHora)
+                const cor = estadoLeitura === 'atualizada'
+                  ? intensidadeCemaden(estacao.precipitacaoAtual ?? 0).cor
+                  : '#94a3b8'
+                return (
+                  <CircleMarker
+                    key={`cemaden-estacao-${estacao.id}`}
+                    center={[estacao.latitude!, estacao.longitude!]}
+                    radius={zoomMapa < 8 ? 2.5 : zoomMapa < 11 ? 4 : 8}
+                    pathOptions={{
+                      color: '#ffffff',
+                      weight: 2,
+                      fillColor: cor,
+                      fillOpacity: 0.95,
+                    }}
+                  >
+                    {zoomMapa >= 11 && (
+                      <Tooltip
+                        permanent
+                        direction="top"
+                        offset={[0, -7]}
+                        opacity={0.96}
+                        className="mapa-cemaden-mg-tooltip"
+                      >
+                        {valorChuvaMarcadorFormatado(estacao.precipitacaoAtual ?? 0)}
+                      </Tooltip>
+                    )}
+                    <Popup>
+                      <div style={{ minWidth: 190, fontFamily: 'inherit' }}>
+                        <strong style={{ display: 'block', marginBottom: 4 }}>
+                          🌧️ {estacao.nome || 'Estação CEMADEN'}
+                        </strong>
+                        {estacao.municipio && (
+                          <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: 3 }}>
+                            {estacao.municipio} · Minas Gerais
+                          </div>
+                        )}
+                        <div style={{ fontSize: '0.8rem', color: '#374151', marginBottom: 3 }}>
+                          <strong>Última hora:</strong> {valorChuvaFormatado(estacao.precipitacaoAtual)}
+                        </div>
+                        <div style={{ fontSize: '0.76rem', color: estadoLeitura === 'atualizada' ? '#166534' : '#b45309', marginBottom: 3 }}>
+                          {estadoLeitura === 'atualizada'
+                            ? situacaoChuva(estacao.precipitacaoAtual)
+                            : estadoLeitura === 'atrasada' ? 'Leitura atrasada' : 'Sem dados recentes'}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: '#6b7280' }}>
+                          Leitura: {dataHoraCemadenFormatada(estacao.precipitacaoDataHora)} · CEMADEN
+                        </div>
+                        {estacao.codigo && (
+                          <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: 3 }}>
+                            Estação {estacao.codigo}
+                          </div>
+                        )}
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                )
+            })}
+          </Pane>
+        )}
+        {mostrarChuva && zoomMapa >= 9 && (
+          <Circle
+            center={CONSELHEIRO_LAFAIETE}
+            radius={RAIO_RADAR_CHUVA_METROS}
+            pathOptions={{
+              color: '#1d4ed8',
+              weight: 2,
+              opacity: 0.95,
+              dashArray: '7 5',
+              fillColor: '#60a5fa',
+              fillOpacity: 0.04,
+            }}
+          >
+            <Popup>
+              <strong>Área de observação da chuva</strong>
+              <br />
+              Raio de 10 km a partir do centro de Conselheiro Lafaiete
+            </Popup>
+          </Circle>
+        )}
+        {mostrarChuva && zoomMapa >= 9 && (
+          <CircleMarker
+            center={CONSELHEIRO_LAFAIETE}
+            radius={5}
+            pathOptions={{
+              color: '#0f172a',
+              weight: 2,
+              fillColor: '#f8fafc',
+              fillOpacity: 1,
+            }}
+          >
+            <Popup>
+              <strong>Centro da área de observação</strong>
+              <br />
+              Conselheiro Lafaiete — raio de 10 km
+            </Popup>
+          </CircleMarker>
+        )}
+
+--- Estilos de temperatura, raios e avisos do INMET ---
+.mapa-tempo-marker {
+  background: transparent;
+  border: 0;
+}
+
+.mapa-tempo-marker-balao {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  width: max-content;
+  min-height: 26px;
+  padding: 0;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(15, 23, 42, 0.95), 0 0 5px rgba(15, 23, 42, 0.8);
+  font-family: inherit;
+}
+
+.mapa-tempo-marker-icone {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.mapa-tempo-marker-balao strong {
+  color: #ffffff;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.mapa-tempo-marker-balao small {
+  color: #ffffff;
+  font-size: 0.55rem;
+  font-weight: 700;
+}
+
+.mapa-raios-marker {
+  border: 0;
+  background: transparent;
+}
+
+.mapa-raios-marker-icones {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 28px;
+  white-space: nowrap;
+  filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.65));
+}
+
+.mapa-raios-marker-icones span {
+  color: #facc15;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.mapa-raios-marker-composto {
+  display: flex;
+  width: 60px;
+  height: 44px;
+  flex-direction: column;
+  align-items: center;
+}
+
+.mapa-raios-marker-temperatura {
+  display: block;
+  height: 16px;
+  border: 1px solid #fff;
+  border-radius: 999px;
+  padding: 0 6px;
+  color: #fff;
+  background: #0369a1;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.45);
+  font-size: .65rem;
+  font-weight: 800;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.mapa-raios-popup {
+  min-width: 190px;
+  display: grid;
+  gap: 4px;
+  font-family: inherit;
+  font-size: 0.76rem;
+}
+
+.mapa-raios-popup b {
+  font-size: 0.88rem;
+}
+
+.mapa-raios-popup small {
+  color: #64748b;
+  font-size: 0.68rem;
+}
+
+.mapa-tempo-popup {
+  min-width: 170px;
+  display: grid;
+  gap: 3px;
+  font-family: inherit;
+  font-size: 0.78rem;
+}
+
+.mapa-tempo-popup-temperatura {
+  color: #0369a1;
+  font-size: 1.45rem;
+  font-weight: 800;
+}
+
+.mapa-tempo-popup small {
+  margin-top: 4px;
+  color: #64748b;
+}
+
+.mapa-tempo-painel {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: linear-gradient(180deg, #f0f9ff, #ffffff);
+}
+
+.mapa-tempo-painel-atual {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.mapa-tempo-painel-icone {
+  font-size: 1.35rem;
+}
+
+.mapa-tempo-painel-atual strong,
+.mapa-tempo-painel-atual span {
+  display: block;
+}
+
+.mapa-tempo-painel-atual strong {
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
+.mapa-tempo-painel-atual span {
+  color: #475569;
+  font-size: 0.55rem;
+}
+
+.mapa-tempo-painel-metricas {
+  display: grid;
+  gap: 0.15rem;
+  margin-left: auto;
+  color: #475569;
+  font-size: 0.55rem;
+  text-align: right;
+}
+
+.mapa-tempo-painel-estado {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+  font-size: 0.58rem;
+}
+
+.mapa-tempo-painel-estado span {
+  color: #64748b;
+}
+
+.mapa-tempo-painel-previsao {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.18rem;
+  margin-top: 0.45rem;
+}
+
+.mapa-tempo-painel-previsao span {
+  display: grid;
+  justify-items: center;
+  gap: 0.12rem;
+  padding: 0.2rem 0.05rem;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.85);
+  color: #475569;
+  font-size: 0.43rem;
+}
+
+.mapa-tempo-painel-previsao strong {
+  font-size: 0.8rem;
+}
+
+.mapa-tempo-painel-previsao small {
+  font-size: 0.42rem;
+}
+
+.mapa-raios-painel {
+  border-bottom: 1px solid #e5e7eb;
+  background: linear-gradient(180deg, #fff7ed, #ffffff);
+}
+
+.mapa-raios-painel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.45rem;
+  padding: 0.45rem 0.5rem 0.28rem;
+}
+
+.mapa-raios-painel-header strong,
+.mapa-raios-painel-header span {
+  display: block;
+}
+
+.mapa-raios-painel-header strong {
+  color: #7c2d12;
+  font-size: 0.62rem;
+}
+
+.mapa-raios-painel-header span {
+  margin-top: 2px;
+  color: #9a3412;
+  font-size: 0.5rem;
+}
+
+.mapa-raios-painel-acoes {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.2rem;
+}
+
+.mapa-raios-painel-header .mapa-chuva-fonte-btn {
+  flex-shrink: 0;
+  padding: 0.18rem 0.3rem;
+  font-size: 0.5rem;
+}
+
+.mapa-raios-resumo {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  margin: 0 0.5rem;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fed7aa;
+}
+
+.mapa-raios-resumo > div {
+  display: grid;
+  gap: 2px;
+  padding: 0.3rem 0.25rem;
+  background: #fff;
+  text-align: center;
+}
+
+.mapa-raios-resumo span {
+  color: #9a3412;
+  font-size: 0.47rem;
+}
+
+.mapa-raios-resumo strong {
+  color: #334155;
+  font-size: 0.62rem;
+}
+
+.mapa-raios-modelos {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.4rem 0.5rem 0.25rem;
+}
+
+.mapa-raios-modelo {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  color: #475569;
+  font-size: 0.54rem;
+}
+
+.mapa-raios-modelo b {
+  color: #64748b;
+  font-size: 0.52rem;
+}
+
+.mapa-raios-modelo b.indica-trovoada {
+  color: #c2410c;
+}
+
+.mapa-raios-pontos-resumo {
+  padding: 0 0.5rem 0.3rem;
+  color: #9a3412;
+  font-size: 0.5rem;
+  font-weight: 700;
+}
+
+.mapa-raios-horarios {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.18rem;
+  padding: 0 0.5rem 0.35rem;
+}
+
+.mapa-raios-horarios span {
+  display: grid;
+  justify-items: center;
+  gap: 0.08rem;
+  padding: 0.17rem 0.02rem;
+  border-radius: 5px;
+  color: #94a3b8;
+  background: #f8fafc;
+  font-size: 0.42rem;
+}
+
+.mapa-raios-horarios span.tem-raios {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.mapa-raios-horarios strong {
+  font-size: 0.75rem;
+}
+
+.mapa-raios-horarios small {
+  font-size: 0.4rem;
+}
+
+.mapa-raios-nota {
+  padding: 0.2rem 0.5rem 0.45rem;
+  color: #78716c;
+  font-size: 0.48rem;
+  line-height: 1.35;
+}
+
+.mapa-tempo-alertas {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+.mapa-tempo-alertas-titulo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.mapa-tempo-alertas-titulo strong {
+  color: #334155;
+  font-size: 0.6rem;
+}
+
+.mapa-tempo-alertas-titulo span {
+  color: #64748b;
+  font-size: 0.48rem;
+}
+
+.mapa-tempo-alerta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  padding: 0.3rem 0.35rem;
+  border-left: 3px solid #f59e0b;
+  border-radius: 4px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 0.5rem;
+  text-decoration: none;
+}
+
+.mapa-tempo-alerta b {
+  font-size: 0.55rem;
+}
+
+.mapa-tempo-alerta span {
+  color: #a16207;
+  white-space: nowrap;
+}
+
+.mapa-tempo-alerta--vermelho {
+  border-left-color: #dc2626;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.mapa-tempo-alerta--informativo {
+  border-left-color: #0284c7;
+  background: #f0f9ff;
+  color: #075985;
+}
+
+.mapa-tempo-sem-alerta,
+.mapa-tempo-alerta-erro {
+  color: #64748b;
+  font-size: 0.54rem;
+}
+
+.mapa-tempo-alerta-erro {
+  color: #b91c1c;
+}
+
+--- Estilos responsivos originais para controles Chuva ---
+@media (max-width: 520px) {
+  .mapa-camadas {
+      top: 54px;
+      width: calc(100vw - 16px);
+      display: flex;
+      gap: 0.02rem;
+      padding: 0.12rem;
+      overflow: visible;
+    }
+  .mapa-camadas > .mapa-camada-btn,
+    .mapa-camadas > .mapa-chuva-wrap,
+    .mapa-camadas > .mapa-ocorr-wrap,
+    .mapa-camadas > .mapa-incendios-wrap {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+  .mapa-camadas .mapa-camada-btn {
+      width: 100%;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0.22rem 0.1rem;
+      font-size: 0.55rem;
+      letter-spacing: -0.01em;
+    }
+  .mapa-camadas .mapa-chuva-wrap,
+    .mapa-camadas .mapa-ocorr-wrap,
+    .mapa-camadas .mapa-incendios-wrap {
+      display: flex;
+    }
+  .mapa-camadas .mapa-chuva-wrap > .mapa-camada-btn,
+    .mapa-camadas .mapa-ocorr-wrap > .mapa-camada-btn,
+    .mapa-camadas .mapa-incendios-wrap > .mapa-camada-btn {
+      flex: 1;
+    }
+  .mapa-chuva-painel {
+      position: fixed;
+      top: 94px;
+      top: calc(env(safe-area-inset-top, 0px) + 94px);
+      left: auto;
+      right: 10px;
+      transform: none;
+      width: min(340px, calc(100vw - 20px));
+      max-height: min(50vh, calc(100vh - 116px));
+      max-height: min(
+        50dvh,
+        calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 116px)
+      );
+    }
+}
+
+--- Servidor Express: Open-Meteo e INMET ---
+O trecho seguinte contém as rotas e funções de apoio do projeto original para /api/tempo, /api/tempo-raios e /api/alertas-tempo. Cole no servidor Express existente junto com as rotas RainViewer e CEMADEN da seção 8.
+// ── Weather / Previsão horária ────────────────────────────────────────────────
+const CONSELHEIRO_LAFAIETE_LAT = -20.6604
+const CONSELHEIRO_LAFAIETE_LON = -43.7863
+const INMET_ESTACAO_OB = 'A513'
+
+let climaCache = null
+let climaCacheTs = 0
+const CLIMA_TTL_MS = 10 * 60 * 1000
+
+async function buscarPrevisaoOpenMeteo() {
+  const params = new URLSearchParams({
+    latitude: String(CONSELHEIRO_LAFAIETE_LAT),
+    longitude: String(CONSELHEIRO_LAFAIETE_LON),
+
+    timezone: 'America/Sao_Paulo',
+    forecast_days: '7',
+
+    hourly: [
+      'temperature_2m',
+      'relative_humidity_2m',
+      'precipitation_probability',
+      'precipitation',
+      'rain',
+      'showers',
+      'weather_code',
+      'is_day',
+      'wind_speed_10m',
+      'wind_direction_10m',
+      'wind_gusts_10m'
+    ].join(','),
+
+    current: [
+      'temperature_2m',
+      'relative_humidity_2m',
+      'precipitation',
+      'rain',
+      'showers',
+      'weather_code',
+      'is_day',
+      'wind_speed_10m',
+      'wind_gusts_10m'
+    ].join(','),
+
+    daily: [
+      'temperature_2m_max',
+      'temperature_2m_min',
+      'precipitation_sum',
+      'rain_sum',
+      'precipitation_hours',
+      'precipitation_probability_max',
+      'wind_speed_10m_max',
+      'wind_gusts_10m_max'
+    ].join(','),
+
+    wind_speed_unit: 'kmh',
+    precipitation_unit: 'mm'
+  })
+
+  const url = `https://api.open-meteo.com/v1/forecast?${params.toString()}`
+
+  const resp = await fetch(url, {
+    headers: { 'Accept': 'application/json' },
+    signal: AbortSignal.timeout(10000)
+  })
+
+  if (!resp.ok) {
+    throw new Error(`Open-Meteo: ${resp.status}`)
+  }
+
+  const json = await resp.json()
+
+  if (!json?.hourly?.time) {
+    throw new Error('Resposta horária inválida da Open-Meteo')
+  }
+
+  const h = json.hourly
+  const atual = json.current
+
+  const horas = h.time.map((time, i) => ({
+    time,
+    dia: h.is_day?.[i] ?? null,
+
+    temperatura: h.temperature_2m?.[i] ?? null,
+    umidade: h.relative_humidity_2m?.[i] ?? null,
+
+    probabilidadeChuva:
+      h.precipitation_probability?.[i] ?? null,
+
+    precipitacao:
+      h.precipitation?.[i] ?? 0,
+
+    chuva:
+      h.rain?.[i] ?? 0,
+
+    pancadas:
+      h.showers?.[i] ?? 0,
+
+    codigoTempo:
+      h.weather_code?.[i] ?? null,
+
+    vento:
+      h.wind_speed_10m?.[i] ?? null,
+
+    direcaoVento:
+      h.wind_direction_10m?.[i] ?? null,
+
+    rajada:
+      h.wind_gusts_10m?.[i] ?? null
+  }))
+
+  // Maior precipitação horária
+  const maiorPrecipitacao = [...horas]
+    .filter(x => Number.isFinite(x.precipitacao))
+    .sort((a, b) => b.precipitacao - a.precipitacao)[0] ?? null
+
+  // Maior vento sustentado
+  const maiorVento = [...horas]
+    .filter(x => Number.isFinite(x.vento))
+    .sort((a, b) => b.vento - a.vento)[0] ?? null
+
+  // Maior rajada
+  const maiorRajada = [...horas]
+    .filter(x => Number.isFinite(x.rajada))
+    .sort((a, b) => b.rajada - a.rajada)[0] ?? null
+
+  // Menor umidade
+  const menorUmidade = [...horas]
+    .filter(x => Number.isFinite(x.umidade))
+    .sort((a, b) => a.umidade - b.umidade)[0] ?? null
+
+  // Maior probabilidade de chuva
+  const maiorProbabilidadeChuva = [...horas]
+    .filter(x => Number.isFinite(x.probabilidadeChuva))
+    .sort((a, b) => b.probabilidadeChuva - a.probabilidadeChuva)[0] ?? null
+
+  return {
+    local: 'Conselheiro Lafaiete - MG',
+    latitude: CONSELHEIRO_LAFAIETE_LAT,
+    longitude: CONSELHEIRO_LAFAIETE_LON,
+
+    timezone: json.timezone,
+
+    atualizadoEm: new Date().toISOString(),
+
+    atual: atual ? {
+      time: atual.time ?? null,
+      dia: atual.is_day ?? null,
+      temperatura: atual.temperature_2m ?? null,
+      umidade: atual.relative_humidity_2m ?? null,
+      precipitacao: atual.precipitation ?? null,
+      chuva: atual.rain ?? null,
+      pancadas: atual.showers ?? null,
+      codigoTempo: atual.weather_code ?? null,
+      vento: atual.wind_speed_10m ?? null,
+      rajada: atual.wind_gusts_10m ?? null,
+    } : null,
+
+    horas,
+
+    diario: json.daily ?? null,
+
+    extremos: {
+      maiorPrecipitacao,
+      maiorVento,
+      maiorRajada,
+      menorUmidade,
+      maiorProbabilidadeChuva
+    },
+
+    fonte: 'Open-Meteo'
+  }
+}
+
+app.get('/api/tempo', async (_req, res) => {
+  try {
+    const agora = Date.now()
+
+    if (
+      climaCache &&
+      (agora - climaCacheTs) < CLIMA_TTL_MS
+    ) {
+      return res.json({
+        ...climaCache,
+        cache: true
+      })
+    }
+
+    const previsao = await buscarPrevisaoOpenMeteo()
+
+    climaCache = previsao
+    climaCacheTs = agora
+
+    res.json(previsao)
+
+  } catch (err) {
+    console.error(
+      'Erro ao buscar previsão climática:',
+      err?.message || err
+    )
+
+    if (climaCache) {
+      return res.json({
+        ...climaCache,
+        cache: true,
+        erroAtualizacao: true
+      })
+    }
+
+    res.status(503).json({
+      erro: 'Serviço climático indisponível'
+    })
+  }
+})
+
+// ── Previsão de trovoadas / raios por modelos Open-Meteo ───────────────────
+// Open-Meteo não fornece a posição de descargas elétricas observadas. Os
+// códigos WMO 95/96/99 são a previsão de trovoada de cada modelo numérico.
+// Mantemos os modelos separados para que o mapa possa mostrar o consenso,
+// em vez de transformar um único modelo em um falso "detector de raios".
+const RAIOS_MODELOS = [
+  { id: 'ecmwf_ifs025', nome: 'ECMWF IFS' },
+  { id: 'gfs_seamless', nome: 'GFS Global' },
+  { id: 'icon_seamless', nome: 'DWD ICON Global' },
+]
+const RAIOS_PONTOS_MINAS = [
+  { id: 'belo-horizonte', nome: 'Belo Horizonte', latitude: -19.9167, longitude: -43.9345 },
+  { id: 'conselheiro-lafaiete', nome: 'Conselheiro Lafaiete', latitude: -20.6604, longitude: -43.7863 },
+  { id: 'barbacena', nome: 'Barbacena', latitude: -21.2214, longitude: -43.7703 },
+  { id: 'juiz-de-fora', nome: 'Juiz de Fora', latitude: -21.7642, longitude: -43.3503 },
+  { id: 'divinopolis', nome: 'Divinópolis', latitude: -20.1436, longitude: -44.8906 },
+  { id: 'sete-lagoas', nome: 'Sete Lagoas', latitude: -19.456, longitude: -44.2413 },
+  { id: 'montes-claros', nome: 'Montes Claros', latitude: -16.7282, longitude: -43.8578 },
+  { id: 'governador-valadares', nome: 'Governador Valadares', latitude: -18.8549, longitude: -41.9559 },
+  { id: 'ipatinga', nome: 'Ipatinga', latitude: -19.4708, longitude: -42.5471 },
+  { id: 'teofilo-otoni', nome: 'Teófilo Otoni', latitude: -17.8575, longitude: -41.505 },
+  { id: 'uberlandia', nome: 'Uberlândia', latitude: -18.9186, longitude: -48.2772 },
+  { id: 'patos-de-minas', nome: 'Patos de Minas', latitude: -18.5789, longitude: -46.518 },
+  { id: 'uberaba', nome: 'Uberaba', latitude: -19.7476, longitude: -47.9382 },
+  { id: 'araxa', nome: 'Araxá', latitude: -19.5902, longitude: -46.9438 },
+  { id: 'pocos-de-caldas', nome: 'Poços de Caldas', latitude: -21.7878, longitude: -46.5614 },
+  { id: 'varginha', nome: 'Varginha', latitude: -21.551, longitude: -45.430 },
+  { id: 'pouso-alegre', nome: 'Pouso Alegre', latitude: -22.23, longitude: -45.933 },
+  { id: 'montes-claros-oeste', nome: 'Januária', latitude: -15.484, longitude: -44.36 },
+]
+let raiosCache = null
+let raiosCacheTs = 0
+const RAIOS_TTL_MS = 10 * 60 * 1000
+
+function nomeRiscoTrovoada(consenso, maxModelos = RAIOS_MODELOS.length) {
+  if (consenso >= Math.max(2, maxModelos)) return 'alto'
+  if (consenso > 0) return 'atenção'
+  return 'baixo'
+}
+
+function horaMaisProximaOpenMeteo(times, alvo = Date.now()) {
+  if (!Array.isArray(times) || times.length === 0) return -1
+  let melhor = 0
+  let distancia = Infinity
+  times.forEach((time, index) => {
+    const valor = new Date(time).getTime()
+    if (!Number.isFinite(valor)) return
+    const atual = Math.abs(valor - alvo)
+    if (atual < distancia) {
+      distancia = atual
+      melhor = index
+    }
+  })
+  return melhor
+}
+
+async function buscarPrevisaoRaiosOpenMeteo() {
+  const params = new URLSearchParams({
+    latitude: String(CONSELHEIRO_LAFAIETE_LAT),
+    longitude: String(CONSELHEIRO_LAFAIETE_LON),
+    timezone: 'America/Sao_Paulo',
+    forecast_days: '2',
+    models: RAIOS_MODELOS.map(modelo => modelo.id).join(','),
+    hourly: [
+      'temperature_2m',
+      'relative_humidity_2m',
+      'precipitation_probability',
+      'precipitation',
+      'rain',
+      'weather_code',
+      'wind_speed_10m',
+      'wind_gusts_10m',
+    ].join(','),
+    wind_speed_unit: 'kmh',
+    precipitation_unit: 'mm',
+  })
+
+  const resposta = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(10000),
+  })
+  if (!resposta.ok) throw new Error(`Open-Meteo raios: ${resposta.status}`)
+
+  const json = await resposta.json()
+  const hourly = json?.hourly
+  if (!Array.isArray(hourly?.time)) throw new Error('Resposta de raios inválida da Open-Meteo')
+
+  const modelos = RAIOS_MODELOS.map(modelo => {
+    const sufixo = `_${modelo.id}`
+    const valores = hourly.time.map((time, index) => ({
+      time,
+      temperatura: hourly[`temperature_2m${sufixo}`]?.[index] ?? null,
+      umidade: hourly[`relative_humidity_2m${sufixo}`]?.[index] ?? null,
+      probabilidadeChuva: hourly[`precipitation_probability${sufixo}`]?.[index] ?? null,
+      precipitacao: hourly[`precipitation${sufixo}`]?.[index] ?? null,
+      chuva: hourly[`rain${sufixo}`]?.[index] ?? null,
+      codigoTempo: hourly[`weather_code${sufixo}`]?.[index] ?? null,
+      vento: hourly[`wind_speed_10m${sufixo}`]?.[index] ?? null,
+      rajada: hourly[`wind_gusts_10m${sufixo}`]?.[index] ?? null,
+    }))
+    const horasTrovoada = valores.filter(item => Number(item.codigoTempo) >= 95)
+    return {
+      id: modelo.id,
+      nome: modelo.nome,
+      horas: valores.slice(0, 36),
+      primeiraTrovoada: horasTrovoada[0]?.time ?? null,
+      maiorCodigo: horasTrovoada.reduce((maior, item) => Math.max(maior, Number(item.codigoTempo) || 0), 0),
+    }
+  })
+
+  const tamanho = Math.min(...modelos.map(modelo => modelo.horas.length))
+  const consenso = Array.from({ length: tamanho }, (_, index) => {
+    const leituras = modelos.map(modelo => modelo.horas[index])
+    const modelosComTrovoada = leituras.filter(item => Number(item.codigoTempo) >= 95).length
+    const maiorProbabilidade = Math.max(
+      ...leituras.map(item => Number(item.probabilidadeChuva) || 0),
+      0,
+    )
+    return {
+      time: hourly.time[index],
+      modelosComTrovoada,
+      maiorProbabilidadeChuva: maiorProbabilidade,
+      codigoMaisGrave: Math.max(...leituras.map(item => Number(item.codigoTempo) || 0), 0),
+      risco: nomeRiscoTrovoada(modelosComTrovoada),
+    }
+  })
+
+  const agoraIndex = horaMaisProximaOpenMeteo(hourly.time)
+  const atual = consenso[agoraIndex] || consenso[0] || null
+  const proximasTrovoadas = consenso.filter(item => item.modelosComTrovoada > 0)
+
+  return {
+    local: 'Conselheiro Lafaiete - MG',
+    latitude: CONSELHEIRO_LAFAIETE_LAT,
+    longitude: CONSELHEIRO_LAFAIETE_LON,
+    timezone: json.timezone,
+    atualizadoEm: new Date().toISOString(),
+    atual,
+    modelos,
+    consenso,
+    proximaTrovoada: proximasTrovoadas[0]?.time ?? null,
+    riscoAtual: atual?.risco || 'baixo',
+    fonte: 'Open-Meteo',
+    observacao: 'Previsão de trovoadas pelos modelos numéricos; não é detecção de descargas observadas.',
+  }
+}
+
+async function buscarPontosRaiosOpenMeteo() {
+  const params = new URLSearchParams({
+    latitude: RAIOS_PONTOS_MINAS.map(ponto => ponto.latitude).join(','),
+    longitude: RAIOS_PONTOS_MINAS.map(ponto => ponto.longitude).join(','),
+    timezone: 'America/Sao_Paulo',
+    forecast_days: '2',
+    models: RAIOS_MODELOS.map(modelo => modelo.id).join(','),
+    hourly: 'precipitation_probability,precipitation,rain,weather_code',
+    precipitation_unit: 'mm',
+  })
+  const resposta = await fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(15000),
+  })
+  if (!resposta.ok) throw new Error(`Open-Meteo raios regionais: ${resposta.status}`)
+  const dados = await resposta.json()
+  if (!Array.isArray(dados)) throw new Error('Resposta regional de raios inválida da Open-Meteo')
+
+  return RAIOS_PONTOS_MINAS.map((ponto, pontoIndex) => {
+    const local = dados[pontoIndex]
+    const times = Array.isArray(local?.hourly?.time) ? local.hourly.time : []
+    const leituras = times.slice(0, 36).map((time, horaIndex) => {
+      const porModelo = RAIOS_MODELOS.map(modelo => {
+        const sufixo = `_${modelo.id}`
+        return {
+          codigo: Number(local?.hourly?.[`weather_code${sufixo}`]?.[horaIndex]) || 0,
+          probabilidade: Number(local?.hourly?.[`precipitation_probability${sufixo}`]?.[horaIndex]) || 0,
+          precipitacao: Number(local?.hourly?.[`precipitation${sufixo}`]?.[horaIndex]) || 0,
+          chuva: Number(local?.hourly?.[`rain${sufixo}`]?.[horaIndex]) || 0,
+        }
+      })
+      const trovoadas = porModelo.filter(leitura => leitura.codigo >= 95)
+      return {
+        time,
+        modelosComTrovoada: trovoadas.length,
+        codigoMaisGrave: Math.max(...porModelo.map(leitura => leitura.codigo), 0),
+        maiorProbabilidadeChuva: Math.max(...porModelo.map(leitura => leitura.probabilidade), 0),
+        maiorPrecipitacao: Math.max(...porModelo.map(leitura => leitura.precipitacao), 0),
+        maiorChuva: Math.max(...porModelo.map(leitura => leitura.chuva), 0),
+      }
+    })
+    const comTrovoada = leituras.filter(leitura => leitura.modelosComTrovoada > 0)
+    const maisGrave = Math.max(...comTrovoada.map(leitura => leitura.codigoMaisGrave), 0)
+    const maiorConsenso = Math.max(...comTrovoada.map(leitura => leitura.modelosComTrovoada), 0)
+    const primeiraTrovoada = comTrovoada[0]?.time || null
+    if (!primeiraTrovoada) return null
+
+    return {
+      ...ponto,
+      primeiraTrovoada,
+      modelosComTrovoada: maiorConsenso,
+      codigoMaisGrave: maisGrave,
+      intensidade: maisGrave >= 99
+        ? 'Trovoada forte'
+        : maisGrave >= 96 ? 'Trovoada com granizo' : 'Trovoada',
+      intensidadeNivel: maisGrave >= 99 ? 3 : maisGrave >= 96 ? 2 : 1,
+      probabilidadeChuva: Math.max(...comTrovoada.map(leitura => leitura.maiorProbabilidadeChuva), 0),
+      precipitacao: Math.max(...comTrovoada.map(leitura => leitura.maiorPrecipitacao), 0),
+      chuva: Math.max(...comTrovoada.map(leitura => leitura.maiorChuva), 0),
+      risco: maiorConsenso >= 2 ? 'alto' : 'atenção',
+    }
+  }).filter(Boolean)
+}
+
+app.get('/api/tempo-raios', async (_req, res) => {
+  try {
+    const agora = Date.now()
+    if (raiosCache && agora - raiosCacheTs < RAIOS_TTL_MS) {
+      return res.json({ ...raiosCache, cache: true })
+    }
+    const previsao = await buscarPrevisaoRaiosOpenMeteo()
+    previsao.pontos = await buscarPontosRaiosOpenMeteo()
+    raiosCache = previsao
+    raiosCacheTs = agora
+    return res.json(previsao)
+  } catch (erro) {
+    console.error('Erro ao buscar previsão de raios:', erro?.message || erro)
+    if (raiosCache) return res.json({ ...raiosCache, cache: true, erroAtualizacao: true })
+    return res.status(503).json({ erro: 'Previsão de raios indisponível' })
+  }
+})
+
+// ── Alertas meteorológicos do INMET para Conselheiro Lafaiete ───────────────
+// O INMET publica os avisos ativos em formato JSON. Mantemos a consulta no
+// servidor para evitar CORS e para não expor uma chamada externa em cada mapa.
+let alertasInmetCache = null
+let alertasInmetCacheTs = 0
+const ALERTAS_INMET_TTL_MS = 10 * 60 * 1000
+const CODIGO_IBGE_CONSELHEIRO_LAFAIETE = '3118304'
+
+function tituloAlertaInmet(alerta) {
+  const codigo = Number(alerta?.id_condicao_severa)
+  if (codigo === 45) return 'Onda de calor'
+  if (codigo === 38) return 'Tempestade'
+  if ([23, 24, 25, 26, 27].includes(codigo)) return 'Chuva intensa'
+  return 'Aviso meteorológico'
+}
+
+function nivelAlertaInmet(alerta) {
+  const codigo = Number(alerta?.id_condicao_severa)
+  if (codigo === 45) return 'vermelho'
+  if ([38, 23, 24, 25, 26, 27].includes(codigo)) return 'amarelo'
+  return 'informativo'
+}
+
+app.get('/api/alertas-tempo', async (_req, res) => {
+  try {
+    const agora = Date.now()
+    if (alertasInmetCache && agora - alertasInmetCacheTs < ALERTAS_INMET_TTL_MS) {
+      return res.json({ ...alertasInmetCache, cache: true })
+    }
+
+    const resposta = await fetch('https://apiprevmet3.inmet.gov.br/avisos/ativos', {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'CODAP/1.0 (Conselheiro Lafaiete, MG)',
+      },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!resposta.ok) throw new Error(`INMET: ${resposta.status}`)
+
+    const payload = await resposta.json()
+    const itens = Object.values(payload || {}).flat().filter(Boolean)
+    const encontrados = itens
+      .filter(item => {
+        const municipios = String(item?.municipios || '')
+        return municipios.includes(CODIGO_IBGE_CONSELHEIRO_LAFAIETE)
+          || /Conselheiro Lafaiete/i.test(municipios)
+      })
+      .map(item => ({
+        id: Number(item.id ?? item.id_aviso),
+        codigo: String(item.codigo || ''),
+        titulo: tituloAlertaInmet(item),
+        nivel: nivelAlertaInmet(item),
+        condicao: Number(item.id_condicao_severa) || null,
+        inicio: item.data_inicio && item.hora_inicio
+          ? `${String(item.data_inicio).slice(0, 10)}T${item.hora_inicio}:00-03:00`
+          : item.data_inicio || null,
+        fim: item.data_fim && item.hora_fim
+          ? `${String(item.data_fim).slice(0, 10)}T${item.hora_fim}:00-03:00`
+          : item.data_fim || null,
+        horaInicio: item.hora_inicio || null,
+        horaFim: item.hora_fim || null,
+        municipios: String(item.municipios || ''),
+        fonte: 'INMET',
+        url: item.id ? `https://avisos.inmet.gov.br/${item.id}` : 'https://avisos.inmet.gov.br/',
+      }))
+      .filter(item => Number.isFinite(item.id))
+      .filter((item, indice, lista) => lista.findIndex(outro =>
+        outro.id === item.id
+        && outro.condicao === item.condicao
+        && outro.inicio === item.inicio
+        && outro.fim === item.fim,
+      ) === indice)
+
+    alertasInmetCache = {
+      local: 'Conselheiro Lafaiete - MG',
+      atualizadoEm: new Date().toISOString(),
+      alertas: encontrados,
+      fonte: 'INMET',
+    }
+    alertasInmetCacheTs = agora
+    return res.json(alertasInmetCache)
+  } catch (erro) {
+    console.error('Erro ao buscar alertas do INMET:', erro?.message || erro)
+    if (alertasInmetCache) {
+      return res.json({ ...alertasInmetCache, cache: true, erroAtualizacao: true })
+    }
+    return res.status(503).json({
+      local: 'Conselheiro Lafaiete - MG',
+      alertas: [],
+      erro: 'Alertas do INMET indisponíveis',
+      fonte: 'INMET',
+    })
+  }
+})
+
+--- APIs adicionais usadas pelo painel ---
+GET /api/tempo — condição atual e previsão horária/diária de Conselheiro Lafaiete via Open-Meteo.
+GET /api/tempo-raios — consenso de três modelos meteorológicos para trovoadas; é previsão, não localização observada de descargas elétricas.
+GET /api/alertas-tempo — avisos ativos do INMET filtrados para Conselheiro Lafaiete.
+
+============================================================
+FIM DA EXPORTAÇÃO COMPLETA
+============================================================
