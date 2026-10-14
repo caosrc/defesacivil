@@ -739,9 +739,9 @@ async function gerarRelatorioVistoria(ocorrencia) {
     ].reduce((xml, texto) => removerParagrafosComTexto(xml, texto), documentXml)
   } else if (ocorrencia.tipo === 'Vistoria Ambiental') {
     documentXml = documentXml
-      .split('Moisés Pinto dos Santos').join('Cristiane Caroline Campos Lopes')
+      .split('Moisés Pinto dos Santos').join('Dra. Cristiane Caroline Campos Lopes')
       .split('Coordenador Municipal de Proteção e Defesa Civil')
-      .join('Engenheira Civil - Coordenadoria Municipal de Proteção e Defesa Civil')
+      .join('Coordenadora Interina Municipal de Proteção e Defesa Civil')
   } else {
     documentXml = [
       'Moisés Pinto dos Santos',
