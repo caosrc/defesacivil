@@ -709,7 +709,7 @@ async function gerarRelatorioVistoria(ocorrencia) {
 
   if (ocorrencia.tipo === 'Vistoria Ambiental') {
     documentXml = documentXml
-      .split('Cristiane Caroline Campos Lopes').join('Talita Oliveira de Ara\u00FAjo')
+      .split('Cristiane Caroline Campos Lopes').join('Dra. Talita Oliveira de Ara\u00FAjo')
     const paragrafoCargo = '<w:p><w:pPr><w:keepNext w:val="false" /><w:keepLines w:val="false" /><w:pageBreakBefore w:val="false" /><w:widowControl w:val="true" /><w:pBdr></w:pBdr><w:spacing w:after="0" /><w:ind /><w:jc w:val="center" /><w:rPr><w:rFonts w:hint="default" w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial" /><w:sz w:val="20" /><w:szCs w:val="20" /></w:rPr></w:pPr><w:r><w:rPr><w:rFonts w:hint="default" w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial" /><w:sz w:val="20" /><w:szCs w:val="20" /></w:rPr><w:t>Analista Ambiental</w:t></w:r></w:p>'
     documentXml = documentXml.replace(
       /<w:p\b[^>]*>(?:(?!<\/w:p>)[\s\S])*?Engenheira Civil - (?:(?!<\/w:p>)[\s\S])*?<\/w:p>/,
