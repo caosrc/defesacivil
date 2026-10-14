@@ -26,6 +26,24 @@ function removerParagrafosComTexto(documentXml: string, texto: string): string {
   })
 }
 
+function substituirTextoDoParagrafo(documentXml: string, texto: string, substituto: string): string {
+  return documentXml.replace(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g, (paragrafo) => {
+    const textoVisivel = [...paragrafo.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)]
+      .map(([, trecho]) => trecho)
+      .join('')
+    if (textoVisivel !== texto) return paragrafo
+
+    let primeiroTrecho = true
+    return paragrafo.replace(/<w:t(\s[^>]*)?>([\s\S]*?)<\/w:t>/g, (_match, atributos = '') => {
+      if (primeiroTrecho) {
+        primeiroTrecho = false
+        return `<w:t${atributos}>${xmlEscape(substituto)}</w:t>`
+      }
+      return `<w:t${atributos}></w:t>`
+    })
+  })
+}
+
 function formatarDataCurta(data: Date = new Date()): string {
   return data.toLocaleDateString('pt-BR')
 }
@@ -177,9 +195,17 @@ export async function gerarRelatorioVistoria(ocorrencia: Ocorrencia): Promise<Bl
   }
 
   if (ocorrencia.tipo === 'Vistoria de Engenharia') {
-    documentXml = [
+    documentXml = substituirTextoDoParagrafo(
+      documentXml,
       'Cristiane Caroline Campos Lopes',
+      'Dra. Cristiane Caroline Campos Lopes'
+    )
+    documentXml = substituirTextoDoParagrafo(
+      documentXml,
       'Engenheira Civil - Coordenadoria Municipal de Proteção e Defesa Civil',
+      'Coordenadora Interina Municipal de Proteção e Defesa Civil'
+    )
+    documentXml = [
       'Moisés Pinto dos Santos',
       'Coordenador Municipal de Proteção e Defesa Civil',
     ].reduce((xml, texto) => removerParagrafosComTexto(xml, texto), documentXml)
