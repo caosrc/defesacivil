@@ -4,3 +4,4 @@
 - [Google Earth Engine](earth-engine.md) — monitoramento MODIS depende de autenticação da conta no ambiente; FIRMS permanece como fonte complementar.
 - [Radar de chuva](radar-chuva.md) — RainViewer fornece tiles observados; camadas GOES/RRQPE exigem processamento geoespacial separado.
 - [Desempenho do mapa](mapa-desempenho.md) — marcadores de ocorrências devem permanecer no Leaflet e ser agrupados, sem desmontagem React durante zoom/arraste.
+- [Texto XML em relatórios DOCX](docx-xml-texto.md) — texto visível de um parágrafo pode estar dividido entre vários elementos `w:t`; concatene-os antes de identificar blocos.

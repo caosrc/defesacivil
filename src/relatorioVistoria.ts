@@ -17,6 +17,15 @@ function xmlEscape(value: unknown): string {
     .replace(/'/g, '&apos;')
 }
 
+function removerParagrafosComTexto(documentXml: string, texto: string): string {
+  return documentXml.replace(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g, (paragrafo) => {
+    const textoVisivel = [...paragrafo.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g)]
+      .map(([, trecho]) => trecho)
+      .join('')
+    return textoVisivel.includes(texto) ? '' : paragrafo
+  })
+}
+
 function formatarDataCurta(data: Date = new Date()): string {
   return data.toLocaleDateString('pt-BR')
 }
@@ -165,6 +174,25 @@ export async function gerarRelatorioVistoria(ocorrencia: Ocorrencia): Promise<Bl
       .split('Talita Oliveira de Ara\u00FAjo').join('Cristiane Caroline Campos Lopes')
       .split('Talita Oliveira de Araújo').join('Cristiane Caroline Campos Lopes')
       .split('Analista Ambiental').join('Engenheira Civil - Coordenadoria Municipal de Prote\u00E7\u00E3o e Defesa Civil')
+  }
+
+  if (ocorrencia.tipo === 'Vistoria de Engenharia') {
+    documentXml = [
+      'Cristiane Caroline Campos Lopes',
+      'Engenheira Civil - Coordenadoria Municipal de Proteção e Defesa Civil',
+      'Moisés Pinto dos Santos',
+      'Coordenador Municipal de Proteção e Defesa Civil',
+    ].reduce((xml, texto) => removerParagrafosComTexto(xml, texto), documentXml)
+  } else if (ocorrencia.tipo === 'Vistoria Ambiental') {
+    documentXml = documentXml
+      .split('Moisés Pinto dos Santos').join('Cristiane Caroline Campos Lopes')
+      .split('Coordenador Municipal de Proteção e Defesa Civil')
+      .join('Engenheira Civil - Coordenadoria Municipal de Proteção e Defesa Civil')
+  } else {
+    documentXml = [
+      'Moisés Pinto dos Santos',
+      'Coordenador Municipal de Proteção e Defesa Civil',
+    ].reduce((xml, texto) => removerParagrafosComTexto(xml, texto), documentXml)
   }
 
   documentXml = documentXml
