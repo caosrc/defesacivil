@@ -8,10 +8,13 @@ import RadarWeatherLayers from './RadarWeatherLayers'
 export type RiskArea = {
   id: string
   nome: string
-  tipo: 'alagamento' | 'deslizamento' | 'incendio' | 'outro'
+  tipo: 'encosta' | 'enchente' | 'drenagem' | 'alagamento' | 'deslizamento' | 'via' | 'obra' | 'inundacao' | 'incendio' | 'outro'
   icone: 'water' | 'landslide' | 'fire' | 'other'
   poligono: { lat: number; lng: number }[]
   limiteMm: number
+  inicioRisco: string
+  referenciaLocal: string
+  observacoes: string
   ativo: boolean
 }
 
@@ -33,10 +36,22 @@ type Props = {
 const CENTRO_OURO_BRANCO: [number, number] = [-20.5195, -43.6983]
 
 const HAZARDS: Record<RiskArea['tipo'], { label: string; icon: RiskArea['icone']; color: string }> = {
-  alagamento: { label: 'Alagamento', icon: 'water', color: '#42b9dc' },
-  deslizamento: { label: 'Deslizamento', icon: 'landslide', color: '#e3a34a' },
-  incendio: { label: 'Incêndio', icon: 'fire', color: '#e56f5c' },
-  outro: { label: 'Outro risco', icon: 'other', color: '#a68be0' },
+  encosta: { label: 'Encostas', icon: 'landslide', color: '#dda34e' },
+  enchente: { label: 'Enchentes', icon: 'water', color: '#4bb8d8' },
+  drenagem: { label: 'Drenagem', icon: 'water', color: '#51bfcb' },
+  alagamento: { label: 'Alagamentos', icon: 'water', color: '#42b9dc' },
+  deslizamento: { label: 'Deslizamentos', icon: 'landslide', color: '#e3a34a' },
+  via: { label: 'Vias', icon: 'other', color: '#778ee8' },
+  obra: { label: 'Obras', icon: 'other', color: '#95af53' },
+  inundacao: { label: 'Inundações', icon: 'water', color: '#39a6cd' },
+  incendio: { label: 'Incêndios', icon: 'fire', color: '#e56f5c' },
+  outro: { label: 'Outros riscos', icon: 'other', color: '#a68be0' },
+}
+const TIPOS_RISCO = Object.keys(HAZARDS) as RiskArea['tipo'][]
+
+function dataHojeLocal() {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
 const ICONS: Record<RiskArea['icone'], { label: string; path: string }> = {
