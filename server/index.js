@@ -1062,6 +1062,19 @@ async function initDb() {
   await query(`ALTER TABLE radar_bilhetes ADD COLUMN IF NOT EXISTS tipo TEXT NOT NULL DEFAULT 'lembrete'`)
   await query(`ALTER TABLE radar_bilhetes ADD COLUMN IF NOT EXISTS agentes_envolvidos TEXT[] NOT NULL DEFAULT '{}'`)
   await query(`ALTER TABLE radar_bilhetes ADD COLUMN IF NOT EXISTS confirmacoes_agentes JSONB NOT NULL DEFAULT '[]'`)
+  await query(`
+    CREATE TABLE IF NOT EXISTS radar_areas_risco (
+      id TEXT PRIMARY KEY,
+      nome TEXT NOT NULL,
+      tipo TEXT NOT NULL CHECK (tipo IN ('alagamento', 'deslizamento', 'incendio', 'outro')),
+      icone TEXT NOT NULL CHECK (icone IN ('water', 'landslide', 'fire', 'other')),
+      poligono JSONB NOT NULL,
+      limite_mm NUMERIC NOT NULL CHECK (limite_mm >= 0),
+      ativo BOOLEAN NOT NULL DEFAULT TRUE,
+      criado_por TEXT NOT NULL,
+      criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
 
   console.log('[DB] Tabelas verificadas/criadas com sucesso')
 
@@ -1374,6 +1387,102 @@ app.delete('/api/planejamentos/:id', async (req, res) => {
 })
 
 // ── Radar DC — lembretes e notificações compartilhados entre os agentes ────
+function validarAreaRisco(body) {
+  const { nome, tipo, icone, poligono, limite_mm, ativo, criado_por } = body || {}
+  const tiposValidos = ['alagamento', 'deslizamento', 'incendio', 'outro']
+  const iconesValidos = ['water', 'landslide', 'fire', 'other']
+  const limite = Number(limite_mm)
+  if (typeof nome !== 'string' || !nome.trim()) return { erro: 'Informe o nome da área.' }
+  if (!tiposValidos.includes(tipo) || !iconesValidos.includes(icone)) return { erro: 'Tipo ou ícone de risco inválido.' }
+  if (!Number.isFinite(limite) || limite < 0) return { erro: 'O limite de chuva precisa ser um número igual ou maior que zero.' }
+  if (!Array.isArray(poligono) || poligono.length < 3) return { erro: 'O polígono precisa ter ao menos três pontos.' }
+  const pontosValidos = poligono.every(ponto =>
+    ponto && Number.isFinite(Number(ponto.lat)) && Number(ponto.lat) >= -90 && Number(ponto.lat) <= 90 &&
+    Number.isFinite(Number(ponto.lng)) && Number(ponto.lng) >= -180 && Number(ponto.lng) <= 180
+  )
+  if (!pontosValidos) return { erro: 'O polígono contém coordenadas inválidas.' }
+  if (typeof criado_por !== 'string' || !criado_por.trim()) return { erro: 'Responsável pelo cadastro não informado.' }
+  return {
+    valor: {
+      nome: nome.trim(),
+      tipo,
+      icone,
+      poligono: poligono.map(ponto => ({ lat: Number(ponto.lat), lng: Number(ponto.lng) })),
+      limite,
+      ativo: ativo !== false,
+      criadoPor: criado_por.trim(),
+    },
+  }
+}
+
+app.get('/api/radar-areas-risco', async (_req, res) => {
+  try {
+    const result = await query('SELECT * FROM radar_areas_risco ORDER BY criado_em DESC')
+    res.json(result.rows)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/radar-areas-risco', async (req, res) => {
+  try {
+    const id = typeof req.body?.id === 'string' ? req.body.id.trim() : ''
+    const validacao = validarAreaRisco(req.body)
+    if (!id) return res.status(400).json({ error: 'Identificador da área obrigatório.' })
+    if (validacao.erro) return res.status(400).json({ error: validacao.erro })
+    const area = validacao.valor
+    const result = await query(
+      `INSERT INTO radar_areas_risco (id, nome, tipo, icone, poligono, limite_mm, ativo, criado_por)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)
+       ON CONFLICT (id) DO UPDATE SET
+         nome = EXCLUDED.nome,
+         tipo = EXCLUDED.tipo,
+         icone = EXCLUDED.icone,
+         poligono = EXCLUDED.poligono,
+         limite_mm = EXCLUDED.limite_mm,
+         ativo = EXCLUDED.ativo,
+         criado_por = EXCLUDED.criado_por
+       RETURNING *`,
+      [id, area.nome, area.tipo, area.icone, JSON.stringify(area.poligono), area.limite, area.ativo, area.criadoPor]
+    )
+    broadcastParaTodos({ tipo: 'radar_areas_risco_atualizadas' })
+    res.status(201).json(result.rows[0])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.patch('/api/radar-areas-risco/:id', async (req, res) => {
+  try {
+    const validacao = validarAreaRisco(req.body)
+    if (validacao.erro) return res.status(400).json({ error: validacao.erro })
+    const area = validacao.valor
+    const result = await query(
+      `UPDATE radar_areas_risco
+       SET nome=$1, tipo=$2, icone=$3, poligono=$4::jsonb, limite_mm=$5, ativo=$6, criado_por=$7
+       WHERE id=$8
+       RETURNING *`,
+      [area.nome, area.tipo, area.icone, JSON.stringify(area.poligono), area.limite, area.ativo, area.criadoPor, req.params.id]
+    )
+    if (!result.rowCount) return res.status(404).json({ error: 'Área de risco não encontrada.' })
+    broadcastParaTodos({ tipo: 'radar_areas_risco_atualizadas' })
+    res.json(result.rows[0])
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.delete('/api/radar-areas-risco/:id', async (req, res) => {
+  try {
+    const result = await query('DELETE FROM radar_areas_risco WHERE id=$1 RETURNING id', [req.params.id])
+    if (!result.rowCount) return res.status(404).json({ error: 'Área de risco não encontrada.' })
+    broadcastParaTodos({ tipo: 'radar_areas_risco_atualizadas' })
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 app.get('/api/radar-bilhetes', async (_req, res) => {
   try {
     const result = await query('SELECT * FROM radar_bilhetes ORDER BY data ASC, hora ASC, criado_em ASC')

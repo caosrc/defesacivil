@@ -6,6 +6,15 @@ import { wsOn, wsSend } from '../wsClient'
 import { supabase, supabaseDisponivel } from '../supabaseClient'
 import { AGENTES } from '../types'
 import { ehFerramentalPorLitro } from '../ferramentalUtils'
+import RadarMapaRisco, { type RiskArea } from './RadarMapaRisco'
+import {
+  atualizarAreaRisco,
+  buscarPrecipitacao24hAreas,
+  criarAreaRisco,
+  excluirAreaRisco,
+  listarAreasRisco,
+  type RiskAreaDraft,
+} from '../radarAreasRiscoApi'
 
 type Prioridade = 'normal' | 'importante' | 'urgente'
 type ConfirmacaoRadar = { agente: string; confirmado: boolean; confirmedAt?: string }
@@ -236,11 +245,122 @@ export default function RadarDC() {
   const [erroTempo, setErroTempo] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [erroSalvamento, setErroSalvamento] = useState('')
+  const [areasRisco, setAreasRisco] = useState<RiskArea[]>([])
+  const [carregandoAreasRisco, setCarregandoAreasRisco] = useState(true)
+  const [carregandoChuvaAreas, setCarregandoChuvaAreas] = useState(false)
+  const [salvandoAreaRisco, setSalvandoAreaRisco] = useState(false)
+  const [erroAreasRisco, setErroAreasRisco] = useState<string | null>(null)
+  const [erroPrevisaoAreas, setErroPrevisaoAreas] = useState<string | null>(null)
+  const [precipitacao24hAreas, setPrecipitacao24hAreas] = useState<Record<string, number | null>>({})
   const carregadoRef = useRef(false)
   const pendentesRef = useRef(new Set<string>())
   const ocorrenciasNotificadasRef = useRef(new Set<number>())
   const atividadesAssinaturaRef = useRef('')
   const calendarioRef = useRef<HTMLDivElement>(null)
+  const mutacaoAreaEmAndamentoRef = useRef(false)
+  const previsaoControllerRef = useRef<AbortController | null>(null)
+
+  const carregarAreasRisco = useCallback(async (mostrarCarregamento = true) => {
+    if (mostrarCarregamento) setCarregandoAreasRisco(true)
+    try {
+      const areas = await listarAreasRisco()
+      setAreasRisco(atuais => JSON.stringify(atuais) === JSON.stringify(areas) ? atuais : areas)
+      setErroAreasRisco(null)
+    } catch (error) {
+      setErroAreasRisco(error instanceof Error ? error.message : 'Não foi possível carregar as áreas de risco.')
+    } finally {
+      if (mostrarCarregamento) setCarregandoAreasRisco(false)
+    }
+  }, [])
+
+  const executarMutacaoArea = useCallback(async <T,>(mutacao: () => Promise<T>): Promise<T> => {
+    if (mutacaoAreaEmAndamentoRef.current) throw new Error('Aguarde a operação atual terminar.')
+    mutacaoAreaEmAndamentoRef.current = true
+    setSalvandoAreaRisco(true)
+    setErroAreasRisco(null)
+    try {
+      return await mutacao()
+    } catch (error) {
+      setErroAreasRisco(error instanceof Error ? error.message : 'Não foi possível salvar a área de risco.')
+      throw error
+    } finally {
+      mutacaoAreaEmAndamentoRef.current = false
+      setSalvandoAreaRisco(false)
+    }
+  }, [])
+
+  const criarAreaMonitorada = useCallback(async (area: RiskAreaDraft) => {
+    const criada = await executarMutacaoArea(() => criarAreaRisco(area, agente))
+    setAreasRisco(atuais => [criada, ...atuais.filter(item => item.id !== criada.id)])
+    wsSend({ tipo: 'radar_areas_risco_atualizadas' })
+  }, [agente, executarMutacaoArea])
+
+  const atualizarAreaMonitorada = useCallback(async (id: string, area: RiskAreaDraft) => {
+    const atualizada = await executarMutacaoArea(() => atualizarAreaRisco(id, area, agente))
+    setAreasRisco(atuais => atuais.map(item => item.id === id ? atualizada : item))
+    wsSend({ tipo: 'radar_areas_risco_atualizadas' })
+  }, [agente, executarMutacaoArea])
+
+  const excluirAreaMonitorada = useCallback(async (id: string) => {
+    await executarMutacaoArea(() => excluirAreaRisco(id))
+    setAreasRisco(atuais => atuais.filter(item => item.id !== id))
+    setPrecipitacao24hAreas(atuais => {
+      const proxima = { ...atuais }
+      delete proxima[id]
+      return proxima
+    })
+    wsSend({ tipo: 'radar_areas_risco_atualizadas' })
+  }, [executarMutacaoArea])
+
+  const atualizarPrevisaoAreas = useCallback(async () => {
+    previsaoControllerRef.current?.abort()
+    const controller = new AbortController()
+    previsaoControllerRef.current = controller
+    const ativas = areasRisco.filter(area => area.ativo)
+    if (!ativas.length) {
+      setPrecipitacao24hAreas({})
+      setErroPrevisaoAreas(null)
+      setCarregandoChuvaAreas(false)
+      return
+    }
+
+    setCarregandoChuvaAreas(true)
+    setErroPrevisaoAreas(null)
+    try {
+      const previsao = await buscarPrecipitacao24hAreas(areasRisco, controller.signal)
+      if (!controller.signal.aborted) setPrecipitacao24hAreas(previsao)
+    } catch (error) {
+      if (controller.signal.aborted) return
+      setPrecipitacao24hAreas({})
+      setErroPrevisaoAreas(error instanceof Error ? error.message : 'Não foi possível atualizar a previsão de chuva.')
+    } finally {
+      if (!controller.signal.aborted) setCarregandoChuvaAreas(false)
+    }
+  }, [areasRisco])
+
+  useEffect(() => {
+    void carregarAreasRisco()
+    const off = wsOn('radar_areas_risco_atualizadas', () => void carregarAreasRisco(false))
+    const timer = window.setInterval(() => void carregarAreasRisco(false), 60 * 1000)
+    return () => {
+      off()
+      window.clearInterval(timer)
+    }
+  }, [carregarAreasRisco])
+
+  useEffect(() => {
+    void atualizarPrevisaoAreas()
+    const timer = window.setInterval(() => void atualizarPrevisaoAreas(), 10 * 60 * 1000)
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === 'visible') void atualizarPrevisaoAreas()
+    }
+    document.addEventListener('visibilitychange', atualizarAoVoltar)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', atualizarAoVoltar)
+      previsaoControllerRef.current?.abort()
+    }
+  }, [atualizarPrevisaoAreas])
 
   useEffect(() => {
     const timer = window.setInterval(() => setHoraAtual(new Date()), 1000)
@@ -808,6 +928,20 @@ export default function RadarDC() {
           <div><h3>⚠️ Ocorrências do dia</h3>{atividades.ocorrencias.length === 0 ? <div className="radar-empty">Nenhuma ocorrência registrada.</div> : atividades.ocorrencias.map(o => <button className="radar-activity" key={o.id} onClick={() => disparar('dc:abrir-ocorrencia', { id: o.id })}><b>{o.agente}</b><span>{o.hora} · {o.natureza || 'Natureza não informada'}</span><small>{o.endereco || 'Endereço não informado'}</small><em>abrir ›</em></button>)}</div>
         </div>
         </section>
+        </div>
+        <div className="radar-map-column">
+          <RadarMapaRisco
+            areas={areasRisco}
+            precipitacao24h={precipitacao24hAreas}
+            carregando={carregandoAreasRisco}
+            carregandoChuva={carregandoChuvaAreas}
+            erro={erroPrevisaoAreas || erroAreasRisco}
+            salvando={salvandoAreaRisco}
+            onCriar={criarAreaMonitorada}
+            onAtualizar={atualizarAreaMonitorada}
+            onExcluir={excluirAreaMonitorada}
+            onAtualizarChuva={() => void atualizarPrevisaoAreas()}
+          />
         </div>
       </div>
       <div className="radar-ticker">
