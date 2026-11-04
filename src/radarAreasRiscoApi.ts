@@ -4,7 +4,10 @@ import type { RiskArea } from './components/RadarMapaRisco'
 export type RiskAreaDraft = Omit<RiskArea, 'id'>
 
 const ENDPOINT = '/api/radar-areas-risco'
-const TIPOS_RISCO = new Set<RiskArea['tipo']>(['alagamento', 'deslizamento', 'incendio', 'outro'])
+const TIPOS_RISCO = new Set<RiskArea['tipo']>([
+  'encosta', 'enchente', 'drenagem', 'alagamento', 'deslizamento',
+  'via', 'obra', 'inundacao', 'incendio', 'outro',
+])
 const ICONES_RISCO = new Set<RiskArea['icone']>(['water', 'landslide', 'fire', 'other'])
 
 type RiskAreaRow = Record<string, unknown>

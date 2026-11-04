@@ -850,3 +850,311 @@ body.radar-tv-active .radar-page {
     font-size: .7rem;
   }
 }
+
+/* No Modo TV o mapa e os controles de áreas de risco ocupam toda a tela. */
+body.radar-tv-active .radar-page,
+.radar-tv {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 0;
+}
+
+.radar-tv .radar-weather {
+  position: absolute;
+  z-index: 1200;
+  top: 8px;
+  right: 9px;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.radar-tv .radar-weather-bar {
+  min-height: 0;
+  justify-content: flex-end;
+  gap: 0;
+}
+
+.radar-tv .radar-weather-bar > :not(.radar-weather-actions),
+.radar-tv .radar-weather-detail,
+.radar-tv .radar-header,
+.radar-tv .radar-left-column,
+.radar-tv .radar-ticker {
+  display: none !important;
+}
+
+.radar-tv .radar-weather-actions button {
+  min-height: 30px;
+  border: 1px solid rgba(255, 255, 255, .65);
+  border-radius: 6px;
+  padding: .28rem .55rem;
+  color: #fff;
+  background: rgba(7, 40, 61, .92);
+  font-size: .68rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+}
+
+.radar-tv .radar-layout {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.radar-tv .radar-map-column {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.radar-tv .risk-map-panel {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.radar-tv .risk-map-heading {
+  display: none;
+}
+
+.radar-tv .risk-map-workspace {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+}
+
+.radar-tv .risk-map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+}
+
+.radar-tv .risk-map-panel .risk-map-leaflet {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.radar-tv .risk-map-map-label {
+  display: none;
+}
+
+.radar-tv .risk-map-map-legend {
+  display: none;
+}
+
+.radar-tv .risk-map-layer-controls {
+  top: 8px;
+  left: 8px;
+  max-width: calc(100% - 330px);
+  gap: .25rem;
+}
+
+.radar-tv .risk-map-layer-controls button {
+  min-height: 27px;
+  border-color: rgba(70, 101, 119, .85);
+  border-radius: 5px;
+  padding: .28rem .42rem;
+  color: #e6f3f8;
+  background: rgba(7, 38, 58, .94);
+  font-size: .58rem;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .25);
+}
+
+.radar-tv .risk-map-layer-controls button.is-active {
+  border-color: #4cb8d6;
+  color: #fff;
+  background: #087a9f;
+}
+
+.radar-tv .risk-map-layer-controls [data-testid="toggle-radar-chuva-observada"].is-active {
+  border-color: #e5a04b;
+  background: #a85d24;
+}
+
+.radar-tv .risk-map-base-switch {
+  border-color: rgba(70, 101, 119, .85);
+  background: rgba(7, 38, 58, .94);
+}
+
+.radar-tv .risk-map-base-switch button {
+  min-height: 23px;
+  border: 0;
+  background: transparent;
+}
+
+.radar-tv .risk-map-base-switch button.is-active {
+  background: #087a9f;
+}
+
+.radar-tv .risk-map-region-select {
+  min-height: 27px;
+  border-color: rgba(70, 101, 119, .85);
+  color: #e6f3f8;
+  background: rgba(7, 38, 58, .94);
+  font-size: .58rem;
+}
+
+.radar-tv .risk-map-region-select select {
+  color: #fff;
+  background: #0b3149;
+}
+
+.radar-tv .risk-map-sidebar {
+  position: absolute;
+  z-index: 800;
+  top: 48px;
+  right: 10px;
+  bottom: auto;
+  width: clamp(205px, 24vw, 285px);
+  height: min(68vh, 600px);
+  max-height: calc(100% - 58px);
+  overflow: auto;
+  border: 1px solid rgba(72, 110, 130, .9);
+  border-radius: 8px;
+  padding: .55rem;
+  background: rgba(7, 34, 53, .95);
+  box-shadow: 0 8px 26px rgba(1, 16, 28, .38);
+  backdrop-filter: blur(7px);
+}
+
+.radar-tv .risk-map-list-head {
+  padding-bottom: .4rem;
+}
+
+.radar-tv .risk-map-list-head h3 {
+  font-size: .76rem;
+}
+
+.radar-tv .risk-map-refresh-small {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #37657b;
+  border-radius: 6px;
+  color: #a1e4e8;
+  background: #16435a;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.radar-tv .risk-map-refresh-small.is-loading {
+  animation: risk-map-spin .9s linear infinite;
+}
+
+.risk-map-refresh-small:disabled {
+  cursor: wait;
+  opacity: .55;
+}
+
+.radar-tv .risk-map-type-option {
+  min-height: 27px;
+  font-size: .56rem;
+}
+
+.radar-tv .risk-map-type-icon {
+  width: 19px;
+  height: 19px;
+}
+
+.radar-tv .risk-map-forecast-note {
+  margin-top: .45rem;
+  padding-top: .4rem;
+}
+
+.radar-tv .risk-map-forecast-note p {
+  font-size: .53rem;
+}
+
+.radar-tv .risk-map-editor {
+  position: absolute;
+  z-index: 900;
+  bottom: 12px;
+  left: 12px;
+  width: min(560px, calc(100% - 325px));
+  max-height: calc(100% - 72px);
+  overflow: auto;
+  margin: 0;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .42);
+}
+
+.radar-tv .leaflet-top.leaflet-left {
+  top: 42px;
+}
+
+@media (max-width: 700px) {
+  .radar-tv .risk-map-layer-controls {
+    max-width: calc(100% - 215px);
+  }
+
+  .radar-tv .risk-map-layer-controls button {
+    min-height: 25px;
+    padding: .24rem .32rem;
+    font-size: .53rem;
+  }
+
+  .radar-tv .risk-map-region-select {
+    min-height: 25px;
+    padding: .16rem .3rem;
+    font-size: .53rem;
+  }
+
+  .radar-tv .risk-map-region-select select {
+    max-width: 76px;
+    font-size: .53rem;
+  }
+
+  .radar-tv .risk-map-sidebar {
+    top: auto;
+    right: 7px;
+    bottom: 7px;
+    height: auto;
+    width: min(285px, calc(100% - 14px));
+    max-height: 48%;
+    padding: .45rem;
+  }
+
+  .radar-tv .risk-map-editor {
+    right: 7px;
+    bottom: 7px;
+    left: 7px;
+    width: auto;
+    max-height: 52%;
+  }
+}

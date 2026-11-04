@@ -173,7 +173,7 @@
   position: absolute;
   z-index: 500;
   top: 12px;
-  left: 12px;
+  left: 58px;
   display: flex;
   align-items: center;
   gap: .45rem;
@@ -223,6 +223,13 @@
 .risk-map-layer-controls button:hover { border-color: #1986a2; background: #fff; }
 .risk-map-layer-controls button.is-active { border-color: #087894; color: #fff; background: #087894; }
 .risk-map-layer-controls button:focus-visible { outline: 2px solid #168eac; outline-offset: 2px; }
+
+.risk-map-base-switch { display: inline-flex; gap: 2px; border: 1px solid rgba(81, 112, 126, .62); border-radius: 6px; padding: 2px; background: rgba(244, 249, 248, .95); box-shadow: 0 2px 7px rgba(18, 43, 53, .17); pointer-events: auto; }
+.risk-map-base-switch button { min-height: 24px; border: 0; box-shadow: none; background: transparent; }
+.risk-map-base-switch button.is-active { color: #fff; background: #087894; }
+.risk-map-region-select { display: inline-flex; min-height: 29px; align-items: center; gap: .28rem; border: 1px solid rgba(81, 112, 126, .62); border-radius: 6px; padding: .2rem .4rem; color: #294956; background: rgba(244, 249, 248, .96); box-shadow: 0 2px 7px rgba(18, 43, 53, .17); font-size: .58rem; font-weight: 800; pointer-events: auto; }
+.risk-map-region-select select { max-width: 105px; border: 0; color: inherit; background: transparent; font: inherit; cursor: pointer; }
+.risk-map-region-select select:focus-visible { outline: 2px solid #168eac; outline-offset: 2px; }
 
 .risk-map-weather-status {
   position: absolute;
@@ -313,6 +320,7 @@
   display: flex;
   min-width: 0;
   flex-direction: column;
+  overflow-y: auto;
   padding: .76rem .72rem .65rem;
   background: linear-gradient(155deg, #10334d, #0a273e 85%);
 }
@@ -323,6 +331,20 @@
 .risk-map-add-small { display: grid; width: 29px; height: 29px; place-items: center; border: 1px solid #37657b; border-radius: 6px; color: #a1e4e8; background: #16435a; font-size: 1.1rem; cursor: pointer; }
 .risk-map-add-small:hover:not(:disabled) { background: #205873; }
 .risk-map-add-small:disabled { cursor: not-allowed; opacity: .45; }
+.risk-map-refresh-small { display: none; }
+.risk-map-type-menu { padding: .5rem 0 .35rem; border-bottom: 1px solid #284a60; }
+.risk-map-type-menu-heading { display: flex; align-items: center; justify-content: space-between; gap: .3rem; margin-bottom: .3rem; color: #8ba9ba; font-size: .53rem; font-weight: 850; letter-spacing: .1em; }
+.risk-map-type-menu-heading button { border: 1px solid #355d72; border-radius: 4px; padding: .2rem .32rem; color: #c1d5de; background: #14364e; font: inherit; font-size: .52rem; font-weight: 750; cursor: pointer; }
+.risk-map-type-menu-heading button.is-selected { border-color: #258b89; color: #a8e2d5; }
+.risk-map-type-list { display: grid; gap: .22rem; margin: 0; padding: 0; list-style: none; }
+.risk-map-type-option { display: grid; width: 100%; min-height: 29px; grid-template-columns: 23px minmax(0, 1fr) 18px 23px; align-items: center; gap: .28rem; border: 1px solid #284e65; border-radius: 5px; padding: .2rem .3rem; color: #8eaaba; background: #102f47; text-align: left; font: inherit; font-size: .59rem; cursor: pointer; }
+.risk-map-type-option:hover { border-color: #4a8093; background: #194259; }
+.risk-map-type-option.is-visible { color: #d6e7ec; background: #153b53; }
+.risk-map-type-icon { display: grid; width: 21px; height: 21px; place-items: center; border: 1px solid currentColor; border-radius: 4px; }
+.risk-map-type-option > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.risk-map-type-option > b { color: #a9c1cb; font: 700 .54rem ui-monospace, monospace; text-align: right; }
+.risk-map-type-option > i { display: grid; width: 21px; height: 24px; place-items: center; border: 1px solid #376875; border-radius: 4px; color: #9de5c7; background: #174d4e; font-style: normal; font-weight: 900; }
+.risk-map-type-option:not(.is-visible) > i { border-color: #385263; color: transparent; background: #102a3d; }
 .risk-map-area-list { display: grid; gap: .42rem; margin: .58rem 0 0; padding: 0; list-style: none; }
 .risk-map-area-list > li { min-width: 0; }
 

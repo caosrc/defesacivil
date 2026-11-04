@@ -12,9 +12,9 @@ export type RiskArea = {
   icone: 'water' | 'landslide' | 'fire' | 'other'
   poligono: { lat: number; lng: number }[]
   limiteMm: number
-  inicioRisco: string
-  referenciaLocal: string
-  observacoes: string
+  inicioRisco?: string
+  referenciaLocal?: string
+  observacoes?: string
   ativo: boolean
 }
 
@@ -48,10 +48,11 @@ const HAZARDS: Record<RiskArea['tipo'], { label: string; icon: RiskArea['icone']
   outro: { label: 'Outros riscos', icon: 'other', color: '#a68be0' },
 }
 const TIPOS_RISCO = Object.keys(HAZARDS) as RiskArea['tipo'][]
-
-function dataHojeLocal() {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+type VisaoMapa = 'ouro-branco' | 'lafaiete' | 'minas-gerais'
+const VISOES_MAPA: Record<VisaoMapa, { label: string; center: [number, number]; zoom: number }> = {
+  'ouro-branco': { label: 'Ouro Branco', center: CENTRO_OURO_BRANCO, zoom: 14 },
+  lafaiete: { label: 'Lafaiete', center: [-20.6636, -43.7862], zoom: 13 },
+  'minas-gerais': { label: 'Toda MG', center: [-18.5122, -44.555], zoom: 6 },
 }
 
 const ICONS: Record<RiskArea['icone'], { label: string; path: string }> = {
@@ -118,6 +119,15 @@ function MapResizeSync() {
   return null
 }
 
+function MapViewController({ view }: { view: VisaoMapa }) {
+  const map = useMap()
+  useEffect(() => {
+    const target = VISOES_MAPA[view]
+    map.flyTo(target.center, target.zoom, { duration: 0.85 })
+  }, [map, view])
+  return null
+}
+
 function centroide(points: RiskArea['poligono']): [number, number] | null {
   if (!points.length) return null
   const total = points.reduce((sum, point) => [sum[0] + point.lat, sum[1] + point.lng], [0, 0])
@@ -159,6 +169,8 @@ export default function RadarMapaRisco({
   const [mostrarRadarSintetico, setMostrarRadarSintetico] = useState(false)
   const [mostrarNuvens, setMostrarNuvens] = useState(false)
   const [satelite, setSatelite] = useState(false)
+  const [visaoMapa, setVisaoMapa] = useState<VisaoMapa>('ouro-branco')
+  const [tiposVisiveis, setTiposVisiveis] = useState(() => new Set(TIPOS_RISCO))
   const [erroCamadas, setErroCamadas] = useState('')
   const [quadroAtualizadoEm, setQuadroAtualizadoEm] = useState('')
 
@@ -170,6 +182,7 @@ export default function RadarMapaRisco({
   }, [])
 
   const activeAreas = useMemo(() => areas.filter(area => area.ativo), [areas])
+  const areasDesenhadas = useMemo(() => areas.filter(area => tiposVisiveis.has(area.tipo)), [areas, tiposVisiveis])
   const alertCount = useMemo(() => activeAreas.filter(area => {
     const forecast = precipitacao24h[area.id]
     return typeof forecast === 'number' && Number.isFinite(forecast) && forecast > area.limiteMm
@@ -340,13 +353,28 @@ export default function RadarMapaRisco({
             <span className="risk-map-map-coords">20°31′ S · 43°42′ O</span>
           </div>
           <div className="risk-map-layer-controls" role="group" aria-label="Camadas do mapa">
+            <div className="risk-map-base-switch" role="group" aria-label="Mapa base">
+              <button
+                type="button"
+                className={!satelite ? 'is-active' : ''}
+                aria-pressed={!satelite}
+                onClick={() => setSatelite(false)}
+              >Mapa</button>
+              <button
+                type="button"
+                className={satelite ? 'is-active' : ''}
+                aria-pressed={satelite}
+                data-testid="toggle-base-satelite"
+                onClick={() => setSatelite(true)}
+              >Satélite</button>
+            </div>
             <button
               type="button"
               className={mostrarChuva ? 'is-active' : ''}
               aria-pressed={mostrarChuva}
               data-testid="toggle-radar-chuva-observada"
               onClick={() => { setMostrarChuva(value => !value); setErroCamadas('') }}
-            >Chuva observada</button>
+            >Chuva ativa</button>
             <button
               type="button"
               className={mostrarRadarSintetico ? 'is-active' : ''}
@@ -361,13 +389,12 @@ export default function RadarMapaRisco({
               data-testid="toggle-nuvens-goes"
               onClick={() => { setMostrarNuvens(value => !value); setErroCamadas('') }}
             >Nuvens GOES</button>
-            <button
-              type="button"
-              className={satelite ? 'is-active' : ''}
-              aria-pressed={satelite}
-              data-testid="toggle-base-satelite"
-              onClick={() => setSatelite(value => !value)}
-            >{satelite ? 'Mapa de rua' : 'Satélite'}</button>
+            <label className="risk-map-region-select">
+              <span>Área</span>
+              <select aria-label="Área do mapa" value={visaoMapa} onChange={event => setVisaoMapa(event.target.value as VisaoMapa)}>
+                {Object.entries(VISOES_MAPA).map(([value, view]) => <option value={value} key={value}>{view.label}</option>)}
+              </select>
+            </label>
           </div>
           {(erroCamadas || (quadroAtualizadoEm && (mostrarChuva || mostrarRadarSintetico))) && (
             <div className={`risk-map-weather-status${erroCamadas ? ' is-error' : ''}`} role={erroCamadas ? 'status' : undefined}>
@@ -393,8 +420,9 @@ export default function RadarMapaRisco({
               onAtualizado={receberAtualizacaoRadar}
             />
             <MapResizeSync />
+            <MapViewController view={visaoMapa} />
             {desenhando && <MapClickCapture onPoint={addPoint} />}
-            {areas.map(area => {
+            {areasDesenhadas.map(area => {
               const center = centroide(area.poligono)
               const forecast = precipitacao24h[area.id]
               const hasForecast = typeof forecast === 'number' && Number.isFinite(forecast)
@@ -468,8 +496,54 @@ export default function RadarMapaRisco({
 
         <aside className="risk-map-sidebar" aria-label="Lista de áreas monitoradas">
           <div className="risk-map-list-head">
-            <div><span className="risk-map-section-label">MONITORAMENTO</span><h3>Áreas cadastradas <b>{areas.length.toString().padStart(2, '0')}</b></h3></div>
+            <div><span className="risk-map-section-label">MONITORAMENTO</span><h3>Áreas de risco <b>{areas.length.toString().padStart(2, '0')}</b></h3></div>
+            <button
+              type="button"
+              className={`risk-map-refresh-small${carregandoChuva ? ' is-loading' : ''}`}
+              onClick={onAtualizarChuva}
+              disabled={carregandoChuva}
+              aria-label="Atualizar previsão de chuva"
+              title="Atualizar previsão de chuva"
+            >↻</button>
             <button type="button" className="risk-map-add-small" onClick={startCreate} aria-label="Cadastrar nova área" disabled={salvando || desenhando}>＋</button>
+          </div>
+          <div className="risk-map-type-menu" aria-label="Tipos de risco visíveis no mapa">
+            <div className="risk-map-type-menu-heading">
+              <span>TIPOS NO MAPA</span>
+              <button
+                type="button"
+                className={tiposVisiveis.size === TIPOS_RISCO.length ? 'is-selected' : ''}
+                aria-pressed={tiposVisiveis.size === TIPOS_RISCO.length}
+                onClick={() => setTiposVisiveis(new Set(TIPOS_RISCO))}
+              >Todas as áreas</button>
+            </div>
+            <ul className="risk-map-type-list">
+              {TIPOS_RISCO.map(tipoRisco => {
+                const hazard = HAZARDS[tipoRisco]
+                const count = areas.filter(area => area.tipo === tipoRisco).length
+                const visible = tiposVisiveis.has(tipoRisco)
+                return (
+                  <li key={tipoRisco}>
+                    <button
+                      type="button"
+                      className={`risk-map-type-option${visible ? ' is-visible' : ''}`}
+                      aria-pressed={visible}
+                      onClick={() => setTiposVisiveis(previous => {
+                        const next = new Set(previous)
+                        if (next.has(tipoRisco)) next.delete(tipoRisco)
+                        else next.add(tipoRisco)
+                        return next
+                      })}
+                    >
+                      <span className="risk-map-type-icon" style={{ color: hazard.color }}><HazardIcon icon={hazard.icon} size={14} /></span>
+                      <span>{hazard.label}</span>
+                      <b>{count}</b>
+                      <i aria-hidden="true">{visible ? '✓' : ''}</i>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
           </div>
           {carregando ? (
             <div className="risk-map-skeleton-list" aria-label="Carregando áreas">
@@ -494,7 +568,12 @@ export default function RadarMapaRisco({
                     <button
                       type="button"
                       className={`risk-map-area-row${selected ? ' is-selected' : ''}${alert ? ' is-alert' : ''}${!area.ativo ? ' is-inactive' : ''}`}
-                      onClick={() => setSelecionadaId(selected ? null : area.id)}
+                      onClick={() => {
+                        if (!tiposVisiveis.has(area.tipo)) {
+                          setTiposVisiveis(previous => new Set(previous).add(area.tipo))
+                        }
+                        setSelecionadaId(selected ? null : area.id)
+                      }}
                       aria-pressed={selected}
                     >
                       <span className="risk-map-area-icon" style={{ color: HAZARDS[area.tipo].color }}><HazardIcon icon={area.icone} /></span>

@@ -1066,7 +1066,7 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS radar_areas_risco (
       id TEXT PRIMARY KEY,
       nome TEXT NOT NULL,
-      tipo TEXT NOT NULL CHECK (tipo IN ('alagamento', 'deslizamento', 'incendio', 'outro')),
+      tipo TEXT NOT NULL CHECK (tipo IN ('encosta', 'enchente', 'drenagem', 'alagamento', 'deslizamento', 'via', 'obra', 'inundacao', 'incendio', 'outro')),
       icone TEXT NOT NULL CHECK (icone IN ('water', 'landslide', 'fire', 'other')),
       poligono JSONB NOT NULL,
       limite_mm NUMERIC NOT NULL CHECK (limite_mm >= 0),
@@ -1074,6 +1074,12 @@ async function initDb() {
       criado_por TEXT NOT NULL,
       criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `)
+  await query(`ALTER TABLE radar_areas_risco DROP CONSTRAINT IF EXISTS radar_areas_risco_tipo_check`)
+  await query(`
+    ALTER TABLE radar_areas_risco
+    ADD CONSTRAINT radar_areas_risco_tipo_check
+    CHECK (tipo IN ('encosta', 'enchente', 'drenagem', 'alagamento', 'deslizamento', 'via', 'obra', 'inundacao', 'incendio', 'outro'))
   `)
 
   console.log('[DB] Tabelas verificadas/criadas com sucesso')
@@ -1389,7 +1395,7 @@ app.delete('/api/planejamentos/:id', async (req, res) => {
 // ── Radar DC — lembretes e notificações compartilhados entre os agentes ────
 function validarAreaRisco(body) {
   const { nome, tipo, icone, poligono, limite_mm, ativo, criado_por } = body || {}
-  const tiposValidos = ['alagamento', 'deslizamento', 'incendio', 'outro']
+  const tiposValidos = ['encosta', 'enchente', 'drenagem', 'alagamento', 'deslizamento', 'via', 'obra', 'inundacao', 'incendio', 'outro']
   const iconesValidos = ['water', 'landslide', 'fire', 'other']
   const limite = Number(limite_mm)
   if (typeof nome !== 'string' || !nome.trim()) return { erro: 'Informe o nome da área.' }

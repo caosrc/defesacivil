@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS public.radar_areas_risco (
   id TEXT PRIMARY KEY,
   nome TEXT NOT NULL,
-  tipo TEXT NOT NULL CHECK (tipo IN ('alagamento', 'deslizamento', 'incendio', 'outro')),
+  tipo TEXT NOT NULL CHECK (tipo IN ('encosta', 'enchente', 'drenagem', 'alagamento', 'deslizamento', 'via', 'obra', 'inundacao', 'incendio', 'outro')),
   icone TEXT NOT NULL CHECK (icone IN ('water', 'landslide', 'fire', 'other')),
   poligono JSONB NOT NULL,
   limite_mm NUMERIC NOT NULL CHECK (limite_mm >= 0),
@@ -10,6 +10,12 @@ CREATE TABLE IF NOT EXISTS public.radar_areas_risco (
   criado_por TEXT NOT NULL,
   criado_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.radar_areas_risco
+  DROP CONSTRAINT IF EXISTS radar_areas_risco_tipo_check;
+ALTER TABLE public.radar_areas_risco
+  ADD CONSTRAINT radar_areas_risco_tipo_check
+  CHECK (tipo IN ('encosta', 'enchente', 'drenagem', 'alagamento', 'deslizamento', 'via', 'obra', 'inundacao', 'incendio', 'outro'));
 
 ALTER TABLE public.radar_areas_risco ENABLE ROW LEVEL SECURITY;
 
