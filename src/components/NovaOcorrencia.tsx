@@ -76,6 +76,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const [latPicker, setLatPicker] = useState<number | null>(null)
   const [lngPicker, setLngPicker] = useState<number | null>(null)
   const [salvando, setSalvando] = useState(false)
+  const salvandoRef = useRef(false)
   const [erro, setErro] = useState('')
   const [tipoAberto, setTipoAberto] = useState(false)
   const [naturezaAberta, setNaturezaAberta] = useState(false)
@@ -336,6 +337,9 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   }
 
   async function salvar() {
+    // A referência bloqueia toques repetidos no mesmo ciclo, antes do React
+    // redesenhar o botão como desativado.
+    if (salvandoRef.current) return
     if (!tipo) { setErro('Selecione o tipo de ocorrência.'); return }
     if (!natureza) { setErro('Selecione a natureza da ocorrência.'); return }
     if (precisaSubnatureza && !subnatureza.trim()) {
@@ -347,59 +351,59 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       return
     }
     setErro('')
+    salvandoRef.current = true
     setSalvando(true)
 
-    // If address provided but no GPS yet, try to geocode now
-    let finalLat = lat
-    let finalLng = lng
-    if (!finalLat && endereco.trim() && navigator.onLine) {
-      const geo = await geocodificarEndereco(endereco)
-      if (geo) { finalLat = geo.lat; finalLng = geo.lng }
-    }
-
-    const tipoFinal = tipo === 'Outro' ? (tipoOutro.trim() || 'Outro') : tipo
-
-    // Monta lista de focos válidos (com coordenadas) para incêndios
-    const focosValidos = ehIncendio
-      ? focosIncendio.filter(f => f.lat != null && f.lng != null).map(f => ({ lat: f.lat!, lng: f.lng! }))
-      : null
-
-    const horasTotalBruto = (horaInicio && horaFim) ? calcularHorasTotal(horaInicio, horaFim) : null
-    const horasTotal = horasTotalBruto  // horas brutas, sem multiplicador
-    // Horas que entram no banco: dom/feriado = todas as horas; seg–sáb = sobreaviso 17h–7h (sem mult)
-    const horasBanco = (horaInicio && horaFim && dataOcorrencia)
-      ? calcularHorasOcorrenciaBanco(dataOcorrencia, horaInicio, horaFim, feriadosCustom)
-      : null
-
-    const payload = {
-      tipo: tipoFinal,
-      natureza,
-      subnatureza: precisaSubnatureza ? subnatureza : null,
-      nivel_risco: nivelRisco,
-      status_oc: statusOc,
-      data_ocorrencia: dataOcorrencia || null,
-      hora_inicio: horaInicio || null,
-      hora_fim: horaFim || null,
-      horas_total: horasTotal,
-      horas_sobreaviso: horasBanco,
-      fotos,
-      lat: finalLat,
-      lng: finalLng,
-      endereco: endereco || null,
-      proprietario: proprietario || null,
-      telefone: telefone || null,
-      situacao: situacao || null,
-      recomendacao: recomendacao || null,
-      conclusao: conclusao || null,
-      agentes,
-      responsavel_registro: sessionStorage.getItem('defesacivil-agente-sessao') || null,
-      focos_incendio: focosValidos && focosValidos.length > 0 ? focosValidos : null,
-      poligono_area_queimada: poligonoArea.length >= 3 ? poligonoArea : null,
-    }
-
     try {
+      // If address provided but no GPS yet, try to geocode now
+      let finalLat = lat
+      let finalLng = lng
+      if (!finalLat && endereco.trim() && navigator.onLine) {
+        const geo = await geocodificarEndereco(endereco)
+        if (geo) { finalLat = geo.lat; finalLng = geo.lng }
+      }
+
+      const tipoFinal = tipo === 'Outro' ? (tipoOutro.trim() || 'Outro') : tipo
+
+      // Monta lista de focos válidos (com coordenadas) para incêndios
+      const focosValidos = ehIncendio
+        ? focosIncendio.filter(f => f.lat != null && f.lng != null).map(f => ({ lat: f.lat!, lng: f.lng! }))
+        : null
+
+      const horasTotalBruto = (horaInicio && horaFim) ? calcularHorasTotal(horaInicio, horaFim) : null
+      const horasTotal = horasTotalBruto  // horas brutas, sem multiplicador
+      // Horas que entram no banco: dom/feriado = todas as horas; seg–sáb = sobreaviso 17h–7h (sem mult)
+      const horasBanco = (horaInicio && horaFim && dataOcorrencia)
+        ? calcularHorasOcorrenciaBanco(dataOcorrencia, horaInicio, horaFim, feriadosCustom)
+        : null
+
+      const payload = {
+        tipo: tipoFinal,
+        natureza,
+        subnatureza: precisaSubnatureza ? subnatureza : null,
+        nivel_risco: nivelRisco,
+        status_oc: statusOc,
+        data_ocorrencia: dataOcorrencia || null,
+        hora_inicio: horaInicio || null,
+        hora_fim: horaFim || null,
+        horas_total: horasTotal,
+        horas_sobreaviso: horasBanco,
+        fotos,
+        lat: finalLat,
+        lng: finalLng,
+        endereco: endereco || null,
+        proprietario: proprietario || null,
+        telefone: telefone || null,
+        situacao: situacao || null,
+        recomendacao: recomendacao || null,
+        conclusao: conclusao || null,
+        agentes,
+        responsavel_registro: sessionStorage.getItem('defesacivil-agente-sessao') || null,
+        focos_incendio: focosValidos && focosValidos.length > 0 ? focosValidos : null,
+        poligono_area_queimada: poligonoArea.length >= 3 ? poligonoArea : null,
+      }
+
       const resultado = await criarOcorrencia(payload as any)
-      setSalvando(false)
       const foiOffline = !!(resultado as any)._offline
       const saveError = (resultado as any)._saveError as string | undefined
 
@@ -413,8 +417,10 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       await clearRascunhoNovaOcorrencia()
       onSalvo(foiOffline)
     } catch (e: any) {
-      setSalvando(false)
       setErro(`Erro ao salvar: ${e?.message ?? 'tente novamente'}`)
+    } finally {
+      salvandoRef.current = false
+      setSalvando(false)
     }
   }
 
