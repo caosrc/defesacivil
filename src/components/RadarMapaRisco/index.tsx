@@ -1,8 +1,9 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { CircleMarker, MapContainer, Marker, Polygon, Polyline, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet'
+import { CircleMarker, MapContainer, Marker, Polygon, Polyline, Popup, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import './RadarMapaRisco.css'
+import RadarWeatherLayers from './RadarWeatherLayers'
 
 export type RiskArea = {
   id: string
@@ -139,6 +140,19 @@ export default function RadarMapaRisco({
   const [coordLat, setCoordLat] = useState('')
   const [coordLng, setCoordLng] = useState('')
   const [mutationError, setMutationError] = useState('')
+  const [mostrarChuva, setMostrarChuva] = useState(false)
+  const [mostrarRadarSintetico, setMostrarRadarSintetico] = useState(false)
+  const [mostrarNuvens, setMostrarNuvens] = useState(false)
+  const [satelite, setSatelite] = useState(false)
+  const [erroCamadas, setErroCamadas] = useState('')
+  const [quadroAtualizadoEm, setQuadroAtualizadoEm] = useState('')
+
+  const receberErroCamadas = useCallback((mensagem: string) => {
+    setErroCamadas(mensagem)
+  }, [])
+  const receberAtualizacaoRadar = useCallback((horario: string) => {
+    setQuadroAtualizadoEm(horario)
+  }, [])
 
   const activeAreas = useMemo(() => areas.filter(area => area.ativo), [areas])
   const alertCount = useMemo(() => activeAreas.filter(area => {
@@ -310,6 +324,41 @@ export default function RadarMapaRisco({
             <span>MAPA MUNICIPAL</span>
             <span className="risk-map-map-coords">20°31′ S · 43°42′ O</span>
           </div>
+          <div className="risk-map-layer-controls" role="group" aria-label="Camadas do mapa">
+            <button
+              type="button"
+              className={mostrarChuva ? 'is-active' : ''}
+              aria-pressed={mostrarChuva}
+              data-testid="toggle-radar-chuva-observada"
+              onClick={() => { setMostrarChuva(value => !value); setErroCamadas('') }}
+            >Chuva observada</button>
+            <button
+              type="button"
+              className={mostrarRadarSintetico ? 'is-active' : ''}
+              aria-pressed={mostrarRadarSintetico}
+              data-testid="toggle-radar-sintetico"
+              onClick={() => { setMostrarRadarSintetico(value => !value); setErroCamadas('') }}
+            >Radar sintético</button>
+            <button
+              type="button"
+              className={mostrarNuvens ? 'is-active' : ''}
+              aria-pressed={mostrarNuvens}
+              data-testid="toggle-nuvens-goes"
+              onClick={() => { setMostrarNuvens(value => !value); setErroCamadas('') }}
+            >Nuvens GOES</button>
+            <button
+              type="button"
+              className={satelite ? 'is-active' : ''}
+              aria-pressed={satelite}
+              data-testid="toggle-base-satelite"
+              onClick={() => setSatelite(value => !value)}
+            >{satelite ? 'Mapa de rua' : 'Satélite'}</button>
+          </div>
+          {(erroCamadas || (quadroAtualizadoEm && (mostrarChuva || mostrarRadarSintetico))) && (
+            <div className={`risk-map-weather-status${erroCamadas ? ' is-error' : ''}`} role={erroCamadas ? 'status' : undefined}>
+              {erroCamadas || `RainViewer · ${new Date(quadroAtualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
+            </div>
+          )}
           <MapContainer
             center={CENTRO_OURO_BRANCO}
             zoom={14}
@@ -320,9 +369,13 @@ export default function RadarMapaRisco({
             className="risk-map-leaflet"
             aria-label="Mapa de Ouro Branco e áreas de risco"
           >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution="&copy; OpenStreetMap"
+            <RadarWeatherLayers
+              mostrarChuva={mostrarChuva}
+              mostrarSintetico={mostrarRadarSintetico}
+              mostrarNuvens={mostrarNuvens}
+              satelite={satelite}
+              onErro={receberErroCamadas}
+              onAtualizado={receberAtualizacaoRadar}
             />
             <MapResizeSync />
             {desenhando && <MapClickCapture onPoint={addPoint} />}

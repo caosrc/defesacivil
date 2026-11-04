@@ -193,6 +193,55 @@
 .risk-map-map-coords { margin-left: .3rem; color: #64808d; font-size: .53rem; letter-spacing: .025em; }
 .risk-map-leaflet { width: 100%; height: 100%; min-height: 480px; background: #e5ecec; z-index: 1; }
 
+.risk-map-layer-controls {
+  position: absolute;
+  z-index: 700;
+  top: 52px;
+  left: 12px;
+  display: flex;
+  max-width: calc(100% - 24px);
+  flex-wrap: wrap;
+  gap: .3rem;
+  pointer-events: none;
+}
+
+.risk-map-layer-controls button {
+  min-height: 29px;
+  border: 1px solid rgba(81, 112, 126, .62);
+  border-radius: 6px;
+  padding: .33rem .48rem;
+  color: #294956;
+  background: rgba(244, 249, 248, .95);
+  box-shadow: 0 2px 7px rgba(18, 43, 53, .17);
+  font: inherit;
+  font-size: .58rem;
+  font-weight: 800;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.risk-map-layer-controls button:hover { border-color: #1986a2; background: #fff; }
+.risk-map-layer-controls button.is-active { border-color: #087894; color: #fff; background: #087894; }
+.risk-map-layer-controls button:focus-visible { outline: 2px solid #168eac; outline-offset: 2px; }
+
+.risk-map-weather-status {
+  position: absolute;
+  z-index: 700;
+  right: 12px;
+  bottom: 52px;
+  max-width: min(270px, calc(100% - 24px));
+  border: 1px solid rgba(193, 212, 217, .82);
+  border-radius: 6px;
+  padding: .32rem .48rem;
+  color: #294956;
+  background: rgba(244, 249, 248, .95);
+  box-shadow: 0 2px 7px rgba(18, 43, 53, .17);
+  font-size: .57rem;
+  line-height: 1.35;
+}
+
+.risk-map-weather-status.is-error { border-color: #b7655d; color: #742c2c; }
+
 .risk-map-map-legend {
   position: absolute;
   z-index: 500;
@@ -466,6 +515,27 @@
   .risk-map-coordinate-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .risk-map-coordinate-form > span { grid-column: 1 / -1; }
   .risk-map-coordinate-form .risk-map-button { grid-column: 1 / -1; }
+}
+
+@media (max-width: 700px) {
+  .risk-map-layer-controls {
+    right: 8px;
+    left: 8px;
+    gap: .22rem;
+    max-width: calc(100% - 16px);
+  }
+
+  .risk-map-layer-controls button {
+    min-height: 27px;
+    padding: .28rem .38rem;
+    font-size: .54rem;
+  }
+
+  .risk-map-weather-status {
+    right: 8px;
+    bottom: 48px;
+    font-size: .53rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -788,146 +788,147 @@ export default function RadarDC() {
         )}
       </section>
       <div className="radar-layout">
-        <div className="radar-note-card radar-bilhete-large">
-          <div className="card-label"><span className="label-dot" /> LEMBRETE</div>
-          <h2>Lembrete</h2>
-          <div className="radar-mini-list">
-            {lembretes.length === 0 ? (
-              <span>Nenhum lembrete cadastrado.</span>
-            ) : lembretes.map(l => (
-              <div className="radar-mini-item" key={l.id}>
-                 <b>{l.agentesEnvolvidos.length > 0 ? l.agentesEnvolvidos.join(', ') : l.criadoPor}</b>
-                <span>{l.texto}</span>
-                 {l.criadoPor === agente && (
-                   <button onClick={() => remover(l.id)} title="Apagar meu lembrete" aria-label="Apagar meu lembrete">×</button>
-                 )}
-              </div>
-            ))}
-          </div>
-          <textarea value={textoLembrete} onFocus={() => setLembreteEditorAberto(true)} onChange={e => setTextoLembrete(e.target.value)} placeholder="Deixe um lembrete para a equipe..." rows={7} />
-           {lembreteEditorAberto && <fieldset className="radar-agentes-fieldset radar-lembrete-agentes">
-             <legend>Agentes que receberão o lembrete</legend>
-             <div className="radar-agentes-grid">
-               {AGENTES.map(nome => (
-                 <label key={nome} className="radar-agente-option">
-                   <input type="checkbox" checked={agentesLembrete.includes(nome)} onChange={e => setAgentesLembrete(prev => e.target.checked ? [...prev, nome] : prev.filter(item => item !== nome))} />
-                   <span>{nome}</span>
-                 </label>
-               ))}
-             </div>
-           </fieldset>}
-           <button className="radar-add" onClick={() => salvarRegistro('lembrete', textoLembrete, hoje(), horaAgora())} disabled={!textoLembrete.trim() || agentesLembrete.length === 0 || salvando}>{salvando ? 'Salvando...' : '+ Salvar lembrete'}</button>
-          {erroSalvamento && <p className="radar-save-error" role="alert">{erroSalvamento}</p>}
-          <small>O lembrete fica visível até o agente que o criou removê-lo.</small>
-        </div>
-
-        <div className="radar-right-column">
-        <div className="radar-calendar-card" ref={calendarioRef}>
-          <div className="calendar-top"><div><span>CALENDÁRIO DE NOTIFICAÇÕES</span><h2>{mes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</h2></div><div className="month-buttons"><button type="button" aria-label="Mês anterior" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}>‹</button><button type="button" aria-label="Próximo mês" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + 1, 1))}>›</button></div></div>
-          <div className="weekdays">{['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'].map(d => <span key={d}>{d}</span>)}</div>
-          <div className="calendar-grid">{dias.map(d => { const key = dataLocalISO(d); const count = notificacoes.filter(n => n.data === key && !n.concluido).length; return <button type="button" key={key} aria-label={dataBonita(key)} className={`${d.getMonth() !== mes.getMonth() ? 'other-month ' : ''}${key === dataSelecionada ? 'selected ' : ''}${key === hoje() ? 'today' : ''}`} onClick={() => { setDataSelecionada(key); setEditorAberto(true) }}><span>{d.getDate()}</span>{count > 0 && <i>{count}</i>}</button> })}</div>
-          <div className="calendar-legend"><span><i className="legend-red" /> notificações</span></div>
-          {editorAberto && <form className="radar-calendar-editor" onSubmit={e => { e.preventDefault(); salvarRegistro('notificacao', textoNotificacao, dataSelecionada, hora) }}>
-            <strong>Notificar em {dataBonita(dataSelecionada)}</strong>
-             <div className="radar-date-notifications">
-               <span className="radar-date-notifications-title">Notificações desta data</span>
-               {notificacoesDaData.length === 0 ? (
-                 <span className="radar-date-notifications-empty">Nenhuma notificação cadastrada.</span>
-               ) : notificacoesDaData.map(n => (
-                 <div className="radar-date-notification" key={n.id}>
-                   <div>
-                     <b>{n.hora} · {n.prioridade}</b>
-                     <span>{n.texto}</span>
-                     <small>Por {n.criadoPor}</small>
-                     {n.criadoPor === agente && <small className="radar-confirmacoes-status">
-                       {n.agentesEnvolvidos.map(nome => {
-                         const confirmacao = n.confirmacoesAgentes.find(item => item.agente === nome)
-                         return `${nome}: ${confirmacao ? confirmacao.confirmado ? 'vai ✅' : 'não vai ❌' : 'aguardando…'}`
-                       }).join(' · ')}
-                     </small>}
-                   </div>
-                   {n.criadoPor === agente && <button type="button" onClick={() => remover(n.id)} aria-label={`Remover notificação: ${n.texto}`} title="Remover notificação">×</button>}
-                 </div>
-               ))}
-             </div>
-            <textarea value={textoNotificacao} onChange={e => setTextoNotificacao(e.target.value)} placeholder="Escreva a notificação..." rows={3} />
-             <div className="radar-form-row"><label>⏰ Hora<input type="time" value={hora} onChange={e => setHora(e.target.value)} /></label><label>Nível<select value={prioridade} onChange={e => setPrioridade(e.target.value as Prioridade)}>{Object.entries(prioridadeConfig).map(([key, c]) => <option key={key} value={key}>{c.emoji} {c.label}</option>)}</select></label></div>
-             <fieldset className="radar-agentes-fieldset">
-               <legend>Agentes envolvidos</legend>
+        <div className="radar-left-column">
+          <div className="radar-note-card radar-bilhete-large">
+            <div className="card-label"><span className="label-dot" /> LEMBRETE</div>
+            <h2>Lembrete</h2>
+            <div className="radar-mini-list">
+              {lembretes.length === 0 ? (
+                <span>Nenhum lembrete cadastrado.</span>
+              ) : lembretes.map(l => (
+                <div className="radar-mini-item" key={l.id}>
+                   <b>{l.agentesEnvolvidos.length > 0 ? l.agentesEnvolvidos.join(', ') : l.criadoPor}</b>
+                  <span>{l.texto}</span>
+                   {l.criadoPor === agente && (
+                     <button onClick={() => remover(l.id)} title="Apagar meu lembrete" aria-label="Apagar meu lembrete">×</button>
+                   )}
+                </div>
+              ))}
+            </div>
+            <textarea value={textoLembrete} onFocus={() => setLembreteEditorAberto(true)} onChange={e => setTextoLembrete(e.target.value)} placeholder="Deixe um lembrete para a equipe..." rows={7} />
+             {lembreteEditorAberto && <fieldset className="radar-agentes-fieldset radar-lembrete-agentes">
+               <legend>Agentes que receberão o lembrete</legend>
                <div className="radar-agentes-grid">
                  {AGENTES.map(nome => (
                    <label key={nome} className="radar-agente-option">
-                     <input
-                       type="checkbox"
-                       checked={agentesEnvolvidos.includes(nome)}
-                       onChange={e => setAgentesEnvolvidos(prev => e.target.checked ? [...prev, nome] : prev.filter(item => item !== nome))}
-                     />
+                     <input type="checkbox" checked={agentesLembrete.includes(nome)} onChange={e => setAgentesLembrete(prev => e.target.checked ? [...prev, nome] : prev.filter(item => item !== nome))} />
                      <span>{nome}</span>
                    </label>
                  ))}
                </div>
-             </fieldset>
-             <button className="radar-add" type="submit" disabled={!textoNotificacao.trim() || salvando}>{salvando ? 'Salvando...' : '+ Colocar no Radar DC'}</button>
+             </fieldset>}
+             <button className="radar-add" onClick={() => salvarRegistro('lembrete', textoLembrete, hoje(), horaAgora())} disabled={!textoLembrete.trim() || agentesLembrete.length === 0 || salvando}>{salvando ? 'Salvando...' : '+ Salvar lembrete'}</button>
             {erroSalvamento && <p className="radar-save-error" role="alert">{erroSalvamento}</p>}
-          </form>}
-        </div>
-        <section className="radar-activities">
-         <div className="radar-list-heading"><div><span className="card-label">REGISTROS OPERACIONAIS</span><h2>Atividades de {dataBonita(dataSelecionada)}</h2></div><strong>{atividades.checklists.length + atividades.checklistsFerramentas.length + atividades.ocorrencias.length} registro(s)</strong></div>
-        <div className="radar-activity-columns">
-          <div><h3>🚗 Checklists do dia</h3>{atividades.checklists.length === 0 ? <div className="radar-empty">Nenhum checklist de viatura registrado.</div> : atividades.checklists.map(c => <button className="radar-activity" key={c.id} onClick={() => disparar('dc:abrir-checklist', { id: c.id })}><b>{c.agente}{c.fotoCarregada && <strong className="radar-foto-carregada">Foto Carregada</strong>}</b><span className="radar-checklist-resumo">{c.hora} - {c.placa || 'Placa não informada'} - KM {c.km || 'não informado'} - ⛽ {c.nivelCombustivel || 'não informado'}</span><em>abrir ›</em></button>)}
-          <h3 className="radar-subtitulo-ferramentas">🧰 Checklists de ferramentas</h3>
-           {!resumosFerramental ? (
-            <div className="radar-empty">Nenhum checklist de ferramenta registrado.</div>
-          ) : (
-            <div className="radar-ferramental-resumos">
-                  <article className="radar-ferramental-resumo">
-                  <div className="radar-ferramental-cabecalho">
-                      <strong className="radar-ferramental-agentes">{resumosFerramental.agentes.join(' · ')}</strong>
-                     <b>Ferramental {resumosFerramental.tiposVerificados}/{resumosFerramental.totalTipos}</b>
-                  </div>
-                    {(resumosFerramental.boa + resumosFerramental.media + resumosFerramental.ruim) > 0 && (
-                     <div className="radar-ferramental-itens">
-                        <span className="radar-ferramental-boa">Boa - {percentual(resumosFerramental.boa, resumosFerramental.totalTipos)}%</span>
-                        <span className="radar-ferramental-media">Média - {percentual(resumosFerramental.media, resumosFerramental.totalTipos)}%</span>
-                        <span className="radar-ferramental-ruim">Ruim - {percentual(resumosFerramental.ruim, resumosFerramental.totalTipos)}%</span>
-                     </div>
-                   )}
-                  <div className="radar-ferramental-quantidade">
-                      Itens/litros conferidos: {resumosFerramental.itensConferidos}/{resumosFerramental.itensCadastrados}
-                  </div>
-                   {resumosFerramental.ferramentasRuins.length > 0 && (
-                    <div className="radar-ferramental-alerta radar-ferramental-alerta-ruim">
-                       <strong>Ruim:</strong> {resumosFerramental.ferramentasRuins.join(', ')}
-                    </div>
-                  )}
-                   {resumosFerramental.faltantes.length > 0 && (
-                    <div className="radar-ferramental-alerta radar-ferramental-alerta-falta">
-                       <strong>Faltando:</strong> {resumosFerramental.faltantes.join(', ')}
-                    </div>
-                  )}
-                   {resumosFerramental.serragemAlertas.length > 0 && (
-                    <div className="radar-ferramental-alerta radar-ferramental-alerta-serragem">
-                       <strong>⚠️ Serragem:</strong> {resumosFerramental.serragemAlertas.join(', ')}
-                    </div>
-                  )}
-                    {resumosFerramental.litrosAlertas.length > 0 && (
-                     <div className="radar-ferramental-alerta radar-ferramental-alerta-serragem">
-                        <strong>⚠️ Estoque baixo:</strong> {resumosFerramental.litrosAlertas.join(', ')}
-                     </div>
-                   )}
-                   {resumosFerramental.semChecklist.length > 0 && (
-                    <div className="radar-ferramental-alerta radar-ferramental-alerta-pendente">
-                       <strong>Sem checklist:</strong> {resumosFerramental.semChecklist.slice(0, 3).join(', ')}
-                       {resumosFerramental.semChecklist.length > 3 ? ` e mais ${resumosFerramental.semChecklist.length - 3}` : ''}
-                    </div>
-                  )}
-                </article>
-            </div>
-          )}
+            <small>O lembrete fica visível até o agente que o criou removê-lo.</small>
           </div>
-          <div><h3>⚠️ Ocorrências do dia</h3>{atividades.ocorrencias.length === 0 ? <div className="radar-empty">Nenhuma ocorrência registrada.</div> : atividades.ocorrencias.map(o => <button className="radar-activity" key={o.id} onClick={() => disparar('dc:abrir-ocorrencia', { id: o.id })}><b>{o.agente}</b><span>{o.hora} · {o.natureza || 'Natureza não informada'}</span><small>{o.endereco || 'Endereço não informado'}</small><em>abrir ›</em></button>)}</div>
-        </div>
-        </section>
+          <div className="radar-right-column">
+          <div className="radar-calendar-card" ref={calendarioRef}>
+            <div className="calendar-top"><div><span>CALENDÁRIO DE NOTIFICAÇÕES</span><h2>{mes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</h2></div><div className="month-buttons"><button type="button" aria-label="Mês anterior" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}>‹</button><button type="button" aria-label="Próximo mês" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + 1, 1))}>›</button></div></div>
+            <div className="weekdays">{['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'].map(d => <span key={d}>{d}</span>)}</div>
+            <div className="calendar-grid">{dias.map(d => { const key = dataLocalISO(d); const count = notificacoes.filter(n => n.data === key && !n.concluido).length; return <button type="button" key={key} aria-label={dataBonita(key)} className={`${d.getMonth() !== mes.getMonth() ? 'other-month ' : ''}${key === dataSelecionada ? 'selected ' : ''}${key === hoje() ? 'today' : ''}`} onClick={() => { setDataSelecionada(key); setEditorAberto(true) }}><span>{d.getDate()}</span>{count > 0 && <i>{count}</i>}</button> })}</div>
+            <div className="calendar-legend"><span><i className="legend-red" /> notificações</span></div>
+            {editorAberto && <form className="radar-calendar-editor" onSubmit={e => { e.preventDefault(); salvarRegistro('notificacao', textoNotificacao, dataSelecionada, hora) }}>
+              <strong>Notificar em {dataBonita(dataSelecionada)}</strong>
+               <div className="radar-date-notifications">
+                 <span className="radar-date-notifications-title">Notificações desta data</span>
+                 {notificacoesDaData.length === 0 ? (
+                   <span className="radar-date-notifications-empty">Nenhuma notificação cadastrada.</span>
+                 ) : notificacoesDaData.map(n => (
+                   <div className="radar-date-notification" key={n.id}>
+                     <div>
+                       <b>{n.hora} · {n.prioridade}</b>
+                       <span>{n.texto}</span>
+                       <small>Por {n.criadoPor}</small>
+                       {n.criadoPor === agente && <small className="radar-confirmacoes-status">
+                         {n.agentesEnvolvidos.map(nome => {
+                           const confirmacao = n.confirmacoesAgentes.find(item => item.agente === nome)
+                           return `${nome}: ${confirmacao ? confirmacao.confirmado ? 'vai ✅' : 'não vai ❌' : 'aguardando…'}`
+                         }).join(' · ')}
+                       </small>}
+                     </div>
+                     {n.criadoPor === agente && <button type="button" onClick={() => remover(n.id)} aria-label={`Remover notificação: ${n.texto}`} title="Remover notificação">×</button>}
+                   </div>
+                 ))}
+               </div>
+              <textarea value={textoNotificacao} onChange={e => setTextoNotificacao(e.target.value)} placeholder="Escreva a notificação..." rows={3} />
+               <div className="radar-form-row"><label>⏰ Hora<input type="time" value={hora} onChange={e => setHora(e.target.value)} /></label><label>Nível<select value={prioridade} onChange={e => setPrioridade(e.target.value as Prioridade)}>{Object.entries(prioridadeConfig).map(([key, c]) => <option key={key} value={key}>{c.emoji} {c.label}</option>)}</select></label></div>
+               <fieldset className="radar-agentes-fieldset">
+                 <legend>Agentes envolvidos</legend>
+                 <div className="radar-agentes-grid">
+                   {AGENTES.map(nome => (
+                     <label key={nome} className="radar-agente-option">
+                       <input
+                         type="checkbox"
+                         checked={agentesEnvolvidos.includes(nome)}
+                         onChange={e => setAgentesEnvolvidos(prev => e.target.checked ? [...prev, nome] : prev.filter(item => item !== nome))}
+                       />
+                       <span>{nome}</span>
+                     </label>
+                   ))}
+                 </div>
+               </fieldset>
+               <button className="radar-add" type="submit" disabled={!textoNotificacao.trim() || salvando}>{salvando ? 'Salvando...' : '+ Colocar no Radar DC'}</button>
+              {erroSalvamento && <p className="radar-save-error" role="alert">{erroSalvamento}</p>}
+            </form>}
+          </div>
+          <section className="radar-activities">
+           <div className="radar-list-heading"><div><span className="card-label">REGISTROS OPERACIONAIS</span><h2>Atividades de {dataBonita(dataSelecionada)}</h2></div><strong>{atividades.checklists.length + atividades.checklistsFerramentas.length + atividades.ocorrencias.length} registro(s)</strong></div>
+          <div className="radar-activity-columns">
+            <div><h3>🚗 Checklists do dia</h3>{atividades.checklists.length === 0 ? <div className="radar-empty">Nenhum checklist de viatura registrado.</div> : atividades.checklists.map(c => <button className="radar-activity" key={c.id} onClick={() => disparar('dc:abrir-checklist', { id: c.id })}><b>{c.agente}{c.fotoCarregada && <strong className="radar-foto-carregada">Foto Carregada</strong>}</b><span className="radar-checklist-resumo">{c.hora} - {c.placa || 'Placa não informada'} - KM {c.km || 'não informado'} - ⛽ {c.nivelCombustivel || 'não informado'}</span><em>abrir ›</em></button>)}
+            <h3 className="radar-subtitulo-ferramentas">🧰 Checklists de ferramentas</h3>
+             {!resumosFerramental ? (
+              <div className="radar-empty">Nenhum checklist de ferramenta registrado.</div>
+            ) : (
+              <div className="radar-ferramental-resumos">
+                    <article className="radar-ferramental-resumo">
+                    <div className="radar-ferramental-cabecalho">
+                        <strong className="radar-ferramental-agentes">{resumosFerramental.agentes.join(' · ')}</strong>
+                       <b>Ferramental {resumosFerramental.tiposVerificados}/{resumosFerramental.totalTipos}</b>
+                    </div>
+                      {(resumosFerramental.boa + resumosFerramental.media + resumosFerramental.ruim) > 0 && (
+                       <div className="radar-ferramental-itens">
+                          <span className="radar-ferramental-boa">Boa - {percentual(resumosFerramental.boa, resumosFerramental.totalTipos)}%</span>
+                          <span className="radar-ferramental-media">Média - {percentual(resumosFerramental.media, resumosFerramental.totalTipos)}%</span>
+                          <span className="radar-ferramental-ruim">Ruim - {percentual(resumosFerramental.ruim, resumosFerramental.totalTipos)}%</span>
+                       </div>
+                     )}
+                    <div className="radar-ferramental-quantidade">
+                        Itens/litros conferidos: {resumosFerramental.itensConferidos}/{resumosFerramental.itensCadastrados}
+                    </div>
+                     {resumosFerramental.ferramentasRuins.length > 0 && (
+                      <div className="radar-ferramental-alerta radar-ferramental-alerta-ruim">
+                         <strong>Ruim:</strong> {resumosFerramental.ferramentasRuins.join(', ')}
+                      </div>
+                    )}
+                     {resumosFerramental.faltantes.length > 0 && (
+                      <div className="radar-ferramental-alerta radar-ferramental-alerta-falta">
+                         <strong>Faltando:</strong> {resumosFerramental.faltantes.join(', ')}
+                      </div>
+                    )}
+                     {resumosFerramental.serragemAlertas.length > 0 && (
+                      <div className="radar-ferramental-alerta radar-ferramental-alerta-serragem">
+                         <strong>⚠️ Serragem:</strong> {resumosFerramental.serragemAlertas.join(', ')}
+                      </div>
+                    )}
+                      {resumosFerramental.litrosAlertas.length > 0 && (
+                       <div className="radar-ferramental-alerta radar-ferramental-alerta-serragem">
+                          <strong>⚠️ Estoque baixo:</strong> {resumosFerramental.litrosAlertas.join(', ')}
+                       </div>
+                     )}
+                     {resumosFerramental.semChecklist.length > 0 && (
+                      <div className="radar-ferramental-alerta radar-ferramental-alerta-pendente">
+                         <strong>Sem checklist:</strong> {resumosFerramental.semChecklist.slice(0, 3).join(', ')}
+                         {resumosFerramental.semChecklist.length > 3 ? ` e mais ${resumosFerramental.semChecklist.length - 3}` : ''}
+                      </div>
+                    )}
+                  </article>
+              </div>
+            )}
+            </div>
+            <div><h3>⚠️ Ocorrências do dia</h3>{atividades.ocorrencias.length === 0 ? <div className="radar-empty">Nenhuma ocorrência registrada.</div> : atividades.ocorrencias.map(o => <button className="radar-activity" key={o.id} onClick={() => disparar('dc:abrir-ocorrencia', { id: o.id })}><b>{o.agente}</b><span>{o.hora} · {o.natureza || 'Natureza não informada'}</span><small>{o.endereco || 'Endereço não informado'}</small><em>abrir ›</em></button>)}</div>
+          </div>
+          </section>
+          </div>
         </div>
         <div className="radar-map-column">
           <RadarMapaRisco
