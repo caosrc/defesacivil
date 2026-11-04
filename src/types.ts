@@ -22,6 +22,7 @@ export interface Ocorrencia {
   lng: number | null
   endereco: string | null
   proprietario: string | null
+  telefone?: string | null
   situacao: string | null
   recomendacao: string | null
   conclusao: string | null

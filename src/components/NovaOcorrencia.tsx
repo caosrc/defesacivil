@@ -61,6 +61,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const [bairro, setBairro] = useState('')
   const endereco = [rua, numero, bairro].filter(Boolean).join(', ')
   const [proprietario, setProprietario] = useState('')
+  const [telefone, setTelefone] = useState('')
   const [situacao, setSituacao] = useState('')
   const [recomendacao, setRecomendacao] = useState('')
   const [conclusao, setConclusao] = useState('')
@@ -116,6 +117,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
         if (d.lat != null) setLat(d.lat as number)
         if (d.lng != null) setLng(d.lng as number)
         if (d.proprietario) setProprietario(d.proprietario as string)
+        if (d.telefone) setTelefone(d.telefone as string)
         if (d.situacao) setSituacao(d.situacao as string)
         if (d.recomendacao) setRecomendacao(d.recomendacao as string)
         if (d.conclusao) setConclusao(d.conclusao as string)
@@ -138,11 +140,11 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     tipo, tipoOutro, natureza, subnatureza, nivelRisco, statusOc,
     dataOcorrencia, horaInicio, horaFim,
     rua, numero, bairro, lat, lng,
-    proprietario, situacao, recomendacao, conclusao,
+    proprietario, telefone, situacao, recomendacao, conclusao,
     agentes, focosIncendio, fotos, poligonoArea,
   }), [tipo, tipoOutro, natureza, subnatureza, nivelRisco, statusOc,
     dataOcorrencia, horaInicio, horaFim, rua, numero, bairro, lat, lng,
-    proprietario, situacao, recomendacao, conclusao, agentes, focosIncendio, fotos, poligonoArea])
+    proprietario, telefone, situacao, recomendacao, conclusao, agentes, focosIncendio, fotos, poligonoArea])
 
   const persistirRascunho = useCallback(async () => {
     const draft = montarRascunho()
@@ -168,7 +170,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     setDataOcorrencia(hoje); setHoraInicio(''); setHoraFim('')
     setRua(''); setNumero(''); setBairro('')
     setLat(null); setLng(null)
-    setProprietario(''); setSituacao(''); setRecomendacao(''); setConclusao('')
+    setProprietario(''); setTelefone(''); setSituacao(''); setRecomendacao(''); setConclusao('')
     const agenteLogado = sessionStorage.getItem('defesacivil-agente-sessao')
     setAgentes(agenteLogado ? [agenteLogado] : [])
     setFotos([])
@@ -385,6 +387,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       lng: finalLng,
       endereco: endereco || null,
       proprietario: proprietario || null,
+      telefone: telefone || null,
       situacao: situacao || null,
       recomendacao: recomendacao || null,
       conclusao: conclusao || null,
@@ -808,6 +811,17 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
               placeholder="Nome completo"
               value={proprietario}
               onChange={(e) => setProprietario(e.target.value)}
+            />
+            <label className="campo-label campo-label-sub">📞 DDD E TELEFONE</label>
+            <input
+              className="campo-input"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              maxLength={20}
+              placeholder="(31) 99999-9999"
+              value={telefone}
+              onChange={(e) => setTelefone(e.target.value)}
             />
           </div>
 

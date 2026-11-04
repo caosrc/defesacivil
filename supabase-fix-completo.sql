@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS public.ocorrencias (
   lng                  DOUBLE PRECISION,
   endereco             TEXT,
   proprietario         TEXT,
+  telefone             TEXT,
   situacao             TEXT,
   recomendacao         TEXT,
   conclusao            TEXT,
@@ -28,6 +29,7 @@ CREATE TABLE IF NOT EXISTS public.ocorrencias (
   created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.ocorrencias ADD COLUMN IF NOT EXISTS telefone TEXT;
 ALTER TABLE public.ocorrencias ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "ocorrencias aberta" ON public.ocorrencias;
 CREATE POLICY "ocorrencias aberta" ON public.ocorrencias FOR ALL USING (true) WITH CHECK (true);

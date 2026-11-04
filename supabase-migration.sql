@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS ocorrencias (
   lng                             DOUBLE PRECISION,
   endereco                        TEXT,
   proprietario                    TEXT,
+  telefone                        TEXT,
   situacao                        TEXT,
   recomendacao                    TEXT,
   conclusao                       TEXT,
@@ -25,6 +26,7 @@ CREATE TABLE IF NOT EXISTS ocorrencias (
   responsavel_registro            TEXT,
   vistorias                       JSONB DEFAULT '[]'
 );
+ALTER TABLE ocorrencias ADD COLUMN IF NOT EXISTS telefone TEXT;
 
 -- Escala / banco de horas (linha única, id=1)
 CREATE TABLE IF NOT EXISTS escala_estado (

@@ -278,6 +278,7 @@ export async function exportarOcorrenciaExcel(o: Ocorrencia): Promise<void> {
   row++
   secao('RESPONSÁVEL')
   linha('Proprietário / Morador', o.proprietario)
+  linha('Telefone do Morador', o.telefone)
 
   row++
   secao('SITUAÇÃO')

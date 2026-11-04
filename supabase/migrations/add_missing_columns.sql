@@ -2,6 +2,7 @@
 -- Execute no Supabase: https://app.supabase.com → SQL Editor → colar e clicar em Run
 
 -- ── ocorrencias ─────────────────────────────────────────────────────────────
+ALTER TABLE ocorrencias ADD COLUMN IF NOT EXISTS telefone TEXT;
 ALTER TABLE ocorrencias ADD COLUMN IF NOT EXISTS focos_incendio JSONB DEFAULT NULL;
 ALTER TABLE ocorrencias ADD COLUMN IF NOT EXISTS poligono_area_queimada JSONB DEFAULT NULL;
 ALTER TABLE ocorrencias ADD COLUMN IF NOT EXISTS hora_inicio VARCHAR(5);

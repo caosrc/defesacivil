@@ -63,6 +63,7 @@ function buildPayload(dados: Omit<Ocorrencia, 'id' | 'created_at'>) {
     lng: dados.lng ?? null,
     endereco: dados.endereco ?? null,
     proprietario: dados.proprietario ?? null,
+    telefone: dados.telefone ?? null,
     situacao: dados.situacao ?? null,
     recomendacao: dados.recomendacao ?? null,
     conclusao: dados.conclusao ?? null,
@@ -94,11 +95,11 @@ export class ApiError extends Error {
 
 // Campos leves para listagem/mapa — exclui fotos e vistorias (base64 pesado)
 const CAMPOS_LISTA_OCORRENCIA =
-  'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,hora_inicio,hora_fim,horas_total,horas_sobreaviso,agentes,responsavel_registro,focos_incendio,poligono_area_queimada,created_at'
+  'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,telefone,situacao,recomendacao,conclusao,data_ocorrencia,hora_inicio,hora_fim,horas_total,horas_sobreaviso,agentes,responsavel_registro,focos_incendio,poligono_area_queimada,created_at'
 
 // Fallback sem colunas que podem não existir em Supabase mais antigo
 const CAMPOS_LISTA_OCORRENCIA_BASE =
-  'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,situacao,recomendacao,conclusao,data_ocorrencia,agentes,responsavel_registro,focos_incendio,poligono_area_queimada,created_at'
+  'id,tipo,natureza,subnatureza,nivel_risco,status_oc,lat,lng,endereco,proprietario,telefone,situacao,recomendacao,conclusao,data_ocorrencia,agentes,responsavel_registro,focos_incendio,poligono_area_queimada,created_at'
 
 function isColumnMissingError(e: unknown): boolean {
   if (e instanceof Error) {
@@ -134,6 +135,17 @@ export async function listarOcorrencias(): Promise<Ocorrencia[]> {
             .select(CAMPOS_LISTA_OCORRENCIA_BASE)
             .order('created_at', { ascending: false })
             .limit(500)
+          if (error2 && isColumnMissingError(error2)) {
+            // Mantém a listagem acessível antes da migração da coluna telefone.
+            const camposLegados = CAMPOS_LISTA_OCORRENCIA_BASE.replace(',telefone', '')
+            const { data: data3, error: error3 } = await supabase
+              .from('ocorrencias')
+              .select(camposLegados)
+              .order('created_at', { ascending: false })
+              .limit(500)
+            if (error3) throw new Error(error3.message)
+            return (data3 || []) as unknown as Ocorrencia[]
+          }
           if (error2) throw new Error(error2.message)
           return (data2 || []) as Ocorrencia[]
         }
