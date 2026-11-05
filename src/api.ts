@@ -117,6 +117,14 @@ function isColumnMissingError(e: unknown): boolean {
   return s.includes('does not exist') || s.includes('42703') || s.includes('schema cache')
 }
 
+function mensagemErroSupabase(error: { code?: string; message: string }): string {
+  const detalhe = error.code ? `[${error.code}] ${error.message}` : error.message
+  if (error.code === 'PGRST204' && /['"]telefone['"]/.test(error.message)) {
+    return `${detalhe}. Aplique supabase/migrations/add_telefone_ocorrencias.sql no SQL Editor do projeto Supabase conectado ao app.`
+  }
+  return detalhe
+}
+
 export async function listarOcorrencias(): Promise<Ocorrencia[]> {
   // Supabase direto quando disponível (Netlify)
   if (supabaseDisponivel) {
@@ -239,8 +247,7 @@ export async function enviarOcorrenciaServidor(
 
       if (error) {
         console.error('[api] Supabase insert error:', error)
-        const detalhe = error.code ? `[${error.code}] ${error.message}` : error.message
-        throw new ApiError(500, detalhe)
+        throw new ApiError(500, mensagemErroSupabase(error))
       }
       if (!data) throw new ApiError(500, 'Supabase retornou resposta inválida')
       wsSend({ tipo: 'ocorrencias_atualizadas' })
@@ -329,7 +336,7 @@ export async function atualizarOcorrencia(
       data = r2.data
       error = r2.error
     }
-    if (error) throw new Error(error.message)
+    if (error) throw new Error(mensagemErroSupabase(error))
     if (!data) throw new Error('Ocorrência não encontrada')
     wsSend({ tipo: 'ocorrencias_atualizadas' })
     return data as Ocorrencia
