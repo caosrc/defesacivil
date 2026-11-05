@@ -752,11 +752,22 @@ export default function App() {
     return (
       <Suspense fallback={<LazyFallback />}>
         <NovaOcorrencia
-          onSalvo={async (ocOffline) => {
-            if (ocOffline) showToast('📥 Salvo localmente. Será enviado ao reconectar.')
-            await carregar()
-            await atualizarPendingCount()
+          onSalvo={async (ocOffline, saveError) => {
+            if (ocOffline) {
+              showToast(
+                saveError
+                  ? `📥 Salvo localmente; envio pendente: ${saveError}`
+                  : '📥 Salvo localmente. Será enviado ao reconectar.',
+                saveError ? 8000 : 4000,
+              )
+            }
             setAba('lista')
+            try {
+              await carregar()
+            } catch (e) {
+              console.error('[ocorrencias] Registro salvo, mas a lista não atualizou:', e)
+              showToast('Ocorrência salva, mas não foi possível atualizar a lista.', 8000)
+            }
           }}
           onVoltar={() => setAba('lista')}
           isOnline={isOnline}

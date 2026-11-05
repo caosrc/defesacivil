@@ -30,7 +30,7 @@ function MapPickerClick({ onPick }: { onPick: (lat: number, lng: number) => void
 }
 
 interface Props {
-  onSalvo: (offline: boolean) => void
+  onSalvo: (offline: boolean, saveError?: string) => void | Promise<void>
   onVoltar: () => void
   isOnline: boolean
 }
@@ -407,15 +407,18 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       const foiOffline = !!(resultado as any)._offline
       const saveError = (resultado as any)._saveError as string | undefined
 
-      // Se estava online mas falhou no servidor, mostra o erro real para diagnóstico
-      if (foiOffline && saveError && navigator.onLine) {
-        setErro(`Erro ao salvar online: ${saveError}`)
-        return
+      // Após salvar online ou gravar na fila local, feche o formulário antes
+      // de liberar o bloqueio para impedir uma segunda criação.
+      try {
+        localStorage.removeItem(RASCUNHO_KEY)
+      } catch (e) {
+        console.warn('[ocorrencias] Não foi possível limpar o rascunho local:', e)
       }
-
-      localStorage.removeItem(RASCUNHO_KEY)
-      await clearRascunhoNovaOcorrencia()
-      onSalvo(foiOffline)
+      await clearRascunhoNovaOcorrencia().catch((e) => {
+        console.warn('[ocorrencias] Não foi possível limpar o rascunho após salvar:', e)
+      })
+      // Aguarda a tela de destino para manter o bloqueio até o formulário sair.
+      await onSalvo(foiOffline, saveError)
     } catch (e: any) {
       setErro(`Erro ao salvar: ${e?.message ?? 'tente novamente'}`)
     } finally {
@@ -893,7 +896,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
       </div>
 
       <div className="footer-fixo">
-        <button className="btn-salvar" onClick={salvar} disabled={salvando}>
+        <button type="button" className="btn-salvar" onClick={salvar} disabled={salvando}>
           {salvando ? '⏳ Salvando...' : '💾  Salvar Ocorrência'}
         </button>
       </div>
