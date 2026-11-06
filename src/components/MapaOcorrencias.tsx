@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { MapContainer, TileLayer, ImageOverlay, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Ocorrencia } from '../types'
@@ -21,6 +21,7 @@ import {
   descartarMalhaEmMemoria,
 } from '../malhaViaria'
 import { wsOn, wsSend, wsOnOpen } from '../wsClient'
+import RadarWeatherLayers, { type QuadroRadar } from './RadarMapaRisco/RadarWeatherLayers'
 import {
   ativarGps as ativarGpsGlobal,
   desativarGps as desativarGpsGlobal,
@@ -153,30 +154,6 @@ interface ResumoChuvaOntem {
 interface ChuvaNoPonto {
   precipitacao: number | null
   fonte?: string
-}
-
-function intensidadeChuva(precipitacao: number): string {
-  if (precipitacao >= 50) return 'extrema'
-  if (precipitacao >= 20) return 'intensa'
-  if (precipitacao >= 7.6) return 'muito-forte'
-  if (precipitacao >= 2.5) return 'forte'
-  if (precipitacao >= 0.5) return 'moderada'
-  if (precipitacao > 0) return 'fraca'
-  return 'nuvens'
-}
-
-function corIntensidadeChuva(precipitacao: number, coberturaNuvens: number | null): string {
-  if (precipitacao <= 0 && (coberturaNuvens ?? 0) >= 40) return '#93c5fd'
-  const cores: Record<string, string> = {
-    fraca: '#7dd3fc',
-    moderada: '#22c55e',
-    forte: '#facc15',
-    'muito-forte': '#f97316',
-    intensa: '#ef4444',
-    extrema: '#c026d3',
-    nuvens: '#bfdbfe',
-  }
-  return cores[intensidadeChuva(precipitacao)]
 }
 
 // ── Cache de ícones no nível do módulo ──────────────────────────
@@ -352,168 +329,6 @@ function GpsCenter({ position, seguir }: { position: [number, number]; seguir: b
     }
   }, [position, seguir, map])
   return null
-}
-
-interface RadarChuvaPoligonosProps {
-  path: string
-  frameTime: number
-  enabled: boolean
-}
-
-interface RadarFeature {
-  geometry?: { type?: string; coordinates?: unknown }
-  properties?: {
-    tipo?: string
-    cor?: string
-    intensidade?: string
-    alpha?: number
-    pixels?: number
-  }
-}
-
-interface DadosNuvensGoes {
-  url: string
-  bounds: [[number, number], [number, number]]
-  atualizadoEm?: string
-  fonte?: string
-  frequencia?: string
-}
-
-function criarIconeNucleoRadar(cor: string): L.DivIcon {
-  return L.divIcon({
-    className: 'radar-nucleo-icon',
-    html: `<span style="display:block;width:15px;height:15px;border:2px solid #fff;
-      border-radius:70% 32% 70% 32%;background:${cor};transform:rotate(45deg);
-      box-shadow:0 0 0 2px rgba(0,91,187,.24),0 2px 8px rgba(0,35,90,.55);">
-      <i style="display:block;width:4px;height:4px;margin:3px auto;background:#dff5ff;
-      border-radius:50%;opacity:.9;"></i></span>`,
-    iconSize: [21, 21],
-    iconAnchor: [10.5, 10.5],
-  })
-}
-
-function RadarChuvaPoligonos({ path, frameTime, enabled }: RadarChuvaPoligonosProps) {
-  const map = useMap()
-
-  useEffect(() => {
-    if (!enabled) return
-
-    let desmontado = false
-    const grupo = L.layerGroup().addTo(map)
-    const pane = 'radar-poligonos-pane'
-    if (!map.getPane(pane)) map.createPane(pane)
-    map.getPane(pane)!.style.zIndex = '650'
-
-    const desenharGeoJson = (geojson: { features?: RadarFeature[] }) => {
-      for (const feature of geojson.features || []) {
-        const propriedades = feature.properties || {}
-        const tipo = propriedades.tipo || 'mancha'
-        const cor = propriedades.cor || (tipo === 'nucleo' ? '#006bd6' : '#bdeaff')
-        if (feature.geometry?.type === 'Polygon' && Array.isArray(feature.geometry.coordinates)) {
-          const anel = feature.geometry.coordinates[0]
-          if (!Array.isArray(anel)) continue
-          const coordenadas = anel.map((coordenada: any) => [coordenada[1], coordenada[0]]) as [number, number][]
-          L.polygon(coordenadas, {
-            pane,
-            color: cor,
-            weight: tipo === 'nucleo' ? 1 : 0,
-            opacity: tipo === 'nucleo' ? 0.72 : 0,
-            fillColor: cor,
-            fillOpacity: tipo === 'nucleo'
-              ? Math.min(0.78, 0.42 + Number(propriedades.alpha || 0) / 700)
-              : Math.min(0.42, 0.18 + Number(propriedades.alpha || 0) / 900),
-            smoothFactor: tipo === 'nucleo' ? 1.4 : 2.8,
-            lineJoin: 'round',
-          }).bindPopup(
-            `<strong>${tipo === 'nucleo' ? 'Núcleo de chuva' : 'Mancha de precipitação'}</strong><br />RainViewer · intensidade ${propriedades.intensidade || 'não informada'}`
-          ).addTo(grupo)
-        }
-        if (feature.geometry?.type === 'Point' && Array.isArray(feature.geometry.coordinates)) {
-          const coordenada = feature.geometry.coordinates as number[]
-          const ponto = [coordenada[1], coordenada[0]] as [number, number]
-          L.marker(ponto, {
-            pane,
-            icon: criarIconeNucleoRadar(cor),
-            zIndexOffset: 50,
-          }).bindPopup(
-            `<strong>💧 Núcleo de chuva detectado</strong><br />Intensidade ${propriedades.intensidade || 'não informada'}<br />${propriedades.pixels || 0} células do radar`
-          ).addTo(grupo)
-        }
-      }
-    }
-
-    const desenhar = async () => {
-      try {
-        const respostaGeoJson = await fetch(
-          `/api/radar-chuva-poligonos?path=${encodeURIComponent(path)}&frameTime=${frameTime}`,
-          { cache: 'no-store' }
-        )
-        if (!respostaGeoJson.ok) throw new Error('Contorno do radar indisponível')
-        const geojson = await respostaGeoJson.json()
-        if (!desmontado) desenharGeoJson(geojson)
-      } catch {
-        // O painel segue informando o quadro do radar; a camada vetorial só é
-        // desenhada quando o PNG real pôde ser lido no servidor.
-      }
-    }
-
-    void desenhar()
-    return () => {
-      desmontado = true
-      grupo.removeFrom(map)
-    }
-  }, [enabled, frameTime, map, path])
-
-  return null
-}
-
-function CamadaNuvensGoes({ enabled }: { enabled: boolean }) {
-  const [dados, setDados] = useState<DadosNuvensGoes | null>(null)
-
-  useEffect(() => {
-    if (!enabled) {
-      setDados(null)
-      return
-    }
-
-    let desmontado = false
-    const buscar = async () => {
-      try {
-        const resposta = await fetch(`/api/goes-nuvens?_ts=${Date.now()}`, { cache: 'no-store' })
-        if (!resposta.ok) throw new Error('Imagem GOES indisponível')
-        const proximo = await resposta.json() as DadosNuvensGoes
-        if (!desmontado && proximo.url && Array.isArray(proximo.bounds)) setDados(proximo)
-      } catch {
-        // A chuva vetorial permanece disponível mesmo quando a imagem GOES
-        // estiver temporariamente fora do ar.
-      }
-    }
-
-    void buscar()
-    const intervalo = setInterval(buscar, 10 * 60 * 1000)
-    const atualizarAoVoltar = () => {
-      if (document.visibilityState === 'visible') void buscar()
-    }
-    document.addEventListener('visibilitychange', atualizarAoVoltar)
-    return () => {
-      desmontado = true
-      clearInterval(intervalo)
-      document.removeEventListener('visibilitychange', atualizarAoVoltar)
-    }
-  }, [enabled])
-
-  if (!enabled || !dados) return null
-
-  return (
-    <ImageOverlay
-      key={`${dados.url}-${dados.atualizadoEm || ''}`}
-      url={`${dados.url}?t=${encodeURIComponent(dados.atualizadoEm || '')}`}
-      bounds={dados.bounds}
-      opacity={0.38}
-      zIndex={20}
-      attribution={dados.fonte || 'NOAA/NESDIS · GOES-19'}
-    />
-  )
 }
 
 // Centraliza no destino quando ele muda — usado pela busca de endereço.
@@ -732,7 +547,6 @@ function nomeDiaSemana(dateStr: string): string {
 }
 
 const OURO_BRANCO: [number, number] = [-20.5195, -43.6983]
-const RAIO_RADAR_CHUVA_METROS = 10_000
 
 const MAX_TRILHA = 300
 
@@ -821,6 +635,13 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [monitoramentoCarregando, setMonitoramentoCarregando] = useState(false)
 
   // ── Chuva ao vivo — RainViewer + resumo do ponto central ─────────
+  const receberErroCamadaChuva = useCallback((mensagem: string) => {
+    setRadarChuvaErro(mensagem || null)
+  }, [])
+  const receberAtualizacaoCamadaChuva = useCallback((atualizadoEm: string) => {
+    setRadarChuva(atual => atual ? { ...atual, atualizadoEm } : atual)
+  }, [])
+
   const buscarRadarChuva = useCallback(async () => {
     setRadarChuvaCarregando(true)
     setRadarChuvaErro(null)
@@ -894,6 +715,16 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   }, [radarChuva])
 
   const quadroRadarAtual = quadrosRadar[indiceQuadroRadar] || quadrosRadar.at(-1) || null
+  const quadroRadarMapa = useMemo<QuadroRadar | null>(() => {
+    if (!radarChuva?.host || !quadroRadarAtual) return null
+    return {
+      host: radarChuva.host,
+      path: quadroRadarAtual.path,
+      frameTime: quadroRadarAtual.frameTime,
+      atualizadoEm: new Date(quadroRadarAtual.frameTime * 1000).toISOString(),
+      erroAtualizacao: radarChuva.erroAtualizacao,
+    }
+  }, [radarChuva, quadroRadarAtual])
 
   useEffect(() => {
     if (!mostrarChuva || !radarAnimando || quadrosRadar.length < 2) return
@@ -1556,7 +1387,17 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         zoomControl={false}
         whenReady={() => {}}
       >
-        {camadaMapa === 'padrao' && !mostrarChuva ? (
+        {mostrarChuva ? (
+          <RadarWeatherLayers
+            mostrarChuva
+            mostrarSintetico={false}
+            mostrarNuvens
+            satelite
+            quadroExterno={quadroRadarMapa}
+            onErro={receberErroCamadaChuva}
+            onAtualizado={receberAtualizacaoCamadaChuva}
+          />
+        ) : camadaMapa === 'padrao' ? (
           <TileLayer
             key="mapa-padrao"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -1588,53 +1429,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
             zIndex={10}
           />
         )}
-        {mostrarChuva && <CamadaNuvensGoes enabled={mostrarChuva} />}
-        {mostrarChuva && radarChuva && quadroRadarAtual && (
-          <RadarChuvaPoligonos
-            path={quadroRadarAtual.path}
-            frameTime={quadroRadarAtual.frameTime}
-            enabled={mostrarChuva}
-          />
-        )}
-        {mostrarChuva && (
-          <Circle
-            center={OURO_BRANCO}
-            radius={RAIO_RADAR_CHUVA_METROS}
-            pathOptions={{
-              color: '#1d4ed8',
-              weight: 2,
-              opacity: 0.95,
-              dashArray: '7 5',
-              fillColor: '#60a5fa',
-              fillOpacity: 0.04,
-            }}
-          >
-            <Popup>
-              <strong>Área de observação da chuva</strong>
-              <br />
-              Raio de 10 km a partir do centro de Ouro Branco
-            </Popup>
-          </Circle>
-        )}
-        {mostrarChuva && (
-          <CircleMarker
-            center={OURO_BRANCO}
-            radius={5}
-            pathOptions={{
-              color: '#0f172a',
-              weight: 2,
-              fillColor: '#f8fafc',
-              fillOpacity: 1,
-            }}
-          >
-            <Popup>
-              <strong>Centro de Ouro Branco</strong>
-              <br />
-              Ponto usado para consultar a precipitação local.
-            </Popup>
-          </CircleMarker>
-        )}
-
         <MapClickHandler onMapClick={() => setSelecionada(null)} />
         {mostrarOcorrencias && (
           <CamadaOcorrencias
@@ -1917,7 +1711,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
               <div className="mapa-chuva-painel-header">
                 <div>
                   <strong>🌧️ Chuva ao vivo</strong>
-                  <span>Ouro Branco, MG · área tracejada = raio de observação de 10 km</span>
+                  <span>Ouro Branco, MG · precipitação observada e cobertura de nuvens</span>
                 </div>
                 <button
                   onClick={() => setPainelChuvaAberto(false)}
@@ -1925,8 +1719,8 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
                 >✕</button>
               </div>
               <div className="mapa-chuva-fontes">
-                <strong>🛰️ GOES-19 + radar vetorial</strong>
-                <span>Nuvens atualizadas a cada 10 min · PNG RainViewer processado no servidor</span>
+                <strong>🛰️ RainViewer ativo + nuvens GOES-19</strong>
+                <span>Quadros animados do radar · imagem de nuvens atualizada a cada 10 min</span>
               </div>
               {radarChuvaCarregando && !radarChuva && (
                 <div className="mapa-chuva-status">⏳ Carregando o último quadro do radar…</div>
@@ -2009,11 +1803,10 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
                   )}
                   <div className="mapa-chuva-legenda">
                     <span><i className="chuva-cor chuva-cor--goes" /> nuvens GOES-19</span>
-                    <span><i className="chuva-cor chuva-cor--nuvens" /> mancha de precipitação</span>
-                    <span><i className="chuva-cor chuva-cor--nucleo" /> núcleo detectado</span>
+                    <span><i className="chuva-cor chuva-cor--nuvens" /> chuva observada RainViewer</span>
                   </div>
                   <p className="mapa-chuva-ajuda">
-                     A base usa imagem de satélite. A mancha irregular e os núcleos azuis são derivados dos pixels reais do PNG do radar; pontos só aparecem quando há núcleo detectado. O contorno tracejado indica 10 km.
+                    A camada RainViewer mostra a precipitação observada; a imagem GOES-19 mostra a cobertura de nuvens e não mede intensidade da chuva.
                   </p>
                   <div className="mapa-chuva-rodape">
                     <span>{radarChuva.erroAtualizacao ? 'Último radar salvo' : 'RainViewer · ao vivo'}</span>

@@ -851,7 +851,7 @@ body.radar-tv-active .radar-page {
   }
 }
 
-/* No Modo TV o mapa e os controles de áreas de risco ocupam toda a tela. */
+/* Composição-base do mapa em tela cheia para visualizações estreitas. */
 body.radar-tv-active .radar-page,
 .radar-tv {
   position: fixed;
@@ -1156,5 +1156,139 @@ body.radar-tv-active .radar-page,
     left: 7px;
     width: auto;
     max-height: 52%;
+  }
+}
+
+/* Em telas de TV, mantenha o painel completo ao lado do mapa. */
+@media (min-width: 901px) {
+  body.radar-tv-active .radar-page,
+  .radar-tv {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .radar-tv .radar-weather {
+    position: relative;
+    inset: auto;
+    width: auto;
+    height: clamp(64px, 10.5vh, 92px);
+    min-height: 0;
+    flex: 0 0 clamp(64px, 10.5vh, 92px);
+    margin: .2rem .55rem 0;
+    border: 1px solid #285475;
+    border-radius: 8px;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .radar-tv .radar-weather-bar {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    left: 6px;
+    min-height: 0;
+    justify-content: flex-end;
+  }
+
+  .radar-tv .radar-weather-bar > :not(.radar-weather-actions) {
+    display: flex !important;
+  }
+
+  .radar-tv .radar-weather-place {
+    position: absolute;
+    top: 0;
+    left: .45rem;
+    font-size: .48rem;
+  }
+
+  .radar-tv .radar-weather-condition {
+    position: absolute;
+    bottom: .15rem;
+    left: .45rem;
+    display: flex !important;
+    gap: .35rem;
+  }
+
+  .radar-tv .radar-weather-condition > span {
+    font-size: 1.5rem;
+  }
+
+  .radar-tv .radar-weather-condition strong {
+    font-size: 1.15rem;
+  }
+
+  .radar-tv .radar-weather-condition b {
+    font-size: .48rem;
+  }
+
+  .radar-tv .radar-weather-metrics,
+  .radar-tv .radar-clock {
+    display: none !important;
+  }
+
+  .radar-tv .radar-weather-actions {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+
+  .radar-tv .radar-weather-detail {
+    display: grid !important;
+    height: 100%;
+    max-height: 100%;
+    margin: 0;
+    padding: .25rem 92px .22rem 6.1rem;
+  }
+
+  .radar-tv .radar-header,
+  .radar-tv .radar-left-column,
+  .radar-tv .radar-ticker {
+    display: contents !important;
+  }
+
+  .radar-tv .radar-layout {
+    position: relative;
+    inset: auto;
+    display: grid;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1.05fr) minmax(0, 1.95fr);
+    grid-template-rows: minmax(0, .3fr) minmax(0, .7fr);
+    grid-template-areas:
+      "note activities map"
+      "calendar activities map";
+    gap: .45rem;
+    margin: 0;
+    padding: .4rem .55rem 0;
+  }
+
+  .radar-tv .radar-map-column {
+    position: relative;
+    inset: auto;
+    grid-area: map;
+    grid-row: 1 / -1;
+    width: 100%;
+    height: 100%;
+  }
+
+  .radar-tv .risk-map-layer-controls {
+    max-width: calc(100% - 220px);
+  }
+
+  .radar-tv .risk-map-sidebar {
+    width: clamp(145px, 16vw, 210px);
+  }
+
+  .radar-tv .risk-map-editor {
+    width: min(460px, calc(100% - 220px));
+  }
+
+  .radar-tv .radar-ticker {
+    display: flex !important;
+    flex: 0 0 36px;
   }
 }

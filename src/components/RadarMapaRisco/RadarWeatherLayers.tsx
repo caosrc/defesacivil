@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ImageOverlay, Pane, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
 
-type QuadroRadar = {
+export type QuadroRadar = {
   host: string
   path: string
   frameTime: number
@@ -35,6 +35,7 @@ type Props = {
   mostrarSintetico: boolean
   mostrarNuvens: boolean
   satelite: boolean
+  quadroExterno?: QuadroRadar | null
   onErro: (mensagem: string) => void
   onAtualizado: (horario: string) => void
 }
@@ -42,6 +43,27 @@ type Props = {
 const URL_BASE_RUA = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 const URL_BASE_SATELITE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
 const CAMINHO_RADAR_VALIDO = /^\/v2\/radar\/[a-z0-9]+$/i
+
+function validarQuadroRadar(dados: Partial<QuadroRadar> | null | undefined): QuadroRadar | null {
+  const frameTime = Number(dados?.frameTime)
+  if (!dados?.host || !CAMINHO_RADAR_VALIDO.test(dados.path || '') || !Number.isFinite(frameTime) || frameTime <= 0) {
+    return null
+  }
+
+  try {
+    const host = new URL(dados.host)
+    if (host.protocol !== 'https:') return null
+    return {
+      host: host.origin,
+      path: dados.path!,
+      frameTime,
+      atualizadoEm: dados.atualizadoEm,
+      erroAtualizacao: dados.erroAtualizacao === true,
+    }
+  } catch {
+    return null
+  }
+}
 
 function RadarSintetico({ quadro, onErro }: { quadro: QuadroRadar; onErro: (mensagem: string) => void }) {
   const mapa = useMap()
@@ -120,15 +142,19 @@ export default function RadarWeatherLayers({
   mostrarSintetico,
   mostrarNuvens,
   satelite,
+  quadroExterno,
   onErro,
   onAtualizado,
 }: Props) {
-  const [quadro, setQuadro] = useState<QuadroRadar | null>(null)
+  const [quadroInterno, setQuadroInterno] = useState<QuadroRadar | null>(null)
   const [imagemGoes, setImagemGoes] = useState<ImagemGoes | null>(null)
   const radarAtivo = mostrarChuva || mostrarSintetico
+  const usaQuadroExterno = quadroExterno !== undefined
+  const quadroFonte = usaQuadroExterno ? quadroExterno : quadroInterno
+  const quadro = useMemo(() => validarQuadroRadar(quadroFonte), [quadroFonte])
 
   useEffect(() => {
-    if (!radarAtivo) return
+    if (!radarAtivo || usaQuadroExterno) return
     let cancelado = false
 
     const carregar = async () => {
@@ -136,20 +162,12 @@ export default function RadarWeatherLayers({
         const resposta = await fetch(`/api/radar-chuva?_ts=${Date.now()}`, { cache: 'no-store' })
         const dados = await resposta.json() as Partial<QuadroRadar> & { erro?: string }
         if (!resposta.ok) throw new Error(dados.erro || 'Radar de chuva indisponível.')
-        if (!dados.host || !CAMINHO_RADAR_VALIDO.test(dados.path || '')) {
+        const proximo = validarQuadroRadar(dados)
+        if (!proximo) {
           throw new Error('O serviço não retornou um quadro de radar válido.')
         }
-        const host = new URL(dados.host)
-        if (host.protocol !== 'https:') throw new Error('O endereço do radar não é seguro.')
         if (cancelado) return
-        const proximo = {
-          host: host.origin,
-          path: dados.path!,
-          frameTime: Number(dados.frameTime),
-          atualizadoEm: dados.atualizadoEm,
-          erroAtualizacao: dados.erroAtualizacao === true,
-        }
-        setQuadro(proximo)
+        setQuadroInterno(proximo)
         onErro('')
         onAtualizado(proximo.atualizadoEm || '')
       } catch (error) {
@@ -170,7 +188,7 @@ export default function RadarWeatherLayers({
       window.clearInterval(intervalo)
       document.removeEventListener('visibilitychange', atualizarAoVoltar)
     }
-  }, [radarAtivo, onAtualizado, onErro])
+  }, [radarAtivo, usaQuadroExterno, onAtualizado, onErro])
 
   useEffect(() => {
     if (!mostrarNuvens) return
