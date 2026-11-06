@@ -21,7 +21,6 @@ import {
   descartarMalhaEmMemoria,
 } from '../malhaViaria'
 import { wsOn, wsSend, wsOnOpen } from '../wsClient'
-import RadarWeatherLayers, { type QuadroRadar } from './RadarMapaRisco/RadarWeatherLayers'
 import {
   ativarGps as ativarGpsGlobal,
   desativarGps as desativarGpsGlobal,
@@ -121,39 +120,6 @@ interface IndicadorMonitoramento {
   nome: string
   valor: number
   unidade: string
-}
-
-interface DadosRadarChuva {
-  host: string
-  path: string
-  frameTime: number
-  atualizadoEm: string
-  fonte: string
-  tipoQuadro?: 'observado' | 'nowcast'
-  quadros?: QuadroRadarChuva[]
-  cache?: boolean
-  erroAtualizacao?: boolean
-}
-
-interface QuadroRadarChuva {
-  path: string
-  frameTime: number
-  tipoQuadro: 'observado' | 'nowcast'
-}
-
-interface ResumoChuvaOntem {
-  data: string
-  precipitacao: number
-  horasComChuva: number
-  picoHoraria: number
-  horaPico: string | null
-  coberturaNuvensMedia: number | null
-  fonte?: string
-}
-
-interface ChuvaNoPonto {
-  precipitacao: number | null
-  fonte?: string
 }
 
 // ── Cache de ícones no nível do módulo ──────────────────────────
@@ -557,15 +523,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [camadaMapa, setCamadaMapa] = useState<CamadaMapa>('padrao')
   const [camadaMonitoramento, setCamadaMonitoramento] = useState<CamadaMonitoramentoId>(null)
   const [painelMonitoramentoAberto, setPainelMonitoramentoAberto] = useState(false)
-  const [mostrarChuva, setMostrarChuva] = useState(false)
-  const [painelChuvaAberto, setPainelChuvaAberto] = useState(false)
-  const [radarChuva, setRadarChuva] = useState<DadosRadarChuva | null>(null)
-  const [indiceQuadroRadar, setIndiceQuadroRadar] = useState(0)
-  const [radarAnimando, setRadarAnimando] = useState(true)
-  const [chuvaNoPonto, setChuvaNoPonto] = useState<ChuvaNoPonto | null>(null)
-  const [chuvaOntem, setChuvaOntem] = useState<ResumoChuvaOntem | null>(null)
-  const [radarChuvaCarregando, setRadarChuvaCarregando] = useState(false)
-  const [radarChuvaErro, setRadarChuvaErro] = useState<string | null>(null)
   const [mostrarOcorrencias, setMostrarOcorrencias] = useState(false)
   const [mostrarMateriais, setMostrarMateriais] = useState(false)
   const [painelMaterialAberto, setPainelMaterialAberto] = useState(false)
@@ -633,106 +590,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
     periodo?: { inicio: string; fim: string }
   } | null>(null)
   const [monitoramentoCarregando, setMonitoramentoCarregando] = useState(false)
-
-  // ── Chuva ao vivo — RainViewer + resumo do ponto central ─────────
-  const receberErroCamadaChuva = useCallback((mensagem: string) => {
-    setRadarChuvaErro(mensagem || null)
-  }, [])
-  const receberAtualizacaoCamadaChuva = useCallback((atualizadoEm: string) => {
-    setRadarChuva(atual => atual ? { ...atual, atualizadoEm } : atual)
-  }, [])
-
-  const buscarRadarChuva = useCallback(async () => {
-    setRadarChuvaCarregando(true)
-    setRadarChuvaErro(null)
-    const agora = Date.now()
-    const [resultadoRadar, resultadoTempo] = await Promise.allSettled([
-      fetch(`/api/radar-chuva?_ts=${agora}`, { cache: 'no-store' }),
-      fetch(`/api/tempo?_ts=${agora}`, { cache: 'no-store' }),
-    ])
-
-    let radarAtualizado = false
-    if (resultadoRadar.status === 'fulfilled' && resultadoRadar.value.ok) {
-      setRadarChuva(await resultadoRadar.value.json())
-      setIndiceQuadroRadar(0)
-      setRadarAnimando(true)
-      radarAtualizado = true
-    } else {
-      setRadarChuvaErro('Radar ao vivo indisponível; exibindo a estimativa local.')
-    }
-
-    if (resultadoTempo.status === 'fulfilled' && resultadoTempo.value.ok) {
-      const dadosTempo = await resultadoTempo.value.json()
-      setChuvaOntem(dadosTempo?.ontem || null)
-      const precipitacaoAtual = Number(dadosTempo?.atual?.precipitacao)
-      const horas = Array.isArray(dadosTempo?.horas) ? dadosTempo.horas : []
-      const maisProxima = horas
-        .filter((hora: { time?: string }) => hora?.time)
-        .sort((a: { time: string }, b: { time: string }) => (
-          Math.abs(new Date(a.time).getTime() - agora) - Math.abs(new Date(b.time).getTime() - agora)
-        ))[0]
-      setChuvaNoPonto(Number.isFinite(precipitacaoAtual)
-        ? {
-            precipitacao: precipitacaoAtual,
-            fonte: 'condição atual no ponto central',
-          }
-        : {
-            precipitacao: Number.isFinite(Number(maisProxima?.precipitacao))
-              ? Number(maisProxima.precipitacao)
-              : null,
-            fonte: 'previsão horária mais próxima',
-          })
-    }
-
-    if (radarAtualizado) setRadarChuvaErro(null)
-    setRadarChuvaCarregando(false)
-  }, [])
-
-  useEffect(() => {
-    if (!mostrarChuva) return
-    buscarRadarChuva()
-    const intervalo = setInterval(buscarRadarChuva, 5 * 60 * 1000)
-    const atualizarAoVoltar = () => {
-      if (document.visibilityState === 'visible') buscarRadarChuva()
-    }
-    document.addEventListener('visibilitychange', atualizarAoVoltar)
-    return () => {
-      clearInterval(intervalo)
-      document.removeEventListener('visibilitychange', atualizarAoVoltar)
-    }
-  }, [mostrarChuva, buscarRadarChuva])
-
-  const quadrosRadar = useMemo<QuadroRadarChuva[]>(() => {
-    if (!radarChuva) return []
-    if (Array.isArray(radarChuva.quadros) && radarChuva.quadros.length > 0) {
-      return radarChuva.quadros
-    }
-    return [{
-      path: radarChuva.path,
-      frameTime: radarChuva.frameTime,
-      tipoQuadro: radarChuva.tipoQuadro || 'observado',
-    }]
-  }, [radarChuva])
-
-  const quadroRadarAtual = quadrosRadar[indiceQuadroRadar] || quadrosRadar.at(-1) || null
-  const quadroRadarMapa = useMemo<QuadroRadar | null>(() => {
-    if (!radarChuva?.host || !quadroRadarAtual) return null
-    return {
-      host: radarChuva.host,
-      path: quadroRadarAtual.path,
-      frameTime: quadroRadarAtual.frameTime,
-      atualizadoEm: new Date(quadroRadarAtual.frameTime * 1000).toISOString(),
-      erroAtualizacao: radarChuva.erroAtualizacao,
-    }
-  }, [radarChuva, quadroRadarAtual])
-
-  useEffect(() => {
-    if (!mostrarChuva || !radarAnimando || quadrosRadar.length < 2) return
-    const intervalo = setInterval(() => {
-      setIndiceQuadroRadar(indice => (indice + 1) % quadrosRadar.length)
-    }, 900)
-    return () => clearInterval(intervalo)
-  }, [mostrarChuva, radarAnimando, quadrosRadar.length])
 
   // Mapa offline — inicializa tiles do localStorage para mostrar status imediatamente
   const [statusOffline, setStatusOffline] = useState<StatusOffline>('idle')
