@@ -502,13 +502,6 @@ export default function RadarMapaRisco({
               <span><strong>Marque o perímetro</strong><small>{pontos.length < 3 ? `Toque no mapa · faltam ${3 - pontos.length} pontos para fechar` : `${pontos.length} pontos · área pronta para salvar`}</small></span>
             </div>
           )}
-          {!desenhando && areas.length === 0 && !carregando && (
-            <div className="risk-map-map-empty">
-              <span className="risk-map-empty-cross" aria-hidden="true">＋</span>
-              <strong>Nenhuma área cadastrada</strong>
-              <span>Inicie o cadastro e marque três pontos no mapa.</span>
-            </div>
-          )}
           <div className="risk-map-map-legend" aria-label="Legenda do mapa">
             {Object.entries(HAZARDS).map(([key, hazard]) => (
               <span key={key}><i style={{ backgroundColor: hazard.color }} />{hazard.label}</span>
