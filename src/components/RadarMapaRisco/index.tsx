@@ -21,6 +21,7 @@ export type RiskArea = {
 type AreaDraft = Omit<RiskArea, 'id'>
 
 type Props = {
+  modoTV?: boolean
   areas: RiskArea[]
   precipitacao24h: Record<string, number | null>
   carregando: boolean
@@ -141,6 +142,7 @@ function formatRain(value: number | null | undefined) {
 }
 
 export default function RadarMapaRisco({
+  modoTV = false,
   areas,
   precipitacao24h,
   carregando,
@@ -173,6 +175,8 @@ export default function RadarMapaRisco({
   const [tiposVisiveis, setTiposVisiveis] = useState(() => new Set(TIPOS_RISCO))
   const [erroCamadas, setErroCamadas] = useState('')
   const [quadroAtualizadoEm, setQuadroAtualizadoEm] = useState('')
+  const [painelAreasTVAberto, setPainelAreasTVAberto] = useState(false)
+  const painelAreasVisivel = !modoTV || painelAreasTVAberto
 
   const receberErroCamadas = useCallback((mensagem: string) => {
     setErroCamadas(mensagem)
@@ -180,6 +184,10 @@ export default function RadarMapaRisco({
   const receberAtualizacaoRadar = useCallback((horario: string) => {
     setQuadroAtualizadoEm(horario)
   }, [])
+
+  useEffect(() => {
+    if (modoTV) setPainelAreasTVAberto(false)
+  }, [modoTV])
 
   const activeAreas = useMemo(() => areas.filter(area => area.ativo), [areas])
   const areasDesenhadas = useMemo(() => areas.filter(area => tiposVisiveis.has(area.tipo)), [areas, tiposVisiveis])
@@ -346,7 +354,7 @@ export default function RadarMapaRisco({
       )}
 
       <div className="risk-map-workspace">
-        <div className={`risk-map-canvas${desenhando ? ' is-drawing' : ''}`}>
+        <div className={`risk-map-canvas${desenhando ? ' is-drawing' : ''}${modoTV && !painelAreasVisivel ? ' has-collapsed-sidebar' : ''}`}>
           <div className="risk-map-map-label">
             <span className="risk-map-live-dot" aria-hidden="true" />
             <span>MAPA MUNICIPAL</span>
@@ -396,6 +404,20 @@ export default function RadarMapaRisco({
               </select>
             </label>
           </div>
+          {modoTV && !painelAreasVisivel && (
+            <button
+              type="button"
+              className="risk-map-sidebar-toggle"
+              onClick={() => setPainelAreasTVAberto(true)}
+              aria-controls="risk-map-sidebar"
+              aria-expanded={false}
+              aria-label="Expandir áreas de risco"
+            >
+              <span>Áreas de risco</span>
+              <b>{areas.length}</b>
+              <i aria-hidden="true">⌄</i>
+            </button>
+          )}
           {(erroCamadas || (quadroAtualizadoEm && (mostrarChuva || mostrarRadarSintetico))) && (
             <div className={`risk-map-weather-status${erroCamadas ? ' is-error' : ''}`} role={erroCamadas ? 'status' : undefined}>
               {erroCamadas || `RainViewer · ${new Date(quadroAtualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`}
@@ -494,7 +516,12 @@ export default function RadarMapaRisco({
           </div>
         </div>
 
-        <aside className="risk-map-sidebar" aria-label="Lista de áreas monitoradas">
+        <aside
+          id="risk-map-sidebar"
+          className={`risk-map-sidebar${painelAreasVisivel ? '' : ' is-collapsed'}`}
+          aria-label="Lista de áreas monitoradas"
+          aria-hidden={!painelAreasVisivel}
+        >
           <div className="risk-map-list-head">
             <div><span className="risk-map-section-label">MONITORAMENTO</span><h3>Áreas de risco <b>{areas.length.toString().padStart(2, '0')}</b></h3></div>
             <button
@@ -506,6 +533,17 @@ export default function RadarMapaRisco({
               title="Atualizar previsão de chuva"
             >↻</button>
             <button type="button" className="risk-map-add-small" onClick={startCreate} aria-label="Cadastrar nova área" disabled={salvando || desenhando}>＋</button>
+            {modoTV && (
+              <button
+                type="button"
+                className="risk-map-collapse-small"
+                onClick={() => setPainelAreasTVAberto(false)}
+                aria-controls="risk-map-sidebar"
+                aria-expanded={painelAreasVisivel}
+                aria-label="Recolher painel de áreas de risco"
+                title="Recolher painel"
+              >›</button>
+            )}
           </div>
           <div className="risk-map-type-menu" aria-label="Tipos de risco visíveis no mapa">
             <div className="risk-map-type-menu-heading">

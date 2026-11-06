@@ -932,6 +932,7 @@ export default function RadarDC() {
         </div>
         <div className="radar-map-column">
           <RadarMapaRisco
+            modoTV={tv}
             areas={areasRisco}
             precipitacao24h={precipitacao24hAreas}
             carregando={carregandoAreasRisco}

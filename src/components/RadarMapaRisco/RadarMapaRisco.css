@@ -568,3 +568,73 @@
   .risk-map-marker.is-alert,
   .risk-map-status.is-alert i { animation-duration: 1.8s !important; animation-iteration-count: infinite !important; }
 }
+
+.risk-map-sidebar.is-collapsed {
+  display: none !important;
+}
+
+.risk-map-sidebar-toggle {
+  position: absolute;
+  z-index: 730;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  min-height: 29px;
+  align-items: center;
+  gap: .34rem;
+  border: 1px solid rgba(70, 101, 119, .85);
+  border-radius: 6px;
+  padding: .28rem .42rem;
+  color: #e6f3f8;
+  background: rgba(7, 38, 58, .94);
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .25);
+  font: inherit;
+  font-size: .58rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.risk-map-sidebar-toggle:hover {
+  border-color: #4cb8d6;
+  background: #16435a;
+}
+
+.risk-map-sidebar-toggle b {
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid #37657b;
+  border-radius: 4px;
+  color: #a1e4e8;
+  background: #16435a;
+  font: 700 .52rem ui-monospace, monospace;
+}
+
+.risk-map-sidebar-toggle i {
+  color: #a1e4e8;
+  font-size: .78rem;
+  font-style: normal;
+}
+
+.risk-map-collapse-small {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #37657b;
+  border-radius: 6px;
+  color: #a1e4e8;
+  background: #16435a;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.risk-map-collapse-small:hover {
+  background: #205873;
+}
+
+.radar-tv .risk-map-canvas.has-collapsed-sidebar .risk-map-layer-controls {
+  max-width: calc(100% - 150px);
+}
