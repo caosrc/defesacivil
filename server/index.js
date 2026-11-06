@@ -1503,7 +1503,6 @@ app.post('/api/radar-bilhetes', async (req, res) => {
     const { id, texto, data, hora, prioridade, criado_por, tipo = 'lembrete', agentes_envolvidos = [] } = req.body
     if (!id || !texto?.trim() || !data || !hora || !criado_por) return res.status(400).json({ error: 'Registro incompleto' })
     const agentes = Array.isArray(agentes_envolvidos) ? agentes_envolvidos.filter(Boolean) : []
-    if (agentes.length === 0) return res.status(400).json({ error: 'Marque pelo menos um agente para receber o registro.' })
     const result = await query(
       `INSERT INTO radar_bilhetes (id, texto, data, hora, prioridade, criado_por, tipo, agentes_envolvidos)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)

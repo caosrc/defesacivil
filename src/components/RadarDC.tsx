@@ -379,7 +379,7 @@ export default function RadarDC() {
         if (!res.ok) throw new Error('Servidor do Radar indisponível.')
         rows = await res.json() as Array<Record<string, unknown>>
       }
-      const remotos = rows.map(row => ({
+      const remotos: RegistroRadar[] = rows.map(row => ({
         id: String(row.id), texto: String(row.texto), data: String(row.data), hora: String(row.hora),
         prioridade: (row.prioridade as Prioridade) || 'normal', concluido: Boolean(row.concluido),
         criadoPor: String(row.criado_por), criadoEm: String(row.criado_em),
@@ -387,17 +387,20 @@ export default function RadarDC() {
         agentesEnvolvidos: Array.isArray(row.agentes_envolvidos) ? row.agentes_envolvidos.map(String) : [],
         confirmacoesAgentes: lerConfirmacoes(row.confirmacoes_agentes),
       }))
+      const idsRemotos = new Set(remotos.map(row => row.id))
+      idsRemotos.forEach(id => pendentesRef.current.delete(id))
       setRegistros(prev => {
-        const idsRemotos = new Set(remotos.map(row => row.id))
         const aindaPendentes = prev.filter(row => pendentesRef.current.has(row.id) && !idsRemotos.has(row.id))
         return [...remotos, ...aindaPendentes]
       })
       carregadoRef.current = true
     } catch {
+      if (carregadoRef.current) return
       try {
-        setRegistros(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'))
-        carregadoRef.current = true
+        const cache = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
+        setRegistros(Array.isArray(cache) ? cache : [])
       } catch { setRegistros([]) }
+      carregadoRef.current = true
     }
   }, [])
 
@@ -584,8 +587,9 @@ export default function RadarDC() {
   const lembretes = registros.filter(r => r.tipo === 'lembrete')
   const notificacoes = registros.filter(r => r.tipo === 'notificacao')
   const notificacoesDaData = notificacoes.filter(r => r.data === dataSelecionada)
-  const notificacoesAtivas = notificacoes.filter(r => r.data >= hoje())
-  const proximasNotificacoes = notificacoesAtivas.filter(r => !r.concluido).sort((a, b) => `${a.data}${a.hora}`.localeCompare(`${b.data}${b.hora}`))
+  const proximasNotificacoes = notificacoes
+    .filter(r => r.data >= hoje() && !r.concluido)
+    .sort((a, b) => `${a.data}${a.hora}`.localeCompare(`${b.data}${b.hora}`))
   const resumosFerramental = useMemo(
     () => resumirFerramental(atividades.checklistsFerramentas, atividades.ferramentasCatalogo),
     [atividades.checklistsFerramentas, atividades.ferramentasCatalogo],
@@ -602,11 +606,11 @@ export default function RadarDC() {
 
   async function salvarRegistro(tipo: RegistroRadar['tipo'], texto: string, data: string, horaRegistro: string) {
     if (!texto.trim() || salvando) return
-    const agentesParaRegistro = tipo === 'lembrete' ? agentesLembrete : agentesEnvolvidos
-    if (agentesParaRegistro.length === 0) {
-      setErroSalvamento('Marque pelo menos um agente para receber este lembrete.')
+    if (tipo === 'notificacao' && data < hoje()) {
+      setErroSalvamento('Escolha hoje ou uma data futura para a notificação aparecer no texto rolante.')
       return
     }
+    const agentesParaRegistro = tipo === 'lembrete' ? agentesLembrete : agentesEnvolvidos
     const novo: RegistroRadar = {
       id: crypto.randomUUID(), texto: texto.trim(), data, hora: horaRegistro,
       prioridade, concluido: false, criadoPor: agente, criadoEm: new Date().toISOString(), tipo,
@@ -636,12 +640,11 @@ export default function RadarDC() {
         id: String(row.id), texto: String(row.texto), data: String(row.data), hora: String(row.hora),
         prioridade: (row.prioridade as Prioridade) || novo.prioridade, concluido: Boolean(row.concluido),
         criadoPor: String(row.criado_por || agente), criadoEm: String(row.criado_em || novo.criadoEm),
-        tipo: row.tipo === 'notificacao' ? 'notificacao' : 'lembrete',
+        tipo: row.tipo === 'notificacao' ? 'notificacao' : tipo,
         agentesEnvolvidos: Array.isArray(row.agentes_envolvidos) ? row.agentes_envolvidos.map(String) : novo.agentesEnvolvidos,
         confirmacoesAgentes: lerConfirmacoes(row.confirmacoes_agentes),
       }
       setRegistros(prev => [...prev.filter(r => r.id !== salvo.id && r.id !== novo.id), salvo])
-      pendentesRef.current.delete(novo.id)
       if (supabaseDisponivel) wsSend({ tipo: 'radar_bilhetes_atualizados' })
       if (tipo === 'lembrete') {
         setTextoLembrete('')
@@ -807,7 +810,7 @@ export default function RadarDC() {
             </div>
             <textarea value={textoLembrete} onFocus={() => setLembreteEditorAberto(true)} onChange={e => setTextoLembrete(e.target.value)} placeholder="Deixe um lembrete para a equipe..." rows={7} />
              {lembreteEditorAberto && <fieldset className="radar-agentes-fieldset radar-lembrete-agentes">
-               <legend>Agentes que receberão o lembrete</legend>
+               <legend>Destinatários do lembrete (opcional)</legend>
                <div className="radar-agentes-grid">
                  {AGENTES.map(nome => (
                    <label key={nome} className="radar-agente-option">
@@ -817,17 +820,28 @@ export default function RadarDC() {
                  ))}
                </div>
              </fieldset>}
-             <button className="radar-add" onClick={() => salvarRegistro('lembrete', textoLembrete, hoje(), horaAgora())} disabled={!textoLembrete.trim() || agentesLembrete.length === 0 || salvando}>{salvando ? 'Salvando...' : '+ Salvar lembrete'}</button>
+             <button className="radar-add" onClick={() => salvarRegistro('lembrete', textoLembrete, hoje(), horaAgora())} disabled={!textoLembrete.trim() || salvando}>{salvando ? 'Salvando...' : '+ Salvar lembrete'}</button>
             {erroSalvamento && <p className="radar-save-error" role="alert">{erroSalvamento}</p>}
-            <small>O lembrete fica visível até o agente que o criou removê-lo.</small>
+            <small>Sem destinatários, o lembrete fica visível no painel; quem o criou pode removê-lo.</small>
           </div>
           <div className="radar-right-column">
           <div className="radar-calendar-card" ref={calendarioRef}>
             <div className="calendar-top"><div><span>CALENDÁRIO DE NOTIFICAÇÕES</span><h2>{mes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</h2></div><div className="month-buttons"><button type="button" aria-label="Mês anterior" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}>‹</button><button type="button" aria-label="Próximo mês" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + 1, 1))}>›</button></div></div>
             <div className="weekdays">{['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'].map(d => <span key={d}>{d}</span>)}</div>
-            <div className="calendar-grid">{dias.map(d => { const key = dataLocalISO(d); const count = notificacoes.filter(n => n.data === key && !n.concluido).length; return <button type="button" key={key} aria-label={dataBonita(key)} className={`${d.getMonth() !== mes.getMonth() ? 'other-month ' : ''}${key === dataSelecionada ? 'selected ' : ''}${key === hoje() ? 'today' : ''}`} onClick={() => { setDataSelecionada(key); if (!tv) setEditorAberto(true) }}><span>{d.getDate()}</span>{count > 0 && <i>{count}</i>}</button> })}</div>
+            <div className="calendar-grid">{dias.map(d => { const key = dataLocalISO(d); const count = notificacoes.filter(n => n.data === key && !n.concluido).length; return <button type="button" key={key} aria-label={dataBonita(key)} className={`${d.getMonth() !== mes.getMonth() ? 'other-month ' : ''}${key === dataSelecionada ? 'selected ' : ''}${key === hoje() ? 'today' : ''}`} onClick={() => { setDataSelecionada(key); setErroSalvamento(''); if (!tv) setEditorAberto(true) }}><span>{d.getDate()}</span>{count > 0 && <i>{count}</i>}</button> })}</div>
             <div className="calendar-legend"><span><i className="legend-red" /> notificações</span></div>
-            {editorAberto && <form className="radar-calendar-editor" onSubmit={e => { e.preventDefault(); salvarRegistro('notificacao', textoNotificacao, dataSelecionada, hora) }}>
+            {!tv && <button
+              type="button"
+              className="radar-add radar-calendar-create"
+              onClick={() => {
+                if (dataSelecionada < hoje()) setDataSelecionada(hoje())
+                setErroSalvamento('')
+                setEditorAberto(true)
+              }}
+              aria-expanded={editorAberto}
+              aria-controls="radar-calendar-editor"
+            >+ Criar notificação</button>}
+            {editorAberto && <form id="radar-calendar-editor" className="radar-calendar-editor" onSubmit={e => { e.preventDefault(); salvarRegistro('notificacao', textoNotificacao, dataSelecionada, hora) }}>
               <strong>Notificar em {dataBonita(dataSelecionada)}</strong>
                <div className="radar-date-notifications">
                  <span className="radar-date-notifications-title">Notificações desta data</span>
@@ -853,7 +867,7 @@ export default function RadarDC() {
               <textarea value={textoNotificacao} onChange={e => setTextoNotificacao(e.target.value)} placeholder="Escreva a notificação..." rows={3} />
                <div className="radar-form-row"><label>⏰ Hora<input type="time" value={hora} onChange={e => setHora(e.target.value)} /></label><label>Nível<select value={prioridade} onChange={e => setPrioridade(e.target.value as Prioridade)}>{Object.entries(prioridadeConfig).map(([key, c]) => <option key={key} value={key}>{c.emoji} {c.label}</option>)}</select></label></div>
                <fieldset className="radar-agentes-fieldset">
-                 <legend>Agentes envolvidos</legend>
+                 <legend>Agentes envolvidos (opcional; sem seleção, só aparece no Radar DC)</legend>
                  <div className="radar-agentes-grid">
                    {AGENTES.map(nome => (
                      <label key={nome} className="radar-agente-option">
@@ -867,7 +881,7 @@ export default function RadarDC() {
                    ))}
                  </div>
                </fieldset>
-               <button className="radar-add" type="submit" disabled={!textoNotificacao.trim() || salvando}>{salvando ? 'Salvando...' : '+ Colocar no Radar DC'}</button>
+               <button className="radar-add" type="submit" disabled={!textoNotificacao.trim() || salvando}>{salvando ? 'Salvando...' : '+ Salvar notificação'}</button>
               {erroSalvamento && <p className="radar-save-error" role="alert">{erroSalvamento}</p>}
             </form>}
           </div>
@@ -950,7 +964,7 @@ export default function RadarDC() {
         <span>RADAR DC</span>
         <div className="radar-ticker-viewport">
           {(() => {
-            const filaTicker = proximasNotificacoes.length ? proximasNotificacoes : notificacoesAtivas
+            const filaTicker = proximasNotificacoes
             return filaTicker.length > 0 ? (
               <div className="radar-ticker-track" style={{ '--ticker-duration': `${Math.max(12, filaTicker.length * 4.2)}s` } as React.CSSProperties}>
                 {[0, 1].map(copia => (
