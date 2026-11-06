@@ -1244,17 +1244,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         zoomControl={false}
         whenReady={() => {}}
       >
-        {mostrarChuva ? (
-          <RadarWeatherLayers
-            mostrarChuva
-            mostrarSintetico={false}
-            mostrarNuvens
-            satelite
-            quadroExterno={quadroRadarMapa}
-            onErro={receberErroCamadaChuva}
-            onAtualizado={receberAtualizacaoCamadaChuva}
-          />
-        ) : camadaMapa === 'padrao' ? (
+        {camadaMapa === 'padrao' ? (
           <TileLayer
             key="mapa-padrao"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -1538,144 +1528,17 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
 
       <div className="mapa-camadas" aria-label="Escolher visualização do mapa">
         <button
-          className={`mapa-camada-btn ${camadaMapa === 'padrao' && !mostrarChuva ? 'ativo' : ''}`}
+          className={`mapa-camada-btn ${camadaMapa === 'padrao' ? 'ativo' : ''}`}
           onClick={() => setCamadaMapa('padrao')}
         >
           🗺️ Mapa
         </button>
         <button
-          className={`mapa-camada-btn ${camadaMapa === 'satelite' || mostrarChuva ? 'ativo' : ''}`}
+          className={`mapa-camada-btn ${camadaMapa === 'satelite' ? 'ativo' : ''}`}
           onClick={() => setCamadaMapa('satelite')}
         >
           🛰️ Satélite
         </button>
-        <div className="mapa-chuva-wrap">
-          <button
-            className={`mapa-camada-btn mapa-chuva-btn ${mostrarChuva ? 'ativo' : ''}`}
-            onClick={() => {
-              const proximoEstado = !mostrarChuva
-              setMostrarChuva(proximoEstado)
-              if (proximoEstado) setCamadaMapa('satelite')
-              setPainelChuvaAberto(proximoEstado)
-            }}
-            aria-pressed={mostrarChuva}
-            title="Mostrar radar animado de chuva em Ouro Branco"
-          >
-            🌧️ Chuva
-          </button>
-          {painelChuvaAberto && (
-            <div className="mapa-chuva-painel">
-              <div className="mapa-chuva-painel-header">
-                <div>
-                  <strong>🌧️ Chuva ao vivo</strong>
-                  <span>Ouro Branco, MG · precipitação observada e cobertura de nuvens</span>
-                </div>
-                <button
-                  onClick={() => setPainelChuvaAberto(false)}
-                  aria-label="Fechar painel de chuva"
-                >✕</button>
-              </div>
-              <div className="mapa-chuva-fontes">
-                <strong>🛰️ RainViewer ativo + nuvens GOES-19</strong>
-                <span>Quadros animados do radar · imagem de nuvens atualizada a cada 10 min</span>
-              </div>
-              {radarChuvaCarregando && !radarChuva && (
-                <div className="mapa-chuva-status">⏳ Carregando o último quadro do radar…</div>
-              )}
-              {radarChuvaErro && (
-                <div className="mapa-chuva-status mapa-chuva-status--erro">{radarChuvaErro}</div>
-              )}
-              {chuvaOntem && (
-                <div className="mapa-chuva-historico">
-                  <div>
-                    <span className="mapa-chuva-resumo-label">
-                      Ontem · {new Date(`${chuvaOntem.data}T12:00:00`).toLocaleDateString('pt-BR')}
-                    </span>
-                    <strong className={chuvaOntem.precipitacao > 0 ? 'chovendo' : ''}>
-                      {chuvaOntem.precipitacao > 0
-                        ? `🌧️ ${chuvaOntem.precipitacao.toFixed(1)} mm registrados`
-                        : '☀️ Sem precipitação registrada'}
-                    </strong>
-                  </div>
-                  <span>
-                    {chuvaOntem.horasComChuva > 0
-                      ? `${chuvaOntem.horasComChuva}h com chuva · pico ${chuvaOntem.picoHoraria.toFixed(1)} mm/h`
-                      : 'Nenhuma hora com chuva detectada'}
-                    {chuvaOntem.coberturaNuvensMedia != null
-                      ? ` · ${chuvaOntem.coberturaNuvensMedia}% de nuvens em média`
-                      : ''}
-                  </span>
-                </div>
-              )}
-              {radarChuva && (
-                <>
-                  <div className="mapa-chuva-resumo">
-                    <div>
-                        <span className="mapa-chuva-resumo-label">Ponto central · Ouro Branco</span>
-                      <strong className={chuvaNoPonto?.precipitacao && chuvaNoPonto.precipitacao > 0 ? 'chovendo' : ''}>
-                        {chuvaNoPonto?.precipitacao != null
-                          ? chuvaNoPonto.precipitacao > 0
-                            ? `🌧️ ${chuvaNoPonto.precipitacao.toFixed(1)} mm`
-                            : '☀️ Sem chuva no ponto'
-                          : '–'}
-                      </strong>
-                      <small className="mapa-chuva-ponto-fonte">
-                        {chuvaNoPonto?.fonte || 'consulta local'}
-                      </small>
-                    </div>
-                    <div>
-                      <span className="mapa-chuva-resumo-label">Quadro do radar</span>
-                      <strong>
-                        {quadroRadarAtual
-                          ? new Date(quadroRadarAtual.frameTime * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                          : '–'}
-                        <small className="mapa-chuva-quadro-tipo">
-                          {quadroRadarAtual?.tipoQuadro === 'nowcast' ? 'estimativa' : 'observado'}
-                        </small>
-                      </strong>
-                    </div>
-                  </div>
-                  {quadrosRadar.length > 1 && (
-                    <div className="mapa-chuva-animacao">
-                      <button
-                        type="button"
-                        onClick={() => setRadarAnimando(v => !v)}
-                        aria-label={radarAnimando ? 'Pausar animação do radar' : 'Reproduzir animação do radar'}
-                      >
-                        {radarAnimando ? '⏸' : '▶'}
-                      </button>
-                      <input
-                        type="range"
-                        min={0}
-                        max={quadrosRadar.length - 1}
-                        value={Math.min(indiceQuadroRadar, quadrosRadar.length - 1)}
-                        onChange={evento => {
-                          setRadarAnimando(false)
-                          setIndiceQuadroRadar(Number(evento.target.value))
-                        }}
-                        aria-label="Posição da animação do radar"
-                      />
-                      <span>{indiceQuadroRadar + 1}/{quadrosRadar.length}</span>
-                    </div>
-                  )}
-                  <div className="mapa-chuva-legenda">
-                    <span><i className="chuva-cor chuva-cor--goes" /> nuvens GOES-19</span>
-                    <span><i className="chuva-cor chuva-cor--nuvens" /> chuva observada RainViewer</span>
-                  </div>
-                  <p className="mapa-chuva-ajuda">
-                    A camada RainViewer mostra a precipitação observada; a imagem GOES-19 mostra a cobertura de nuvens e não mede intensidade da chuva.
-                  </p>
-                  <div className="mapa-chuva-rodape">
-                    <span>{radarChuva.erroAtualizacao ? 'Último radar salvo' : 'RainViewer · ao vivo'}</span>
-                    <button onClick={buscarRadarChuva} disabled={radarChuvaCarregando}>
-                      {radarChuvaCarregando ? '⏳' : '↻'} Atualizar
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
         <button
           className={`mapa-camada-btn ${mostrarMateriais ? 'ativo' : ''}`}
           onClick={() => {
