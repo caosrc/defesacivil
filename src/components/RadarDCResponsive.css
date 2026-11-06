@@ -61,7 +61,7 @@ body.radar-tv-active .radar-page {
 }
 
 .radar-bilhete-large {
-  min-height: 480px;
+  min-height: 0;
 }
 
 .radar-bilhete-large textarea {

@@ -134,6 +134,44 @@
   font-size: 1.15rem;
 }
 
+.radar-reminder-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+
+.radar-note-card .radar-reminder-heading h2 {
+  margin: .3rem 0 .55rem;
+}
+
+.radar-reminder-create {
+  display: inline-grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  margin-bottom: .25rem;
+  border: 1px solid #4fc7ec;
+  border-radius: 50%;
+  color: #e7f7ff;
+  background: #155f87;
+  font: inherit;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.radar-reminder-create:hover {
+  background: #1b789f;
+}
+
+.radar-reminder-editor {
+  margin-top: .75rem;
+  padding-top: .7rem;
+  border-top: 1px solid #2b5676;
+}
+
 .radar-note-card textarea,
 .radar-calendar-editor textarea,
 .radar-calendar-editor input,

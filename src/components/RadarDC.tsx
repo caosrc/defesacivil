@@ -794,7 +794,21 @@ export default function RadarDC() {
         <div className="radar-left-column">
           <div className="radar-note-card radar-bilhete-large">
             <div className="card-label"><span className="label-dot" /> LEMBRETE</div>
-            <h2>Lembrete</h2>
+            <div className="radar-reminder-heading">
+              <h2>Lembrete</h2>
+              {!tv && <button
+                type="button"
+                className="radar-reminder-create"
+                onClick={() => {
+                  setErroSalvamento('')
+                  setLembreteEditorAberto(true)
+                }}
+                aria-label="Criar lembrete"
+                aria-expanded={lembreteEditorAberto}
+                aria-controls="radar-reminder-editor"
+                data-testid="button-create-reminder"
+              >+</button>}
+            </div>
             <div className="radar-mini-list">
               {lembretes.length === 0 ? (
                 <span>Nenhum lembrete cadastrado.</span>
@@ -808,8 +822,9 @@ export default function RadarDC() {
                 </div>
               ))}
             </div>
-            <textarea value={textoLembrete} onFocus={() => setLembreteEditorAberto(true)} onChange={e => setTextoLembrete(e.target.value)} placeholder="Deixe um lembrete para a equipe..." rows={7} />
-             {lembreteEditorAberto && <fieldset className="radar-agentes-fieldset radar-lembrete-agentes">
+            {lembreteEditorAberto && <div id="radar-reminder-editor" className="radar-reminder-editor">
+             <textarea data-testid="input-reminder-text" value={textoLembrete} onChange={e => setTextoLembrete(e.target.value)} placeholder="Deixe um lembrete para a equipe..." rows={7} />
+             <fieldset className="radar-agentes-fieldset radar-lembrete-agentes">
                <legend>Destinatários do lembrete (opcional)</legend>
                <div className="radar-agentes-grid">
                  {AGENTES.map(nome => (
@@ -819,28 +834,18 @@ export default function RadarDC() {
                    </label>
                  ))}
                </div>
-             </fieldset>}
-             <button className="radar-add" onClick={() => salvarRegistro('lembrete', textoLembrete, hoje(), horaAgora())} disabled={!textoLembrete.trim() || salvando}>{salvando ? 'Salvando...' : '+ Salvar lembrete'}</button>
+             </fieldset>
+             <button className="radar-add" data-testid="button-save-reminder" onClick={() => salvarRegistro('lembrete', textoLembrete, hoje(), horaAgora())} disabled={!textoLembrete.trim() || salvando}>{salvando ? 'Salvando...' : '+ Salvar lembrete'}</button>
+             <small>Sem destinatários, o lembrete fica visível no painel; quem o criou pode removê-lo.</small>
+            </div>}
             {erroSalvamento && <p className="radar-save-error" role="alert">{erroSalvamento}</p>}
-            <small>Sem destinatários, o lembrete fica visível no painel; quem o criou pode removê-lo.</small>
           </div>
           <div className="radar-right-column">
           <div className="radar-calendar-card" ref={calendarioRef}>
             <div className="calendar-top"><div><span>CALENDÁRIO DE NOTIFICAÇÕES</span><h2>{mes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</h2></div><div className="month-buttons"><button type="button" aria-label="Mês anterior" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}>‹</button><button type="button" aria-label="Próximo mês" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + 1, 1))}>›</button></div></div>
             <div className="weekdays">{['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'].map(d => <span key={d}>{d}</span>)}</div>
-            <div className="calendar-grid">{dias.map(d => { const key = dataLocalISO(d); const count = notificacoes.filter(n => n.data === key && !n.concluido).length; return <button type="button" key={key} aria-label={dataBonita(key)} className={`${d.getMonth() !== mes.getMonth() ? 'other-month ' : ''}${key === dataSelecionada ? 'selected ' : ''}${key === hoje() ? 'today' : ''}`} onClick={() => { setDataSelecionada(key); setErroSalvamento(''); if (!tv) setEditorAberto(true) }}><span>{d.getDate()}</span>{count > 0 && <i>{count}</i>}</button> })}</div>
+            <div className="calendar-grid">{dias.map(d => { const key = dataLocalISO(d); const count = notificacoes.filter(n => n.data === key && !n.concluido).length; return <button type="button" key={key} aria-label={`Criar notificação em ${dataBonita(key)}`} data-testid={`button-notification-date-${key}`} className={`${d.getMonth() !== mes.getMonth() ? 'other-month ' : ''}${key === dataSelecionada ? 'selected ' : ''}${key === hoje() ? 'today' : ''}`} onClick={() => { setDataSelecionada(key); setErroSalvamento(''); if (!tv) setEditorAberto(true) }}><span>{d.getDate()}</span>{count > 0 && <i>{count}</i>}</button> })}</div>
             <div className="calendar-legend"><span><i className="legend-red" /> notificações</span></div>
-            {!tv && <button
-              type="button"
-              className="radar-add radar-calendar-create"
-              onClick={() => {
-                if (dataSelecionada < hoje()) setDataSelecionada(hoje())
-                setErroSalvamento('')
-                setEditorAberto(true)
-              }}
-              aria-expanded={editorAberto}
-              aria-controls="radar-calendar-editor"
-            >+ Criar notificação</button>}
             {editorAberto && <form id="radar-calendar-editor" className="radar-calendar-editor" onSubmit={e => { e.preventDefault(); salvarRegistro('notificacao', textoNotificacao, dataSelecionada, hora) }}>
               <strong>Notificar em {dataBonita(dataSelecionada)}</strong>
                <div className="radar-date-notifications">
