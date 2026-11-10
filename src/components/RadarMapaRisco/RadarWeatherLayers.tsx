@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pane, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import RadarChuvaAnimado from '../RadarChuvaAnimado'
+import NuvensGoesLayer from '../NuvensGoesLayer'
 
 export type QuadroRadar = {
   host: string
   path: string
   frameTime: number
-  quadros?: { path: string; time: number }[]
+  quadros?: { path: string; time?: number; frameTime?: number }[]
   atualizadoEm?: string
   erroAtualizacao?: boolean
 }
@@ -38,15 +39,7 @@ type Props = {
 
 const URL_BASE_RUA = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 const URL_BASE_SATELITE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-const URL_NUVENS_GOES = String(
-  import.meta.env.VITE_GOES_CLOUD_TILES_URL
-    || 'https://gis.nnvl.noaa.gov/arcgis/rest/services/GOES/GOES_current/ImageServer/tile/{z}/{y}/{x}',
-).trim()
 const CAMINHO_RADAR_VALIDO = /^\/v2\/radar\/[a-z0-9]+$/i
-
-function templateTilesHttpsValido(url: string) {
-  return /^https:\/\//i.test(url) && ['{z}', '{x}', '{y}'].every(token => url.includes(token))
-}
 
 function validarQuadroRadar(dados: Partial<QuadroRadar> | null | undefined): QuadroRadar | null {
   const frameTime = Number(dados?.frameTime)
@@ -63,7 +56,7 @@ function validarQuadroRadar(dados: Partial<QuadroRadar> | null | undefined): Qua
       frameTime,
       quadros: Array.isArray(dados.quadros)
         ? dados.quadros
-          .map(quadro => ({ path: String(quadro.path || ''), time: Number(quadro.frameTime) }))
+          .map(quadro => ({ path: String(quadro.path || ''), time: Number(quadro.frameTime ?? quadro.time) }))
           .filter(quadro => CAMINHO_RADAR_VALIDO.test(quadro.path) && Number.isFinite(quadro.time) && quadro.time > 0)
         : [],
       atualizadoEm: dados.atualizadoEm,
@@ -222,19 +215,14 @@ export default function RadarWeatherLayers({
           updateWhenZooming={false}
         />
       ))}
-      {mostrarNuvens && templateTilesHttpsValido(URL_NUVENS_GOES) && (
-        <Pane name="radar-risk-goes" style={{ zIndex: 330 }}>
-          <TileLayer
-            key={`radar-risk-goes-${URL_NUVENS_GOES}`}
-            url={URL_NUVENS_GOES}
-            opacity={0.55}
-            maxNativeZoom={8}
-            maxZoom={19}
-            updateWhenZooming={false}
-            attribution='Cloud imagery &copy; <a href="https://gis.nnvl.noaa.gov/arcgis/rest/services/GOES/GOES_current/ImageServer" target="_blank" rel="noreferrer">NOAA GOES</a>'
-          />
-        </Pane>
-      )}
+      <NuvensGoesLayer
+        ativo={mostrarNuvens}
+        nomePane="radar-risk-goes"
+        zIndex={330}
+        opacidade={0.72}
+        maxZoom={19}
+        onErro={onErro}
+      />
       {mostrarChuva && quadro && (
         <Pane name="radar-risk-rain-observed" style={{ zIndex: 345 }}>
           <RadarChuvaAnimado

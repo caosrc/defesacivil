@@ -34,6 +34,7 @@ import './MonitoramentoCNL.css'
 import ModalSenha from './ModalSenha'
 import AreasRiscoMapa from './AreasRiscoMapa'
 import RadarChuvaAnimado, { type QuadroRadarChuva } from './RadarChuvaAnimado'
+import NuvensGoesLayer from './NuvensGoesLayer'
 import type { RiskArea as AreaRiscoPersistida } from './RadarMapaRisco'
 
 type Prioridade = 'normal' | 'importante' | 'urgente'
@@ -241,12 +242,6 @@ function iconeOcorrenciaRadar(natureza: string): L.DivIcon {
   return icone
 }
 
-// Serviço público NOAA/NNVL com imagens infravermelhas diárias do GOES.
-// A variável de ambiente continua disponível para trocar a fonte sem alterar o código.
-const GOES_CLOUD_TILE_URL = String(
-  import.meta.env.VITE_GOES_CLOUD_TILES_URL
-    || 'https://gis.nnvl.noaa.gov/arcgis/rest/services/GOES/GOES_current/ImageServer/tile/{z}/{y}/{x}',
-).trim()
 const nomesTempo: Record<number, string> = { 0: 'Céu limpo', 1: 'Predominantemente limpo', 2: 'Parcialmente nublado', 3: 'Nublado', 45: 'Neblina', 48: 'Neblina com gelo', 51: 'Garoa leve', 53: 'Garoa moderada', 55: 'Garoa intensa', 61: 'Chuva leve', 63: 'Chuva moderada', 65: 'Chuva forte', 71: 'Neve leve', 73: 'Neve moderada', 75: 'Neve forte', 80: 'Pancadas leves', 81: 'Pancadas moderadas', 82: 'Pancadas fortes', 95: 'Trovoada', 96: 'Trovoada com granizo', 99: 'Trovoada forte' }
 function horarioNoturno(time?: string) {
   const hora = Number(time?.slice(11, 13))
@@ -362,10 +357,6 @@ function formatarMmMapaRadar(valor: number | null | undefined) {
     : `${valor.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mm`
 }
 
-function templateTilesHttpsValido(url: string) {
-  return /^https:\/\//i.test(url) && ['{z}', '{x}', '{y}'].every(token => url.includes(token))
-}
-
 function intensidadeCemadenRadar(valor: number | null | undefined) {
   if (valor == null || !Number.isFinite(valor) || valor <= 0) return { cor: '#38bdf8', alpha: 0 }
   if (valor <= 2) return { cor: '#38bdf8', alpha: 0.48 }
@@ -462,13 +453,14 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
   const [tempoMapa, setTempoMapa] = useState<TempoMapaRadar | null>(null)
   const [previsaoTrovoadas, setPrevisaoTrovoadas] = useState<PrevisaoTrovoadaRadar | null>(null)
   const [radarErro, setRadarErro] = useState('')
+  const [nuvensErro, setNuvensErro] = useState('')
   const [tempoMapaErro, setTempoMapaErro] = useState('')
   const [trovoadasErro, setTrovoadasErro] = useState('')
   const [radarCarregando, setRadarCarregando] = useState(false)
   const [mostrarChuva, setMostrarChuva] = useState(true)
   const [mostrarTemperatura, setMostrarTemperatura] = useState(true)
   const [mostrarTrovoadas, setMostrarTrovoadas] = useState(true)
-  const [mostrarNuvens, setMostrarNuvens] = useState(false)
+  const [mostrarNuvens, setMostrarNuvens] = useState(true)
   const [zoomMapa, setZoomMapa] = useState(RADAR_MAP_ZOOM)
   const [painelAreasRiscoHost, setPainelAreasRiscoHost] = useState<HTMLDivElement | null>(null)
   const mapaLeafletRef = useRef<LeafletMap | null>(null)
@@ -919,8 +911,8 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
         <span><i className="radar-live-map-status-dot radar-live-map-status-dot-station" /> CEMADEN · Ouro Branco</span>
         {zoomMapa >= 9 && <span><i className="radar-live-map-status-dot radar-live-map-status-dot-temperature" /> Temperatura local</span>}
         {zoomMapa >= 9 && <span><i className="radar-live-map-status-dot radar-live-map-status-dot-lightning" /> Trovoadas previstas localmente · 36 h</span>}
-        {(radarErro || tempoMapaErro || trovoadasErro || cemadenMg.erro) && (
-          <strong>{[radarErro, tempoMapaErro, trovoadasErro, cemadenMg.erro].filter(Boolean).join(' · ')}</strong>
+        {(radarErro || nuvensErro || tempoMapaErro || trovoadasErro || cemadenMg.erro) && (
+          <strong>{[radarErro, nuvensErro, tempoMapaErro, trovoadasErro, cemadenMg.erro].filter(Boolean).join(' · ')}</strong>
         )}
         {ocorrenciasComGps.length > 0 && (
           <span>
@@ -971,18 +963,14 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
             maxZoom={18}
           />
         )}
-        {mostrarNuvens && templateTilesHttpsValido(GOES_CLOUD_TILE_URL) && (
-          <Pane name="radarLiveClouds" style={{ zIndex: 410 }}>
-            <TileLayer
-              key={`radar-live-clouds-${GOES_CLOUD_TILE_URL}`}
-              url={GOES_CLOUD_TILE_URL}
-              opacity={0.55}
-              maxNativeZoom={8}
-              maxZoom={18}
-              attribution='Cloud imagery &copy; <a href="https://gis.nnvl.noaa.gov/arcgis/rest/services/GOES/GOES_current/ImageServer" target="_blank" rel="noreferrer">NOAA GOES</a>'
-            />
-          </Pane>
-        )}
+        <NuvensGoesLayer
+          ativo={mostrarNuvens}
+          nomePane="radarLiveClouds"
+          zIndex={410}
+          opacidade={0.72}
+          maxZoom={18}
+          onErro={setNuvensErro}
+        />
         {mostrarChuva && radarChuva && (
           <Pane name="radarLiveRain" style={{ zIndex: 420 }}>
             <RadarChuvaAnimado
@@ -1147,7 +1135,6 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
         </span>
         <span>{tempoMapa?.atual?.temperatura != null ? `Ouro Branco: ${Math.round(Number(tempoMapa.atual.temperatura))} °C` : 'Temperatura local: —'}</span>
         <span>{previsaoTrovoadas ? `${pontosTrovoada.length} ponto(s) previsto(s) perto de Ouro Branco` : 'Previsão local de trovoadas: —'}</span>
-        {!templateTilesHttpsValido(GOES_CLOUD_TILE_URL) && <span>Nuvens GOES: fonte não configurada</span>}
       </div>
     </section>
   )

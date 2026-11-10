@@ -26,7 +26,7 @@ Required env vars (all set in Replit shared env / secrets):
 - **Push Notifications**: Web Push (VAPID) via `web-push` on Express server
 - **Maps**: Leaflet + react-leaflet (tiles proxied via `/api/tiles`)
 - **Incêndios ativos**: NASA FIRMS (VIIRS NOAA-20/S-NPP, MODIS Terra/Aqua) + Google Earth Engine (GOES-19 ABI, MODIS e VIIRS), exibidos como focos e camadas no mapa
-- **Chuva ao vivo**: tiles observados RainViewer mostram precipitação e tiles NOAA GOES-19 mostram nuvens reais; no Mapa, as camadas só aparecem ao clicar em **Chuva**, enquanto o Radar DC mantém a chuva ativa ao abrir
+- **Chuva ao vivo**: tiles observados RainViewer mostram precipitação e tiles NOAA GOES-19 mostram nuvens reais; no Mapa, as camadas só aparecem ao clicar em **Chuva**, enquanto o Radar DC inicia com chuva e nuvens ativas
 - **Imagens Planet**: consulta protegida pelo servidor em `/api/planet-focos`
 
 ## Where things live
@@ -69,7 +69,7 @@ Required env vars (all set in Replit shared env / secrets):
 - Production: `npm run build && node server/index.js` — Express serves built `/dist`
 - Push notifications require `VAPID_PRIVATE_KEY` secret to be set in Replit secrets
 - Earth Engine requires the service account to have Earth Engine access and the `Service Usage Consumer` role on the Google Cloud project
-- No Mapa, o botão **Chuva** liga os tiles de precipitação RainViewer e de nuvens NOAA GOES-19; ambos ficam desligados até o usuário ativá-los. O Radar DC mantém a chuva ativa ao abrir. A leitura em mm do centro é um resumo do Open-Meteo e não substitui pluviômetro local.
+- No Mapa, o botão **Chuva** liga os tiles de precipitação RainViewer e de nuvens NOAA GOES-19; ambos ficam desligados até o usuário ativá-los. O Radar DC inicia com chuva e nuvens ativas. A leitura em mm do centro é um resumo do Open-Meteo e não substitui pluviômetro local.
 - O monitoramento do Earth Engine usa `FireMask >= 7` para MODIS/VIIRS e `Area > 0` para GOES-19 FDCF (cadência de 10 minutos); não interpreta chuva, radar, vegetação ou cicatriz de queimada como incêndio ativo
 
 ## Pointers
