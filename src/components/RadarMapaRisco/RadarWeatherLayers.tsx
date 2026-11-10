@@ -35,6 +35,7 @@ type Props = {
   mostrarSintetico: boolean
   mostrarNuvens: boolean
   satelite: boolean
+  renderizarBase?: boolean
   quadroExterno?: QuadroRadar | null
   onErro: (mensagem: string) => void
   onAtualizado: (horario: string) => void
@@ -142,6 +143,7 @@ export default function RadarWeatherLayers({
   mostrarSintetico,
   mostrarNuvens,
   satelite,
+  renderizarBase = true,
   quadroExterno,
   onErro,
   onAtualizado,
@@ -223,7 +225,7 @@ export default function RadarWeatherLayers({
 
   return (
     <>
-      {satelite ? (
+      {renderizarBase && (satelite ? (
         <TileLayer
           key="radar-risk-satellite"
           url={URL_BASE_SATELITE}
@@ -243,7 +245,7 @@ export default function RadarWeatherLayers({
           keepBuffer={2}
           updateWhenZooming={false}
         />
-      )}
+      ))}
       {mostrarNuvens && imagemGoes && (
         <Pane name="radar-risk-goes" style={{ zIndex: 330 }}>
           <ImageOverlay

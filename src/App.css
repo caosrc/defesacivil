@@ -896,6 +896,37 @@ input, select, textarea { font-family: inherit; }
   font-size: 0.68rem;
 }
 
+.mapa-radar-clima-card {
+  position: absolute;
+  top: auto;
+  bottom: 108px;
+  right: 12px;
+  z-index: 500;
+  width: min(210px, calc(100vw - 24px));
+  padding: .65rem .75rem;
+  border: 1px solid rgba(148, 163, 184, .55);
+  border-radius: 12px;
+  color: #172b3c;
+  background: rgba(255, 255, 255, .96);
+  box-shadow: 0 3px 14px rgba(0, 0, 0, .2);
+  pointer-events: none;
+}
+.mapa-radar-clima-card-cabecalho { display: flex; align-items: center; gap: .5rem; }
+.mapa-radar-clima-card-cabecalho > span { font-size: 1.2rem; }
+.mapa-radar-clima-card-cabecalho strong,
+.mapa-radar-clima-card-cabecalho small { display: block; }
+.mapa-radar-clima-card-cabecalho strong { font-size: .76rem; }
+.mapa-radar-clima-card-cabecalho small,
+.mapa-radar-clima-card-fonte { color: #64748b; font-size: .59rem; }
+.mapa-radar-clima-card-dados { display: flex; align-items: baseline; justify-content: space-between; gap: .4rem; margin-top: .45rem; }
+.mapa-radar-clima-card-dados strong { color: #0f4c81; font-size: 1.55rem; font-weight: 750; letter-spacing: -.04em; }
+.mapa-radar-clima-card-dados span { color: #475569; font-size: .6rem; text-align: right; }
+.mapa-radar-clima-card-fonte { display: block; margin-top: .25rem; }
+.mapa-radar-clima-card-status,
+.mapa-radar-clima-card-erro { margin: .4rem 0 0; font-size: .62rem; line-height: 1.35; }
+.mapa-radar-clima-card-status { color: #64748b; }
+.mapa-radar-clima-card-erro { color: #b42318; }
+
 /* ─── Submenu de filtro de tipos de ocorrências ─── */
 .mapa-ocorr-wrap {
   position: relative;
@@ -1188,6 +1219,7 @@ input, select, textarea { font-family: inherit; }
   .mapa-legenda {
     top: 94px;
   }
+  .mapa-radar-clima-card { right: 8px; width: min(190px, calc(100vw - 16px)); }
 }
 .mapa-legenda-header {
   display: flex;

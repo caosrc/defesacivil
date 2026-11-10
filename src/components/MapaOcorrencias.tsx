@@ -21,6 +21,7 @@ import {
   descartarMalhaEmMemoria,
 } from '../malhaViaria'
 import { wsOn, wsSend, wsOnOpen } from '../wsClient'
+import RadarWeatherLayers from './RadarMapaRisco/RadarWeatherLayers'
 import {
   ativarGps as ativarGpsGlobal,
   desativarGps as desativarGpsGlobal,
@@ -515,12 +516,99 @@ function nomeDiaSemana(dateStr: string): string {
 const OURO_BRANCO: [number, number] = [-20.5195, -43.6983]
 
 const MAX_TRILHA = 300
+const ignorarAtualizacaoRadar = () => {}
+
+type TempoAtualMapa = {
+  atualizadoEm?: string
+  atual?: {
+    temperatura?: number | null
+    precipitacao?: number | null
+  } | null
+}
+
+function CartaoClimaMapa({ ativo, erroCamadas }: { ativo: boolean; erroCamadas: string }) {
+  const [tempo, setTempo] = useState<TempoAtualMapa | null>(null)
+  const [carregando, setCarregando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  useEffect(() => {
+    if (!ativo) return
+    let cancelado = false
+
+    const carregar = async () => {
+      setCarregando(true)
+      try {
+        const resposta = await fetch('/api/tempo', { cache: 'no-store' })
+        const dados = await resposta.json() as TempoAtualMapa & { erro?: string }
+        if (!resposta.ok || !dados.atual) {
+          throw new Error(dados.erro || 'Temperatura indisponível.')
+        }
+        if (!cancelado) {
+          setTempo(dados)
+          setErro('')
+        }
+      } catch (error) {
+        if (!cancelado) setErro(error instanceof Error ? error.message : 'Temperatura indisponível.')
+      } finally {
+        if (!cancelado) setCarregando(false)
+      }
+    }
+
+    void carregar()
+    const intervalo = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void carregar()
+    }, 10 * 60 * 1000)
+    return () => {
+      cancelado = true
+      window.clearInterval(intervalo)
+    }
+  }, [ativo])
+
+  if (!ativo) return null
+
+  const temperatura = tempo?.atual?.temperatura
+  const chuva = tempo?.atual?.precipitacao
+  return (
+    <section className="mapa-radar-clima-card" aria-label="Clima atual em Ouro Branco" data-testid="mapa-clima-atual">
+      <div className="mapa-radar-clima-card-cabecalho">
+        <span aria-hidden="true">🌡️</span>
+        <div>
+          <strong>Ouro Branco</strong>
+          <small>Condições atuais</small>
+        </div>
+      </div>
+      {carregando && !tempo && <p className="mapa-radar-clima-card-status">Carregando temperatura…</p>}
+      {!carregando && !tempo && erro && <p className="mapa-radar-clima-card-erro" role="alert">{erro}</p>}
+      {tempo && (
+        <>
+          <div className="mapa-radar-clima-card-dados">
+            <strong>{typeof temperatura === 'number' && Number.isFinite(temperatura) ? `${Math.round(temperatura)}°C` : '—'}</strong>
+            <span>
+              Chuva atual:{' '}
+              {typeof chuva === 'number' && Number.isFinite(chuva)
+                ? `${chuva.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mm`
+                : '—'}
+            </span>
+          </div>
+          <small className="mapa-radar-clima-card-fonte">
+            Open-Meteo{tempo.atualizadoEm ? ` · ${new Date(tempo.atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
+          </small>
+          {erro && <p className="mapa-radar-clima-card-erro" role="status">{erro}</p>}
+        </>
+      )}
+      {erroCamadas && <p className="mapa-radar-clima-card-erro" role="status">{erroCamadas}</p>}
+      <small className="mapa-radar-clima-card-fonte">Radar de chuva · nuvens GOES-19</small>
+    </section>
+  )
+}
 
 // ── Componente principal ────────────────────────────────────────
 export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExterno, onDestinoExternoConsumido, equipamentosCampo = [], onVerDetalheCampo }: Props) {
   const [selecionada, setSelecionada] = useState<Ocorrencia | null>(null)
   const [legendaAberta, setLegendaAberta] = useState(false)
   const [camadaMapa, setCamadaMapa] = useState<CamadaMapa>('padrao')
+  const [mostrarChuva, setMostrarChuva] = useState(false)
+  const [erroCamadasClima, setErroCamadasClima] = useState('')
   const [camadaMonitoramento, setCamadaMonitoramento] = useState<CamadaMonitoramentoId>(null)
   const [painelMonitoramentoAberto, setPainelMonitoramentoAberto] = useState(false)
   const [mostrarOcorrencias, setMostrarOcorrencias] = useState(false)
@@ -1230,6 +1318,9 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   )
   const dispositivosArray = useMemo(() => Array.from(dispositivos.values()), [dispositivos])
   const totalOnline = dispositivosArray.length + (statusGps === 'ativo' ? 1 : 0)
+  const receberErroCamadasClima = useCallback((mensagem: string) => {
+    setErroCamadasClima(mensagem)
+  }, [])
 
   // ── Render ────────────────────────────────────────────────────
   return (
@@ -1266,6 +1357,15 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
             updateWhenIdle={true}
           />
         )}
+        <RadarWeatherLayers
+          mostrarChuva={mostrarChuva}
+          mostrarSintetico={false}
+          mostrarNuvens={mostrarChuva}
+          satelite={false}
+          renderizarBase={false}
+          onErro={receberErroCamadasClima}
+          onAtualizado={ignorarAtualizacaoRadar}
+        />
         {camadaMonitoramento && camadasMonitoramento.find(c => c.id === camadaMonitoramento)?.url && (
           <TileLayer
             key={`earth-engine-${camadaMonitoramento}`}
@@ -1540,6 +1640,18 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           🛰️ Satélite
         </button>
         <button
+          className={`mapa-camada-btn ${mostrarChuva ? 'ativo' : ''}`}
+          onClick={() => {
+            setMostrarChuva(value => !value)
+            setErroCamadasClima('')
+          }}
+          aria-pressed={mostrarChuva}
+          data-testid="toggle-chuva-mapa"
+          title="Mostrar ou ocultar a temperatura e as camadas de chuva e nuvens"
+        >
+          🌧️ Chuva
+        </button>
+        <button
           className={`mapa-camada-btn ${mostrarMateriais ? 'ativo' : ''}`}
           onClick={() => {
             if (mostrarMateriais) {
@@ -1625,6 +1737,8 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           </button>
         </div>
       </div>
+
+      <CartaoClimaMapa ativo={mostrarChuva} erroCamadas={erroCamadasClima} />
 
       {painelMonitoramentoAberto && (
         <div className="mapa-monitoramento-painel">
