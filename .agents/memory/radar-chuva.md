@@ -23,9 +23,9 @@ Para reproduzir a evolução das áreas de chuva, usar a sequência `radar.past`
 
 **How to apply:** Reiniciar a sequência ao atualizar os metadados, exibir horário e tipo de cada quadro, e manter a grade Open-Meteo como complemento quando houver poucos pixels de radar no município.
 
-## Imagem de nuvens GOES
-A imagem Full Disk GeoColor publicada pela NOAA/NESDIS/STAR cobre o Brasil e pode ser usada como ImageOverlay de baixa opacidade; o radar deve permanecer por cima para indicar a chuva.
+## Nuvens GOES e estado inicial por mapa
+Use a camada pública NOAA GOES ImageServer em tiles para mostrar nuvens no mapa, com RainViewer por cima para a precipitação observada. No Mapa, as duas camadas começam desligadas e aparecem juntas ao clicar em “Chuva”; no Radar DC, a chuva começa ativa.
 
-**Why:** A imagem de satélite dá o contexto visual das nuvens, mas não mede intensidade de precipitação com a mesma semântica do radar.
+**Why:** O usuário pediu que o mapa operacional só mostre nuvens ao ativar “Chuva”, mantendo o Radar DC com chuva ativa; os tiles NOAA seguem a fonte e o padrão do código de referência.
 
-**How to apply:** Atualizar o arquivo oficial periodicamente, mostrar a atribuição NOAA/NESDIS/STAR e deixar o usuário desligar a camada para ver melhor os tiles coloridos.
+**How to apply:** Preserve o estado inicial distinto entre as telas, atribua NOAA e RainViewer e não trate a imagem GOES como medição de precipitação.

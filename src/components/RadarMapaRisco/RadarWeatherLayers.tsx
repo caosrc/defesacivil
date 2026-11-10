@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ImageOverlay, Pane, TileLayer, useMap } from 'react-leaflet'
+import { Pane, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import RadarChuvaAnimado from '../RadarChuvaAnimado'
 
@@ -10,13 +10,6 @@ export type QuadroRadar = {
   quadros?: { path: string; time: number }[]
   atualizadoEm?: string
   erroAtualizacao?: boolean
-}
-
-type ImagemGoes = {
-  url: string
-  bounds: [[number, number], [number, number]]
-  atualizadoEm?: string
-  fonte?: string
 }
 
 type FeatureRadar = {
@@ -45,7 +38,15 @@ type Props = {
 
 const URL_BASE_RUA = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 const URL_BASE_SATELITE = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+const URL_NUVENS_GOES = String(
+  import.meta.env.VITE_GOES_CLOUD_TILES_URL
+    || 'https://gis.nnvl.noaa.gov/arcgis/rest/services/GOES/GOES_current/ImageServer/tile/{z}/{y}/{x}',
+).trim()
 const CAMINHO_RADAR_VALIDO = /^\/v2\/radar\/[a-z0-9]+$/i
+
+function templateTilesHttpsValido(url: string) {
+  return /^https:\/\//i.test(url) && ['{z}', '{x}', '{y}'].every(token => url.includes(token))
+}
 
 function validarQuadroRadar(dados: Partial<QuadroRadar> | null | undefined): QuadroRadar | null {
   const frameTime = Number(dados?.frameTime)
@@ -156,7 +157,6 @@ export default function RadarWeatherLayers({
   onAtualizado,
 }: Props) {
   const [quadroInterno, setQuadroInterno] = useState<QuadroRadar | null>(null)
-  const [imagemGoes, setImagemGoes] = useState<ImagemGoes | null>(null)
   const radarAtivo = mostrarChuva || mostrarSintetico
   const usaQuadroExterno = quadroExterno !== undefined
   const quadroFonte = usaQuadroExterno ? quadroExterno : quadroInterno
@@ -199,33 +199,6 @@ export default function RadarWeatherLayers({
     }
   }, [radarAtivo, usaQuadroExterno, onAtualizado, onErro])
 
-  useEffect(() => {
-    if (!mostrarNuvens) return
-    let cancelado = false
-    const carregar = async () => {
-      try {
-        const resposta = await fetch(`/api/goes-nuvens?_ts=${Date.now()}`, { cache: 'no-store' })
-        if (!resposta.ok) throw new Error('Imagem de nuvens GOES indisponível.')
-        const dados = await resposta.json() as ImagemGoes
-        if (!dados.url || !Array.isArray(dados.bounds)) throw new Error('A imagem GOES retornou dados inválidos.')
-        if (!cancelado) {
-          setImagemGoes(dados)
-          onErro('')
-        }
-      } catch (error) {
-        if (!cancelado) onErro(error instanceof Error ? error.message : 'Imagem de nuvens GOES indisponível.')
-      }
-    }
-    void carregar()
-    const intervalo = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void carregar()
-    }, 10 * 60 * 1000)
-    return () => {
-      cancelado = true
-      window.clearInterval(intervalo)
-    }
-  }, [mostrarNuvens, onErro])
-
   return (
     <>
       {renderizarBase && (satelite ? (
@@ -249,14 +222,16 @@ export default function RadarWeatherLayers({
           updateWhenZooming={false}
         />
       ))}
-      {mostrarNuvens && imagemGoes && (
+      {mostrarNuvens && templateTilesHttpsValido(URL_NUVENS_GOES) && (
         <Pane name="radar-risk-goes" style={{ zIndex: 330 }}>
-          <ImageOverlay
-            key={`${imagemGoes.url}-${imagemGoes.atualizadoEm || ''}`}
-            url={`${imagemGoes.url}?t=${encodeURIComponent(imagemGoes.atualizadoEm || '')}`}
-            bounds={imagemGoes.bounds}
-            opacity={0.38}
-            attribution={imagemGoes.fonte || 'NOAA/NESDIS · GOES-19'}
+          <TileLayer
+            key={`radar-risk-goes-${URL_NUVENS_GOES}`}
+            url={URL_NUVENS_GOES}
+            opacity={0.55}
+            maxNativeZoom={8}
+            maxZoom={19}
+            updateWhenZooming={false}
+            attribution='Cloud imagery &copy; <a href="https://gis.nnvl.noaa.gov/arcgis/rest/services/GOES/GOES_current/ImageServer" target="_blank" rel="noreferrer">NOAA GOES</a>'
           />
         </Pane>
       )}
