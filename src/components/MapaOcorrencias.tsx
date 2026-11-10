@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker, Tooltip } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Ocorrencia } from '../types'
@@ -526,29 +526,24 @@ type TempoAtualMapa = {
 
 function TemperaturaMapaMarker({ ativo }: { ativo: boolean }) {
   const [tempo, setTempo] = useState<TempoAtualMapa | null>(null)
-  const [carregando, setCarregando] = useState(false)
-  const [erro, setErro] = useState('')
 
   useEffect(() => {
     if (!ativo) return
     let cancelado = false
 
     const carregar = async () => {
-      setCarregando(true)
       try {
         const resposta = await fetch('/api/tempo', { cache: 'no-store' })
         const dados = await resposta.json() as TempoAtualMapa & { erro?: string }
         if (!resposta.ok || !dados.atual) {
           throw new Error(dados.erro || 'Temperatura indisponível.')
         }
-        if (!cancelado) {
+        const temperatura = dados.atual.temperatura
+        if (typeof temperatura === 'number' && Number.isFinite(temperatura) && !cancelado) {
           setTempo(dados)
-          setErro('')
         }
       } catch (error) {
-        if (!cancelado) setErro(error instanceof Error ? error.message : 'Temperatura indisponível.')
-      } finally {
-        if (!cancelado) setCarregando(false)
+        if (!cancelado) console.error('Não foi possível carregar a temperatura de Ouro Branco:', error)
       }
     }
 
@@ -563,29 +558,19 @@ function TemperaturaMapaMarker({ ativo }: { ativo: boolean }) {
   }, [ativo])
 
   const temperatura = tempo?.atual?.temperatura
-  const temperaturaValida = typeof temperatura === 'number' && Number.isFinite(temperatura)
-  const textoTemperatura = temperaturaValida
-    ? `${Math.round(temperatura)}°C`
-    : carregando
-      ? '…'
-      : erro
-        ? 'Indisponível'
-        : '—'
-  const descricaoAcessivel = temperaturaValida
-    ? `Temperatura atual de Ouro Branco: ${Math.round(temperatura)} graus Celsius`
-    : erro
-      ? 'Temperatura atual de Ouro Branco indisponível'
-      : 'Carregando temperatura atual de Ouro Branco'
-  const iconeTemperatura = useMemo(() => L.divIcon({
-    className: 'mapa-temperatura-icon',
-    html: `<div class="mapa-temperatura-chip" role="status" aria-label="${descricaoAcessivel}" data-testid="mapa-temperatura-atual"><span class="mapa-temperatura-chip-local">Ouro Branco</span><strong class="mapa-temperatura-chip-valor">${textoTemperatura}</strong></div>`,
-    iconSize: [160, 44],
-    iconAnchor: [80, 22],
-  }), [descricaoAcessivel, textoTemperatura])
+  if (!ativo || typeof temperatura !== 'number' || !Number.isFinite(temperatura)) return null
 
-  if (!ativo) return null
-
-  return <Marker position={OURO_BRANCO} icon={iconeTemperatura} zIndexOffset={1600} interactive={false} />
+  return (
+    <CircleMarker
+      center={OURO_BRANCO}
+      radius={8}
+      pathOptions={{ color: '#fff', weight: 2, fillColor: '#0284c7', fillOpacity: 1 }}
+    >
+      <Tooltip permanent direction="bottom" offset={[0, 9]} opacity={1} className="mapa-temperatura-tooltip">
+        {`🌡️ ${Math.round(temperatura)}°`}
+      </Tooltip>
+    </CircleMarker>
+  )
 }
 
 // ── Componente principal ────────────────────────────────────────
@@ -1346,7 +1331,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         <RadarWeatherLayers
           mostrarChuva={mostrarChuva}
           mostrarSintetico={false}
-          mostrarNuvens={false}
+          mostrarNuvens={mostrarChuva}
           satelite={false}
           renderizarBase={false}
           onErro={receberErroCamadasClima}
@@ -1634,7 +1619,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           }}
           aria-pressed={mostrarChuva}
           data-testid="toggle-chuva-mapa"
-          title="Mostrar a temperatura de Ouro Branco e a chuva ativa do Radar DC"
+          title="Mostrar a chuva observada, as nuvens e a temperatura de Ouro Branco"
         >
           🌧️ Chuva
         </button>

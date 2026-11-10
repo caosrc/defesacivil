@@ -896,23 +896,19 @@ input, select, textarea { font-family: inherit; }
   font-size: 0.68rem;
 }
 
-.leaflet-div-icon.mapa-temperatura-icon { border: 0; background: transparent; }
-.mapa-temperatura-chip {
-  display: flex;
-  width: 160px;
-  height: 44px;
-  align-items: center;
-  justify-content: center;
-  gap: .48rem;
-  border: 2px solid #fff;
-  border-radius: 24px;
-  color: #17324b;
-  background: rgba(255, 255, 255, .97);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, .32);
+.leaflet-tooltip.mapa-temperatura-tooltip {
+  border: 0 !important;
+  padding: 0 !important;
+  color: #0369a1 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-size: .78rem;
+  font-weight: 900;
+  line-height: 1.1;
+  text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
   white-space: nowrap;
 }
-.mapa-temperatura-chip-local { font-size: .7rem; font-weight: 750; }
-.mapa-temperatura-chip-valor { color: #0f4c81; font-size: 1rem; font-weight: 850; }
+.leaflet-tooltip.mapa-temperatura-tooltip::before { display: none; }
 .mapa-chuva-erro {
   position: absolute;
   right: 12px;

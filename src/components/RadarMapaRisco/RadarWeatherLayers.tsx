@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ImageOverlay, Pane, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
+import RadarChuvaAnimado from '../RadarChuvaAnimado'
 
 export type QuadroRadar = {
   host: string
   path: string
   frameTime: number
+  quadros?: { path: string; time: number }[]
   atualizadoEm?: string
   erroAtualizacao?: boolean
 }
@@ -58,6 +60,11 @@ function validarQuadroRadar(dados: Partial<QuadroRadar> | null | undefined): Qua
       host: host.origin,
       path: dados.path!,
       frameTime,
+      quadros: Array.isArray(dados.quadros)
+        ? dados.quadros
+          .map(quadro => ({ path: String(quadro.path || ''), time: Number(quadro.frameTime) }))
+          .filter(quadro => CAMINHO_RADAR_VALIDO.test(quadro.path) && Number.isFinite(quadro.time) && quadro.time > 0)
+        : [],
       atualizadoEm: dados.atualizadoEm,
       erroAtualizacao: dados.erroAtualizacao === true,
     }
@@ -219,10 +226,6 @@ export default function RadarWeatherLayers({
     }
   }, [mostrarNuvens, onErro])
 
-  const urlChuva = quadro
-    ? `${quadro.host}${quadro.path}/256/{z}/{x}/{y}/2/1_1.png`
-    : ''
-
   return (
     <>
       {renderizarBase && (satelite ? (
@@ -259,13 +262,12 @@ export default function RadarWeatherLayers({
       )}
       {mostrarChuva && quadro && (
         <Pane name="radar-risk-rain-observed" style={{ zIndex: 345 }}>
-          <TileLayer
-            key={`rainviewer-${quadro.frameTime}`}
-            url={urlChuva}
-            opacity={0.7}
-            maxNativeZoom={7}
+          <RadarChuvaAnimado
+            host={quadro.host}
+            quadros={quadro.quadros || []}
+            quadroReserva={{ time: quadro.frameTime, path: quadro.path }}
+            opacity={0.72}
             maxZoom={18}
-            attribution="Weather data by RainViewer"
           />
         </Pane>
       )}

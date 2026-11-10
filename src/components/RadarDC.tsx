@@ -870,7 +870,16 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
           <button type="button" className={camadaBase === 'mapa' ? 'ativo' : ''} onClick={() => setCamadaBase('mapa')}>Mapa</button>
           <button type="button" className={camadaBase === 'satelite' ? 'ativo' : ''} onClick={() => setCamadaBase('satelite')}>Satélite</button>
         </div>
-        <button type="button" className={`radar-live-map-layer-button ${mostrarChuva ? 'ativo chuva' : ''}`} onClick={() => setMostrarChuva(prev => !prev)} aria-pressed={mostrarChuva}>
+        <button
+          type="button"
+          className={`radar-live-map-layer-button ${mostrarChuva ? 'ativo chuva' : ''}`}
+          onClick={() => {
+            const proximoEstado = !mostrarChuva
+            setMostrarChuva(proximoEstado)
+            setMostrarNuvens(proximoEstado)
+          }}
+          aria-pressed={mostrarChuva}
+        >
           🌧️ Chuva {mostrarChuva ? 'ativa' : 'desativada'}
         </button>
         <button type="button" className={`radar-live-map-layer-button ${mostrarTemperatura ? 'ativo temperatura' : ''}`} onClick={() => setMostrarTemperatura(prev => !prev)} aria-pressed={mostrarTemperatura}>
