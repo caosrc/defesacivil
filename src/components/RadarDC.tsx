@@ -35,7 +35,6 @@ import ModalSenha from './ModalSenha'
 import AreasRiscoMapa from './AreasRiscoMapa'
 import RadarChuvaAnimado, { type QuadroRadarChuva } from './RadarChuvaAnimado'
 import NuvensGoesLayer from './NuvensGoesLayer'
-import PrecipitacaoAtivaLayer from './PrecipitacaoAtivaLayer'
 import type { RiskArea as AreaRiscoPersistida } from './RadarMapaRisco'
 
 type Prioridade = 'normal' | 'importante' | 'urgente'
@@ -908,7 +907,6 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
       </div>
       <div className="radar-live-map-status">
         <span><i className="radar-live-map-status-dot radar-live-map-status-dot-rain" /> Chuva observada</span>
-        {mostrarChuva && <span><i className="radar-live-map-status-dot radar-live-map-status-dot-estimated-rain" /> Células de chuva estimada · Open-Meteo</span>}
         <span><i className="radar-live-map-status-dot radar-live-map-status-dot-station" /> CEMADEN · Ouro Branco</span>
         {zoomMapa >= 9 && <span><i className="radar-live-map-status-dot radar-live-map-status-dot-temperature" /> Temperatura local</span>}
         {zoomMapa >= 9 && <span><i className="radar-live-map-status-dot radar-live-map-status-dot-lightning" /> Trovoadas previstas localmente · 36 h</span>}
@@ -983,12 +981,6 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
             />
           </Pane>
         )}
-        <PrecipitacaoAtivaLayer
-          ativo={mostrarChuva}
-          nomePane="radarLiveRainGrid"
-          zIndex={435}
-          onErro={setRadarErro}
-        />
         {mostrarChuva && (
           <Pane name="radarLiveCemadenStations" style={{ zIndex: 450 }}>
             {estacoesOuroBrancoGeorreferenciadas.map(estacao => {

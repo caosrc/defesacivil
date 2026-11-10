@@ -1620,7 +1620,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           }}
           aria-pressed={mostrarChuva}
           data-testid="toggle-chuva-mapa"
-          title="Mostrar radar RainViewer e grade estimada de precipitação Open-Meteo"
+          title="Mostrar precipitação observada pelo radar RainViewer"
         >
           🌧️ Chuva
         </button>
