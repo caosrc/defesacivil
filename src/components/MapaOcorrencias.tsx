@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker, Tooltip } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Ocorrencia } from '../types'
@@ -506,7 +506,6 @@ type StatusWs = 'desconectado' | 'conectando' | 'conectado'
 type CamadaMapa = 'padrao' | 'satelite'
 type CamadaMonitoramentoId = string | null
 
-
 function nomeDiaSemana(dateStr: string): string {
   const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const d = new Date(dateStr + 'T12:00:00')
@@ -518,67 +517,12 @@ const OURO_BRANCO: [number, number] = [-20.5195, -43.6983]
 const MAX_TRILHA = 300
 const ignorarAtualizacaoRadar = () => {}
 
-type TempoAtualMapa = {
-  atual?: {
-    temperatura?: number | null
-  } | null
-}
-
-function TemperaturaMapaMarker({ ativo }: { ativo: boolean }) {
-  const [tempo, setTempo] = useState<TempoAtualMapa | null>(null)
-
-  useEffect(() => {
-    if (!ativo) return
-    let cancelado = false
-
-    const carregar = async () => {
-      try {
-        const resposta = await fetch('/api/tempo', { cache: 'no-store' })
-        const dados = await resposta.json() as TempoAtualMapa & { erro?: string }
-        if (!resposta.ok || !dados.atual) {
-          throw new Error(dados.erro || 'Temperatura indisponível.')
-        }
-        const temperatura = dados.atual.temperatura
-        if (typeof temperatura === 'number' && Number.isFinite(temperatura) && !cancelado) {
-          setTempo(dados)
-        }
-      } catch (error) {
-        if (!cancelado) console.error('Não foi possível carregar a temperatura de Ouro Branco:', error)
-      }
-    }
-
-    void carregar()
-    const intervalo = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void carregar()
-    }, 10 * 60 * 1000)
-    return () => {
-      cancelado = true
-      window.clearInterval(intervalo)
-    }
-  }, [ativo])
-
-  const temperatura = tempo?.atual?.temperatura
-  if (!ativo || typeof temperatura !== 'number' || !Number.isFinite(temperatura)) return null
-
-  return (
-    <CircleMarker
-      center={OURO_BRANCO}
-      radius={8}
-      pathOptions={{ color: '#fff', weight: 2, fillColor: '#0284c7', fillOpacity: 1 }}
-    >
-      <Tooltip permanent direction="bottom" offset={[0, 9]} opacity={1} className="mapa-temperatura-tooltip">
-        {`🌡️ ${Math.round(temperatura)}°`}
-      </Tooltip>
-    </CircleMarker>
-  )
-}
-
 // ── Componente principal ────────────────────────────────────────
 export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExterno, onDestinoExternoConsumido, equipamentosCampo = [], onVerDetalheCampo }: Props) {
   const [selecionada, setSelecionada] = useState<Ocorrencia | null>(null)
   const [legendaAberta, setLegendaAberta] = useState(false)
   const [camadaMapa, setCamadaMapa] = useState<CamadaMapa>('padrao')
-  const [mostrarChuva, setMostrarChuva] = useState(true)
+  const [mostrarChuva, setMostrarChuva] = useState(false)
   const [mostrarNuvens, setMostrarNuvens] = useState(false)
   const [erroCamadasClima, setErroCamadasClima] = useState('')
   const [camadaMonitoramento, setCamadaMonitoramento] = useState<CamadaMonitoramentoId>(null)
@@ -1304,7 +1248,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         // O mapa pode ser arrastado livremente para consultar outras regiões.
         dragging={true}
         style={{ width: '100%', height: '100%' }}
-        zoomControl={false}
+        zoomControl={true}
         whenReady={() => {}}
       >
         {camadaMapa === 'padrao' ? (
@@ -1338,7 +1282,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           onErro={receberErroCamadasClima}
           onAtualizado={ignorarAtualizacaoRadar}
         />
-        <TemperaturaMapaMarker ativo={mostrarChuva} />
         {camadaMonitoramento && camadasMonitoramento.find(c => c.id === camadaMonitoramento)?.url && (
           <TileLayer
             key={`earth-engine-${camadaMonitoramento}`}

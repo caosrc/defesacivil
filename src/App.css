@@ -896,19 +896,6 @@ input, select, textarea { font-family: inherit; }
   font-size: 0.68rem;
 }
 
-.leaflet-tooltip.mapa-temperatura-tooltip {
-  border: 0 !important;
-  padding: 0 !important;
-  color: #0369a1 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  font-size: .78rem;
-  font-weight: 900;
-  line-height: 1.1;
-  text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff;
-  white-space: nowrap;
-}
-.leaflet-tooltip.mapa-temperatura-tooltip::before { display: none; }
 .mapa-chuva-erro {
   position: absolute;
   right: 12px;
