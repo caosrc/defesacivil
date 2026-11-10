@@ -26,8 +26,8 @@ Para reproduzir a evolução das áreas de chuva, usar a sequência `radar.past`
 **Why:** O endpoint local envia `frameTime`, enquanto componentes de tile podem esperar `time`; uma lista não vazia com nomes diferentes elimina todos os quadros válidos e impede até o fallback.
 
 ## Nuvens GOES e controle da precipitação
-Mantenha GOES e RainViewer como camadas independentes: “Nuvens GOES” mostra apenas nuvens de satélite; “Chuva” mostra os ecos de precipitação observada. No Radar DC, RainViewer começa ativo e GOES desligado; na aba Mapa, ambos começam desligados.
+Mantenha GOES e chuva como camadas independentes: “Nuvens GOES” mostra apenas nuvens de satélite; “Chuva” combina os ecos observados do RainViewer com células de precipitação estimada do Open-Meteo. Radar DC e a aba Mapa começam com Chuva ativa e GOES desligado.
 
-**Why:** O usuário pediu controles separados para distinguir nuvens observadas por satélite da precipitação real do radar.
+**Why:** O RainViewer pode não ter pixels sobre municípios pequenos; o usuário pediu que a chuva ativa apareça nos dois mapas sem confundir nuvens de satélite com precipitação. O Open-Meteo complementa, mas não substitui, o radar observado.
 
-**How to apply:** Preserve os estados iniciais distintos entre as telas, use `/api/goes-nuvens` como reserva se os tiles NOAA falharem, atribua NOAA e RainViewer e não trate a imagem GOES como medição de precipitação.
+**How to apply:** Desenhe apenas células da grade com precipitação positiva e identifique-as como estimativa; use `/api/goes-nuvens` como reserva se os tiles NOAA falharem, atribua NOAA e RainViewer e nunca trate a imagem GOES como medição de precipitação.

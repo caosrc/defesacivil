@@ -3,6 +3,7 @@ import { Pane, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import RadarChuvaAnimado from '../RadarChuvaAnimado'
 import NuvensGoesLayer from '../NuvensGoesLayer'
+import PrecipitacaoAtivaLayer from '../PrecipitacaoAtivaLayer'
 
 export type QuadroRadar = {
   host: string
@@ -221,6 +222,12 @@ export default function RadarWeatherLayers({
         zIndex={330}
         opacidade={0.72}
         maxZoom={19}
+        onErro={onErro}
+      />
+      <PrecipitacaoAtivaLayer
+        ativo={mostrarChuva}
+        nomePane="radar-risk-rain-grid"
+        zIndex={350}
         onErro={onErro}
       />
       {mostrarChuva && quadro && (

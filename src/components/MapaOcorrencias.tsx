@@ -578,7 +578,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [selecionada, setSelecionada] = useState<Ocorrencia | null>(null)
   const [legendaAberta, setLegendaAberta] = useState(false)
   const [camadaMapa, setCamadaMapa] = useState<CamadaMapa>('padrao')
-  const [mostrarChuva, setMostrarChuva] = useState(false)
+  const [mostrarChuva, setMostrarChuva] = useState(true)
   const [mostrarNuvens, setMostrarNuvens] = useState(false)
   const [erroCamadasClima, setErroCamadasClima] = useState('')
   const [camadaMonitoramento, setCamadaMonitoramento] = useState<CamadaMonitoramentoId>(null)
@@ -1620,7 +1620,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           }}
           aria-pressed={mostrarChuva}
           data-testid="toggle-chuva-mapa"
-          title="Mostrar precipitação observada pelo radar RainViewer"
+          title="Mostrar radar RainViewer e grade estimada de precipitação Open-Meteo"
         >
           🌧️ Chuva
         </button>

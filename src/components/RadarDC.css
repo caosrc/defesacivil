@@ -452,6 +452,7 @@
   border-radius: 50%;
 }
 .radar-live-map-status-dot-rain { background: #5b9cff; }
+.radar-live-map-status-dot-estimated-rain { background: #38bdf8; }
 .radar-live-map-status-dot-station { background: #f97316; }
 .radar-live-map-status-dot-temperature { background: #0ea5e9; }
 .radar-live-map-status-dot-lightning { background: #a78bfa; }
