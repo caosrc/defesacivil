@@ -4429,7 +4429,7 @@ export default function Planejamento() {
       </div>
 
       {subAba === 'radar' ? (
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+        <div className="planejamento-radar-scroll">
            <RadarDC />
         </div>
       ) : subAba === 'emergencia' ? (

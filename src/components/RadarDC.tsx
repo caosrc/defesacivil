@@ -1,20 +1,40 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { CircleMarker, MapContainer, Marker, Pane, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
+import L from 'leaflet'
 import './RadarDC.css'
 import './RadarDCResponsive.css'
+import 'leaflet/dist/leaflet.css'
 import { getAgenteLogado } from './Login'
+import { AGENTES, getSenhaAgente, NATUREZA_COR, NATUREZA_ICONE } from '../types'
 import { wsOn, wsSend } from '../wsClient'
 import { supabase, supabaseDisponivel } from '../supabaseClient'
-import { AGENTES } from '../types'
-import { ehFerramentalPorLitro } from '../ferramentalUtils'
-import RadarMapaRisco, { type RiskArea } from './RadarMapaRisco'
+import { listarOcorrencias } from '../api'
+import type { Ocorrencia } from '../types'
+import type { AreaRisco, AreaRiscoInput, TipoAreaRisco } from '../areasRisco'
 import {
-  atualizarAreaRisco,
-  buscarPrecipitacao24hAreas,
-  criarAreaRisco,
-  excluirAreaRisco,
-  listarAreasRisco,
+  buscarPrecipitacao24hAreas as buscarPrecipitacaoAreasPersistidas,
+  criarAreaRisco as criarAreaRiscoPersistida,
+  atualizarAreaRisco as atualizarAreaRiscoPersistida,
+  excluirAreaRisco as excluirAreaRiscoPersistida,
+  listarAreasRisco as listarAreasRiscoPersistidas,
   type RiskAreaDraft,
 } from '../radarAreasRiscoApi'
+import { ehFerramentalPorLitro } from '../ferramentalUtils'
+import { GraficoNivel, type EstacaoCNL, type LeituraCNL, type PontoNivel, type PontoSerie } from './MonitoramentoCNL'
+import { ChuvaCentro24h, type EstacaoChuvaCentro } from './ChuvaCentro24h'
+import type { Map as LeafletMap } from 'leaflet'
+import {
+  CapturaEstadoMapa,
+  MINAS_GERAIS_BOUNDS,
+  useEstacoesCemadenMg,
+  type EstacaoCemadenMg,
+} from '../meteorologiaMapa'
+import { statusLeituraCemaden } from '../cemadenLeitura'
+import './MonitoramentoCNL.css'
+import ModalSenha from './ModalSenha'
+import AreasRiscoMapa from './AreasRiscoMapa'
+import RadarChuvaAnimado, { type QuadroRadarChuva } from './RadarChuvaAnimado'
+import type { RiskArea as AreaRiscoPersistida } from './RadarMapaRisco'
 
 type Prioridade = 'normal' | 'importante' | 'urgente'
 type ConfirmacaoRadar = { agente: string; confirmado: boolean; confirmedAt?: string }
@@ -36,7 +56,7 @@ type AtividadeFerramenta = {
 }
 type FerramentaCatalogo = { id: string; nome: string; quantidade: number }
 type ResumoFerramental = {
-  agentes: string[]; tiposVerificados: number; totalTipos: number
+  agente: string; tiposVerificados: number; totalTipos: number
   itensConferidos: number; itensCadastrados: number
   boa: number; media: number; ruim: number
   ferramentasRuins: string[]; faltantes: string[]; semChecklist: string[]; serragemAlertas: string[]; litrosAlertas: string[]
@@ -45,8 +65,188 @@ type ResumoFerramental = {
 type DiaPrevisao = { data: string; codigo: number; temperaturaMax: number; temperaturaMin: number; precipitacao: number; probabilidade: number; umidade: number; vento: number; rajada: number }
 type HoraPrevisao = { time: string; codigo: number; temperatura: number; probabilidade: number; precipitacao: number; vento: number }
 type TempoDC = { atual: { codigo: number; temperatura: number; chuva: number; vento: number; rajada: number; umidade: number }; horas: HoraPrevisao[]; dias: DiaPrevisao[] }
+type EstadoVisualTempo = 'normal' | 'quente' | 'frio' | 'chuva' | 'trovoada' | 'seco' | 'baixa-umidade'
+type CenaClima = 'nublado' | 'chuva-fraca' | 'ensolarado' | 'chuva-forte' | 'nuvem-e-sol' | 'raios' | 'frio' | 'chuva-frio'
+type DadosRadarCNL = {
+  estacao: LeituraCNL
+  estacoes: RadarEstacaoCNL[]
+  serie: PontoSerie[]
+  serieChuvaCentro?: PontoSerie[]
+  estacaoChuvaCentro?: EstacaoChuvaCentro | null
+  serieNivel: PontoNivel[]
+}
+type RadarEstacaoCNL = EstacaoCNL & {
+  latitude: number | null
+  longitude: number | null
+}
+
+type DadosRadarChuvaLive = {
+  host: string
+  path: string
+  tileUrl?: string
+  frameTime: number
+  atualizadoEm: string
+  quadros?: QuadroRadarChuva[]
+  quantidadeQuadrosDisponiveis?: number
+  erroAtualizacao?: boolean
+}
+
+type TempoMapaRadar = {
+  atual?: {
+    time?: string
+    temperatura?: number | null
+    umidade?: number | null
+    vento?: number | null
+    rajada?: number | null
+    codigoTempo?: number | null
+  } | null
+  fonte?: string
+}
+
+type PontoTrovoadaRadar = {
+  id: string
+  nome: string
+  latitude: number
+  longitude: number
+  primeiraTrovoada: string
+  modelosComTrovoada: number
+  intensidade: string
+  probabilidadeChuva: number
+  precipitacao: number
+  risco: string
+}
+
+type PrevisaoTrovoadaRadar = {
+  pontos?: PontoTrovoadaRadar[]
+  atualizadoEm?: string
+}
+
+const TIPO_AREA_PERSISTIDA_PARA_RADAR: Record<AreaRiscoPersistida['tipo'], TipoAreaRisco> = {
+  encosta: 'Encostas',
+  enchente: 'Enchentes',
+  drenagem: 'Drenagem',
+  alagamento: 'Alagamentos',
+  deslizamento: 'Deslizamentos',
+  via: 'Problemas de vias',
+  obra: 'Obras',
+  inundacao: 'Inundações',
+  incendio: 'Incêndios',
+  outro: 'Outros',
+}
+const TIPO_AREA_RADAR_PARA_PERSISTIDA: Record<TipoAreaRisco, AreaRiscoPersistida['tipo']> = {
+  Encostas: 'encosta',
+  Enchentes: 'enchente',
+  Drenagem: 'drenagem',
+  Alagamentos: 'alagamento',
+  Deslizamentos: 'deslizamento',
+  'Problemas de vias': 'via',
+  Obras: 'obra',
+  Inundações: 'inundacao',
+  'Incêndios': 'incendio',
+  Outros: 'outro',
+}
+const ICONE_AREA_PERSISTIDA: Record<AreaRiscoPersistida['tipo'], AreaRiscoPersistida['icone']> = {
+  encosta: 'landslide',
+  enchente: 'water',
+  drenagem: 'water',
+  alagamento: 'water',
+  deslizamento: 'landslide',
+  via: 'other',
+  obra: 'other',
+  inundacao: 'water',
+  incendio: 'fire',
+  outro: 'other',
+}
+
+function areaPersistidaParaRadar(area: AreaRiscoPersistida): AreaRisco {
+  const pontoMedio = area.poligono.reduce(
+    (total, ponto) => ({ latitude: total.latitude + ponto.lat, longitude: total.longitude + ponto.lng }),
+    { latitude: 0, longitude: 0 },
+  )
+  const divisor = Math.max(1, area.poligono.length)
+  return {
+    id: area.id,
+    tipo: TIPO_AREA_PERSISTIDA_PARA_RADAR[area.tipo],
+    latitude: pontoMedio.latitude / divisor,
+    longitude: pontoMedio.longitude / divisor,
+    poligono: area.poligono.map(ponto => [ponto.lat, ponto.lng]),
+    data_inicio: area.inicioRisco?.slice(0, 10) || dataLocalISO(),
+    limite_precipitacao_mm: area.limiteMm,
+    referencia: area.referenciaLocal || area.nome,
+    observacao: area.observacoes || null,
+    criado_por: '',
+    created_at: '',
+    ocorrencia_id: null,
+  }
+}
+
+function areaRadarParaPersistida(input: AreaRiscoInput, existente?: AreaRiscoPersistida): RiskAreaDraft {
+  const tipo = TIPO_AREA_RADAR_PARA_PERSISTIDA[input.tipo]
+  return {
+    nome: input.referencia?.trim() || existente?.nome || input.tipo,
+    tipo,
+    icone: existente?.icone || ICONE_AREA_PERSISTIDA[tipo],
+    poligono: input.poligono.map(([lat, lng]) => ({ lat, lng })),
+    limiteMm: input.limite_precipitacao_mm,
+    ativo: existente?.ativo ?? true,
+  }
+}
+
+function mensagemErroAreaRisco(erro: unknown, fallback: string): string {
+  return erro instanceof Error && erro.message ? erro.message : fallback
+}
+
+function naturezaEhInterdicao(natureza: string | null | undefined) {
+  return /interdi[cç][aã]o/i.test(natureza || '')
+}
+
+function agentePodeGerenciarCriacao(criador: string | null | undefined, agente: string | null | undefined) {
+  const normalizar = (nome: string | null | undefined) =>
+    String(nome || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const nomeCriador = normalizar(criador)
+  const nomeAgente = normalizar(agente)
+  return nomeCriador === nomeAgente || (nomeAgente === 'arthur' && nomeCriador === 'j')
+}
 
 const OURO_BRANCO = { latitude: -20.5236, longitude: -43.6949 }
+const RADAR_MAP_CENTER: [number, number] = [OURO_BRANCO.latitude, OURO_BRANCO.longitude]
+const RADAR_MAP_ZOOM = 12
+const ESTACOES_CEMADEN_VAZIAS_RADAR: EstacaoCemadenMg[] = []
+const ALERTA_SONORO_AREAS_RISCO_STORAGE_KEY = 'radar-dc-alerta-sonoro-areas-risco-v1'
+const ICONES_OCORRENCIA_RADAR = new Map<string, L.DivIcon>()
+
+function lerAlertaSonoroAreasRiscoAtivo(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(ALERTA_SONORO_AREAS_RISCO_STORAGE_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+function iconeOcorrenciaRadar(natureza: string): L.DivIcon {
+  const existente = ICONES_OCORRENCIA_RADAR.get(natureza)
+  if (existente) return existente
+
+  const emoji = NATUREZA_ICONE[natureza] || '📋'
+  const cor = NATUREZA_COR[natureza] || '#1a4b8c'
+  const icone = L.divIcon({
+    className: '',
+    html: `<div style="background:${cor};width:38px;height:38px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center"><span style="transform:rotate(45deg);font-size:18px;line-height:1">${emoji}</span></div>`,
+    iconSize: [38, 38],
+    iconAnchor: [19, 38],
+    popupAnchor: [0, -40],
+  })
+  ICONES_OCORRENCIA_RADAR.set(natureza, icone)
+  return icone
+}
+
+// Serviço público NOAA/NNVL com imagens infravermelhas diárias do GOES.
+// A variável de ambiente continua disponível para trocar a fonte sem alterar o código.
+const GOES_CLOUD_TILE_URL = String(
+  import.meta.env.VITE_GOES_CLOUD_TILES_URL
+    || 'https://gis.nnvl.noaa.gov/arcgis/rest/services/GOES/GOES_current/ImageServer/tile/{z}/{y}/{x}',
+).trim()
 const nomesTempo: Record<number, string> = { 0: 'Céu limpo', 1: 'Predominantemente limpo', 2: 'Parcialmente nublado', 3: 'Nublado', 45: 'Neblina', 48: 'Neblina com gelo', 51: 'Garoa leve', 53: 'Garoa moderada', 55: 'Garoa intensa', 61: 'Chuva leve', 63: 'Chuva moderada', 65: 'Chuva forte', 71: 'Neve leve', 73: 'Neve moderada', 75: 'Neve forte', 80: 'Pancadas leves', 81: 'Pancadas moderadas', 82: 'Pancadas fortes', 95: 'Trovoada', 96: 'Trovoada com granizo', 99: 'Trovoada forte' }
 function horarioNoturno(time?: string) {
   const hora = Number(time?.slice(11, 13))
@@ -61,9 +261,63 @@ function iconeTempo(codigo: number, time?: string) {
   if (codigo >= 2) return noturno ? '☁️' : '⛅'
   return noturno ? '🌙' : '☀️'
 }
+function estadosVisuaisTempo(tempo: TempoDC): EstadoVisualTempo[] {
+  const atual = tempo.atual
+  const hoje = tempo.dias[0]
+  const proximasHoras = tempo.horas.slice(0, 6)
+  const maiorProbabilidade = Math.max(
+    hoje?.probabilidade || 0,
+    ...proximasHoras.map(hora => hora.probabilidade || 0),
+  )
+  const haTrovoada = atual.codigo >= 95 || proximasHoras.some(hora => hora.codigo >= 95)
+  const haChuva = atual.codigo >= 51 || atual.chuva > 0.1 || maiorProbabilidade >= 60
+  const estaQuente = atual.temperatura >= 30 || (hoje && atual.temperatura - hoje.temperaturaMin >= 8)
+  const estaFrio = atual.temperatura <= 17 || (hoje && hoje.temperaturaMax - atual.temperatura >= 8)
+  const estaSeco = !haChuva && atual.temperatura >= 28 && atual.umidade <= 45
+  const umidadeBaixa = atual.umidade <= 45
+  const estados: EstadoVisualTempo[] = []
+  if (haTrovoada) estados.push('trovoada')
+  else if (haChuva) estados.push('chuva')
+  if (estaQuente) estados.push('quente')
+  if (estaFrio) estados.push('frio')
+  if (estaSeco) estados.push('seco')
+  if (umidadeBaixa) estados.push('baixa-umidade')
+  return estados.length > 0 ? estados : ['normal']
+}
+function cenaClimaTempo(tempo: TempoDC): { tipo: CenaClima; caminho: string; nome: string } {
+  const codigo = tempo.atual.codigo
+  const estaChovendo = [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 80, 81, 82].includes(codigo)
+    || tempo.atual.chuva > 0.1
+  // A cena grande do cartão acompanha a condição atual, não apenas a
+  // previsão do dia. Os códigos seguem a classificação WMO usada pelo
+  // Open-Meteo.
+  if ([95, 96, 99].includes(codigo)) {
+    return { tipo: 'raios', caminho: '/weather-scenes/raios.jpg', nome: 'COM RAIOS' }
+  }
+  if (estaChovendo && tempo.atual.temperatura <= 17) {
+    return { tipo: 'chuva-frio', caminho: '/weather-scenes/chuva-frio.jpg', nome: 'CHUVA E FRIO' }
+  }
+  if ([65, 67, 75, 82].includes(codigo) || tempo.atual.chuva >= 4) {
+    return { tipo: 'chuva-forte', caminho: '/weather-scenes/chuva-forte.jpg', nome: 'CHUVA FORTE' }
+  }
+  if (tempo.atual.temperatura <= 17) {
+    return { tipo: 'frio', caminho: '/weather-scenes/frio.jpg', nome: 'FRIO' }
+  }
+  if (estaChovendo) {
+    return { tipo: 'chuva-fraca', caminho: '/weather-scenes/chuva-fraca.jpg', nome: 'CHUVA FRACA' }
+  }
+  if ([3, 45, 48].includes(codigo)) {
+    return { tipo: 'nublado', caminho: '/weather-scenes/nublado.jpg', nome: 'NUBLADO' }
+  }
+  if ([1, 2].includes(codigo)) {
+    return { tipo: 'nuvem-e-sol', caminho: '/weather-scenes/nuvem-e-sol.jpg', nome: 'COM NUVEM E SOL' }
+  }
+  return { tipo: 'ensolarado', caminho: '/weather-scenes/ensolarado.jpg', nome: 'ENSOLARADO' }
+}
 function dataTempo(data: string) { return new Date(data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) }
 
 const STORAGE_KEY = 'defesacivil-radar-dc-v2'
+const RADAR_TICKER_SPEED = 1.5
 const prioridadeConfig: Record<Prioridade, { label: string; emoji: string }> = {
   normal: { label: 'Normal', emoji: '🟢' },
   importante: { label: 'Importante', emoji: '🟠' },
@@ -96,6 +350,800 @@ function percentual(valor: number, total: number) {
   return total > 0 ? Math.round((valor / total) * 100) : 0
 }
 
+function formatarMmRadar(valor: number | null | undefined) {
+  return valor == null || !Number.isFinite(valor)
+    ? '—'
+    : `${valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} mm`
+}
+
+function formatarMmMapaRadar(valor: number | null | undefined) {
+  return valor == null || !Number.isFinite(valor)
+    ? 'Sem leitura'
+    : `${valor.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mm`
+}
+
+function templateTilesHttpsValido(url: string) {
+  return /^https:\/\//i.test(url) && ['{z}', '{x}', '{y}'].every(token => url.includes(token))
+}
+
+function intensidadeCemadenRadar(valor: number | null | undefined) {
+  if (valor == null || !Number.isFinite(valor) || valor <= 0) return { cor: '#38bdf8', alpha: 0 }
+  if (valor <= 2) return { cor: '#38bdf8', alpha: 0.48 }
+  if (valor <= 10) return { cor: '#22c55e', alpha: 0.5 }
+  if (valor <= 30) return { cor: '#facc15', alpha: 0.52 }
+  if (valor <= 50) return { cor: '#f97316', alpha: 0.56 }
+  if (valor <= 80) return { cor: '#ef4444', alpha: 0.6 }
+  return { cor: '#a855f7', alpha: 0.64 }
+}
+
+function dataHoraRadar(valor?: string | null) {
+  if (!valor) return 'Sem leitura'
+  const brasileiro = valor.match(/^(\d{2})\/(\d{2})\/(\d{2,4})\s+(\d{2}):(\d{2})/)
+  if (brasileiro) {
+    const ano = brasileiro[3].length === 2 ? `20${brasileiro[3]}` : brasileiro[3]
+    return `${brasileiro[1]}/${brasileiro[2]}/${ano} ${brasileiro[4]}:${brasileiro[5]}`
+  }
+  return valor
+}
+
+function dataHoraTrovoadaRadar(valor?: string | null) {
+  if (!valor) return '—'
+  const data = new Date(valor)
+  return Number.isNaN(data.getTime())
+    ? valor
+    : data.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+let contextoAudioAlertaRadar: AudioContext | null = null
+
+function prepararAudioAlertaRadar(): AudioContext | null {
+  if (typeof window === 'undefined' || typeof window.AudioContext === 'undefined') return null
+  try {
+    if (!contextoAudioAlertaRadar || contextoAudioAlertaRadar.state === 'closed') {
+      contextoAudioAlertaRadar = new window.AudioContext()
+    }
+    if (contextoAudioAlertaRadar.state === 'suspended') {
+      void contextoAudioAlertaRadar.resume().catch(erro => {
+        console.warn('[Radar DC] O navegador bloqueou a preparação do sinal sonoro.', erro)
+      })
+    }
+    return contextoAudioAlertaRadar
+  } catch (erro) {
+    console.warn('[Radar DC] Não foi possível preparar o sinal sonoro.', erro)
+    return null
+  }
+}
+
+function emitirSinalSonoroAlertaRadar() {
+  const contexto = contextoAudioAlertaRadar
+  if (!contexto || contexto.state === 'closed') return
+
+  void contexto.resume().then(() => {
+    if (contexto.state !== 'running') return
+    const notas = [1040, 760, 1040]
+    notas.forEach((frequencia, indice) => {
+      const inicio = contexto.currentTime + 0.04 + indice * 0.5
+      const oscilador = contexto.createOscillator()
+      const volume = contexto.createGain()
+      oscilador.type = 'triangle'
+      oscilador.frequency.setValueAtTime(frequencia, inicio)
+      volume.gain.setValueAtTime(0.0001, inicio)
+      volume.gain.exponentialRampToValueAtTime(0.42, inicio + 0.025)
+      volume.gain.exponentialRampToValueAtTime(0.0001, inicio + 0.38)
+      oscilador.connect(volume)
+      volume.connect(contexto.destination)
+      oscilador.onended = () => {
+        oscilador.disconnect()
+        volume.disconnect()
+      }
+      oscilador.start(inicio)
+      oscilador.stop(inicio + 0.4)
+    })
+  }).catch(erro => {
+    console.warn('[Radar DC] O navegador não permitiu emitir o sinal sonoro.', erro)
+  })
+}
+
+function RadarMapInvalidateSize({ tv }: { tv: boolean }) {
+  const map = useMap()
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      map.invalidateSize()
+      map.setView(RADAR_MAP_CENTER, tv ? RADAR_MAP_ZOOM + 1 : RADAR_MAP_ZOOM, { animate: false })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [map, tv])
+  return null
+}
+
+function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrencias: string }) {
+  const [camadaBase, setCamadaBase] = useState<'mapa' | 'satelite'>('mapa')
+  const [radarChuva, setRadarChuva] = useState<DadosRadarChuvaLive | null>(null)
+  const [tempoMapa, setTempoMapa] = useState<TempoMapaRadar | null>(null)
+  const [previsaoTrovoadas, setPrevisaoTrovoadas] = useState<PrevisaoTrovoadaRadar | null>(null)
+  const [radarErro, setRadarErro] = useState('')
+  const [tempoMapaErro, setTempoMapaErro] = useState('')
+  const [trovoadasErro, setTrovoadasErro] = useState('')
+  const [radarCarregando, setRadarCarregando] = useState(false)
+  const [mostrarChuva, setMostrarChuva] = useState(true)
+  const [mostrarTemperatura, setMostrarTemperatura] = useState(true)
+  const [mostrarTrovoadas, setMostrarTrovoadas] = useState(true)
+  const [mostrarNuvens, setMostrarNuvens] = useState(false)
+  const [zoomMapa, setZoomMapa] = useState(RADAR_MAP_ZOOM)
+  const [painelAreasRiscoHost, setPainelAreasRiscoHost] = useState<HTMLDivElement | null>(null)
+  const mapaLeafletRef = useRef<LeafletMap | null>(null)
+  const [ocorrenciasDoDia, setOcorrenciasDoDia] = useState<Ocorrencia[]>([])
+  const [areasRisco, setAreasRisco] = useState<AreaRisco[]>([])
+  const [areasRiscoPersistidas, setAreasRiscoPersistidas] = useState<AreaRiscoPersistida[]>([])
+  const [areasRiscoCarregando, setAreasRiscoCarregando] = useState(true)
+  const [areasRiscoSalvando, setAreasRiscoSalvando] = useState(false)
+  const [areasRiscoErro, setAreasRiscoErro] = useState<string | null>(null)
+  const [previsaoAreasRisco, setPrevisaoAreasRisco] = useState<Record<string, number | null>>({})
+  const [previsaoAreasRiscoErro, setPrevisaoAreasRiscoErro] = useState<string | null>(null)
+  const [alertaSonoroAtivo, setAlertaSonoroAtivo] = useState(lerAlertaSonoroAreasRiscoAtivo)
+  const alertaSonoroAtivoRef = useRef(alertaSonoroAtivo)
+  const idsAreasEmAlerta = useMemo(
+    () => areasRisco
+      .filter(area => {
+        const previsto = previsaoAreasRisco[area.id]
+        return previsto != null && Number.isFinite(previsto) && previsto > area.limite_precipitacao_mm
+      })
+      .map(area => area.id)
+      .sort(),
+    [areasRisco, previsaoAreasRisco],
+  )
+  const alternarAlertaSonoro = useCallback(() => {
+    const ativado = !alertaSonoroAtivoRef.current
+    alertaSonoroAtivoRef.current = ativado
+    if (ativado) prepararAudioAlertaRadar()
+    setAlertaSonoroAtivo(ativado)
+    try {
+      window.localStorage.setItem(ALERTA_SONORO_AREAS_RISCO_STORAGE_KEY, String(ativado))
+    } catch {
+      // A configuração continua ativa nesta visita se o armazenamento estiver bloqueado.
+    }
+  }, [])
+  const agenteLogado = getAgenteLogado()
+  const cemadenMg = useEstacoesCemadenMg(true)
+  const estacoes = cemadenMg.dados?.estacoes ?? ESTACOES_CEMADEN_VAZIAS_RADAR
+  const estacoesOuroBranco = useMemo(
+    () => estacoes.filter(estacao => /ouro\s+branco/i.test(estacao.municipio)),
+    [estacoes],
+  )
+  const estacoesOuroBrancoGeorreferenciadas = useMemo(
+    () => estacoesOuroBranco.filter(estacao =>
+      Number.isFinite(estacao.latitude) && Number.isFinite(estacao.longitude),
+    ),
+    [estacoesOuroBranco],
+  )
+  const estacoesOuroBrancoSemCoordenadas = estacoesOuroBranco.length - estacoesOuroBrancoGeorreferenciadas.length
+  const ocorrenciasComGps = useMemo(
+    () => ocorrenciasDoDia.filter(ocorrencia =>
+      !naturezaEhInterdicao(ocorrencia.natureza) &&
+      ocorrencia.lat != null &&
+      ocorrencia.lng != null &&
+      Number.isFinite(Number(ocorrencia.lat)) &&
+      Number.isFinite(Number(ocorrencia.lng)),
+    ),
+    [ocorrenciasDoDia],
+  )
+
+  useEffect(() => {
+    if (!alertaSonoroAtivo || idsAreasEmAlerta.length === 0) return
+    emitirSinalSonoroAlertaRadar()
+    const timer = window.setInterval(emitirSinalSonoroAlertaRadar, 15_000)
+    return () => window.clearInterval(timer)
+  }, [alertaSonoroAtivo, idsAreasEmAlerta])
+
+  useEffect(() => {
+    if (!alertaSonoroAtivo || contextoAudioAlertaRadar?.state === 'running') return
+    const prepararAudioNaInteracao = () => { prepararAudioAlertaRadar() }
+    window.addEventListener('pointerdown', prepararAudioNaInteracao, { once: true })
+    window.addEventListener('keydown', prepararAudioNaInteracao, { once: true })
+    return () => {
+      window.removeEventListener('pointerdown', prepararAudioNaInteracao)
+      window.removeEventListener('keydown', prepararAudioNaInteracao)
+    }
+  }, [alertaSonoroAtivo])
+
+  const carregarAreasRisco = useCallback(async () => {
+    setAreasRiscoCarregando(true)
+    try {
+      const persistidas = await listarAreasRiscoPersistidas()
+      setAreasRiscoPersistidas(persistidas)
+      setAreasRisco(persistidas.map(areaPersistidaParaRadar))
+      setAreasRiscoErro(null)
+    } catch (error) {
+      setAreasRiscoErro(
+        mensagemErroAreaRisco(error, 'Não foi possível carregar as áreas de risco.'),
+      )
+    } finally {
+      setAreasRiscoCarregando(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const carregamentoInicial = window.setTimeout(() => {
+      void carregarAreasRisco()
+    }, 0)
+    if (!supabaseDisponivel) return () => window.clearTimeout(carregamentoInicial)
+
+    const channel = supabase
+      .channel('radar-areas-risco')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'radar_areas_risco' }, () => {
+        void carregarAreasRisco()
+      })
+      .subscribe()
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void carregarAreasRisco()
+    }, 60 * 1000)
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === 'visible') void carregarAreasRisco()
+    }
+    document.addEventListener('visibilitychange', atualizarAoVoltar)
+    return () => {
+      window.clearTimeout(carregamentoInicial)
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', atualizarAoVoltar)
+      void supabase.removeChannel(channel)
+    }
+  }, [carregarAreasRisco])
+
+  const salvarAreaRisco = useCallback(async (entrada: AreaRiscoInput) => {
+    if (!agenteLogado) throw new Error('Entre com o agente responsável antes de cadastrar uma área.')
+    setAreasRiscoSalvando(true)
+    setAreasRiscoErro(null)
+    try {
+      const area = await criarAreaRiscoPersistida(areaRadarParaPersistida(entrada), agenteLogado)
+      setAreasRiscoPersistidas(prev => [area, ...prev.filter(item => item.id !== area.id)])
+      setAreasRisco(prev => [areaPersistidaParaRadar(area), ...prev.filter(item => item.id !== area.id)])
+    } catch (error) {
+      const mensagem = mensagemErroAreaRisco(error, 'Não foi possível salvar a área.')
+      setAreasRiscoErro(mensagem)
+      throw new Error(mensagem)
+    } finally {
+      setAreasRiscoSalvando(false)
+    }
+  }, [agenteLogado])
+
+  const editarAreaRisco = useCallback(async (id: string, entrada: AreaRiscoInput) => {
+    if (!agenteLogado) throw new Error('Entre com o agente responsável antes de editar uma área.')
+    setAreasRiscoSalvando(true)
+    setAreasRiscoErro(null)
+    try {
+      const existente = areasRiscoPersistidas.find(item => item.id === id)
+      const area = await atualizarAreaRiscoPersistida(
+        id,
+        areaRadarParaPersistida(entrada, existente),
+        agenteLogado,
+      )
+      setAreasRiscoPersistidas(prev => prev.map(item => item.id === id ? area : item))
+      setAreasRisco(prev => prev.map(item => item.id === id ? areaPersistidaParaRadar(area) : item))
+    } catch (error) {
+      const mensagem = mensagemErroAreaRisco(error, 'Não foi possível atualizar a área.')
+      setAreasRiscoErro(mensagem)
+      throw new Error(mensagem)
+    } finally {
+      setAreasRiscoSalvando(false)
+    }
+  }, [agenteLogado, areasRiscoPersistidas])
+
+  const excluirAreaRisco = useCallback(async (id: string) => {
+    setAreasRiscoSalvando(true)
+    setAreasRiscoErro(null)
+    try {
+      await excluirAreaRiscoPersistida(id)
+      setAreasRiscoPersistidas(prev => prev.filter(item => item.id !== id))
+      setAreasRisco(prev => prev.filter(item => item.id !== id))
+      setPrevisaoAreasRisco(prev => {
+        const proxima = { ...prev }
+        delete proxima[id]
+        return proxima
+      })
+    } catch (error) {
+      const mensagem = mensagemErroAreaRisco(error, 'Não foi possível excluir a área.')
+      setAreasRiscoErro(mensagem)
+      throw new Error(mensagem)
+    } finally {
+      setAreasRiscoSalvando(false)
+    }
+  }, [])
+
+  const carregarPrevisaoAreasRisco = useCallback(async () => {
+    if (areasRiscoPersistidas.length === 0) {
+      setPrevisaoAreasRisco({})
+      setPrevisaoAreasRiscoErro(null)
+      return
+    }
+    try {
+      const previsoes = await buscarPrecipitacaoAreasPersistidas(areasRiscoPersistidas)
+      setPrevisaoAreasRisco(previsoes)
+      setPrevisaoAreasRiscoErro(null)
+    } catch (error) {
+      setPrevisaoAreasRiscoErro(error instanceof Error ? error.message : 'Previsão de chuva indisponível.')
+    }
+  }, [areasRiscoPersistidas])
+
+  useEffect(() => {
+    const carregamentoInicial = window.setTimeout(() => {
+      void carregarPrevisaoAreasRisco()
+    }, 0)
+    if (areasRisco.length === 0) return () => window.clearTimeout(carregamentoInicial)
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void carregarPrevisaoAreasRisco()
+    }, 10 * 60 * 1000)
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === 'visible') void carregarPrevisaoAreasRisco()
+    }
+    document.addEventListener('visibilitychange', atualizarAoVoltar)
+    return () => {
+      window.clearTimeout(carregamentoInicial)
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', atualizarAoVoltar)
+    }
+  }, [areasRiscoPersistidas.length, carregarPrevisaoAreasRisco])
+
+  useEffect(() => {
+    let ativo = true
+    setOcorrenciasDoDia([])
+    const carregarOcorrenciasDaDataSelecionada = async () => {
+      try {
+        const dados = await listarOcorrencias()
+        if (ativo) {
+          setOcorrenciasDoDia(dados.filter(ocorrencia =>
+            String(ocorrencia.data_ocorrencia || '').slice(0, 10) === dataOcorrencias,
+          ))
+        }
+      } catch {
+        if (ativo) setOcorrenciasDoDia([])
+      }
+    }
+    const atualizar = () => { void carregarOcorrenciasDaDataSelecionada() }
+
+    atualizar()
+    const pararEscuta = wsOn('ocorrencias_atualizadas', atualizar)
+    const intervalo = window.setInterval(atualizar, 5 * 60 * 1000)
+    return () => {
+      ativo = false
+      pararEscuta()
+      window.clearInterval(intervalo)
+    }
+  }, [dataOcorrencias])
+
+  useEffect(() => {
+    const mapa = mapaLeafletRef.current
+    if (!mapa || ocorrenciasComGps.length === 0) return
+    const pontos = ocorrenciasComGps.map(ocorrencia => [
+      Number(ocorrencia.lat),
+      Number(ocorrencia.lng),
+    ] as [number, number])
+    const foraDoEnquadramento = pontos.some(ponto => !mapa.getBounds().contains(ponto))
+    if (foraDoEnquadramento) {
+      mapa.fitBounds(L.latLngBounds(pontos), {
+        padding: [36, 36],
+        maxZoom: RADAR_MAP_ZOOM,
+        animate: true,
+      })
+    }
+  }, [dataOcorrencias, ocorrenciasComGps])
+
+  const carregarRadarChuva = useCallback(async () => {
+    setRadarCarregando(true)
+    try {
+      const resposta = await fetch('/api/radar-chuva', { cache: 'no-store' })
+      const corpo = await resposta.json().catch(() => ({}))
+      if (!resposta.ok || typeof corpo?.host !== 'string' || typeof corpo?.path !== 'string') {
+        throw new Error('Radar indisponível')
+      }
+      setRadarChuva({
+        host: corpo.host,
+        path: corpo.path,
+        tileUrl: typeof corpo.tileUrl === 'string' ? corpo.tileUrl : undefined,
+        frameTime: Number(corpo.frameTime),
+        atualizadoEm: typeof corpo.atualizadoEm === 'string' ? corpo.atualizadoEm : '',
+        quadros: Array.isArray(corpo.quadros) ? corpo.quadros : [],
+        quantidadeQuadrosDisponiveis: Number(corpo.quantidadeQuadrosDisponiveis) || 0,
+        erroAtualizacao: corpo.erroAtualizacao === true,
+      })
+      setRadarErro('')
+    } catch (error) {
+      setRadarErro(error instanceof Error ? error.message : 'Radar indisponível')
+    } finally {
+      setRadarCarregando(false)
+    }
+  }, [])
+
+  const carregarTempoMapa = useCallback(async () => {
+    try {
+      const resposta = await fetch(`/api/tempo?_ts=${Date.now()}`, { cache: 'no-store' })
+      const dados = await resposta.json().catch(() => ({}))
+      if (!resposta.ok || !dados?.atual) throw new Error('Temperatura atual indisponível')
+      setTempoMapa(dados)
+      setTempoMapaErro('')
+    } catch (error) {
+      setTempoMapaErro(error instanceof Error ? error.message : 'Temperatura atual indisponível')
+    }
+  }, [])
+
+  const carregarPrevisaoTrovoadas = useCallback(async () => {
+    try {
+      const pontosConsulta = [
+        { latitude: OURO_BRANCO.latitude, longitude: OURO_BRANCO.longitude },
+        { latitude: OURO_BRANCO.latitude + 0.05, longitude: OURO_BRANCO.longitude + 0.05 },
+        { latitude: OURO_BRANCO.latitude + 0.05, longitude: OURO_BRANCO.longitude - 0.05 },
+        { latitude: OURO_BRANCO.latitude - 0.05, longitude: OURO_BRANCO.longitude + 0.05 },
+        { latitude: OURO_BRANCO.latitude - 0.05, longitude: OURO_BRANCO.longitude - 0.05 },
+      ]
+      const params = new URLSearchParams({
+        latitude: pontosConsulta.map(ponto => ponto.latitude.toFixed(5)).join(','),
+        longitude: pontosConsulta.map(ponto => ponto.longitude.toFixed(5)).join(','),
+        hourly: 'weather_code,precipitation_probability,precipitation',
+        forecast_days: '2',
+        timezone: 'America/Sao_Paulo',
+        precipitation_unit: 'mm',
+      })
+      const resposta = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { cache: 'no-store' })
+      if (!resposta.ok) throw new Error('Previsão de trovoadas indisponível')
+      const corpo = await resposta.json() as Record<string, unknown> | Array<Record<string, unknown>>
+      const locais = Array.isArray(corpo) ? corpo : [corpo]
+      const agora = Date.now()
+      const pontos = locais.flatMap((local, indice) => {
+        const horario = local.hourly && typeof local.hourly === 'object'
+          ? local.hourly as Record<string, unknown>
+          : {}
+        const tempos = Array.isArray(horario.time) ? horario.time.map(String) : []
+        const codigos = Array.isArray(horario.weather_code) ? horario.weather_code : []
+        const indiceTrovoada = tempos.findIndex((tempo, i) =>
+          new Date(tempo).getTime() >= agora && Number(codigos[i]) >= 95,
+        )
+        if (indiceTrovoada < 0) return []
+        const codigo = Number(codigos[indiceTrovoada])
+        const ponto = pontosConsulta[indice]
+        return [{
+          id: `ouro-branco-${indice}`,
+          nome: `Ouro Branco · setor ${indice + 1}`,
+          latitude: Number(local.latitude ?? ponto?.latitude),
+          longitude: Number(local.longitude ?? ponto?.longitude),
+          primeiraTrovoada: tempos[indiceTrovoada],
+          modelosComTrovoada: 1,
+          intensidade: codigo >= 99 ? 'Severa' : codigo >= 96 ? 'Moderada' : 'Trovoada',
+          probabilidadeChuva: Number((horario.precipitation_probability as unknown[])?.[indiceTrovoada] ?? 0),
+          precipitacao: Number((horario.precipitation as unknown[])?.[indiceTrovoada] ?? 0),
+          risco: codigo >= 99 ? 'Muito alto' : 'Alto',
+        }]
+      })
+      setPrevisaoTrovoadas({ pontos, atualizadoEm: new Date().toISOString() })
+      setTrovoadasErro('')
+    } catch (error) {
+      setTrovoadasErro(error instanceof Error ? error.message : 'Previsão de trovoadas indisponível')
+    }
+  }, [])
+
+  useEffect(() => {
+    carregarRadarChuva()
+    const timer = window.setInterval(carregarRadarChuva, 60 * 1000)
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === 'visible') carregarRadarChuva()
+    }
+    document.addEventListener('visibilitychange', atualizarAoVoltar)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', atualizarAoVoltar)
+    }
+  }, [carregarRadarChuva])
+
+  useEffect(() => {
+    const atualizarMeteorologia = () => {
+      void carregarTempoMapa()
+      void carregarPrevisaoTrovoadas()
+    }
+    atualizarMeteorologia()
+    const timer = window.setInterval(atualizarMeteorologia, 10 * 60 * 1000)
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === 'visible') atualizarMeteorologia()
+    }
+    document.addEventListener('visibilitychange', atualizarAoVoltar)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', atualizarAoVoltar)
+    }
+  }, [carregarTempoMapa, carregarPrevisaoTrovoadas])
+
+  const pontosTrovoada = (previsaoTrovoadas?.pontos || []).filter(ponto =>
+    Number.isFinite(ponto.latitude) && Number.isFinite(ponto.longitude),
+  )
+  return (
+    <section className="radar-live-map-card" aria-labelledby="radar-live-map-title">
+      <div className="radar-live-map-heading">
+        <div>
+          <span className="card-label">MAPA METEOROLÓGICO</span>
+          <h3 id="radar-live-map-title">
+            {zoomMapa < 9 ? 'Minas Gerais · chuva e nuvens' : 'Ouro Branco em tempo real'}
+          </h3>
+        </div>
+        <span className="radar-live-map-updated">
+          {radarCarregando ? 'Atualizando…' : radarChuva?.erroAtualizacao ? 'Último quadro salvo' : 'Verificação automática · 1 min'}
+        </span>
+      </div>
+      <div className="radar-live-map-toolbar" role="toolbar" aria-label="Controles do mapa meteorológico">
+        <div className="radar-live-map-base-buttons">
+          <button type="button" className={camadaBase === 'mapa' ? 'ativo' : ''} onClick={() => setCamadaBase('mapa')}>Mapa</button>
+          <button type="button" className={camadaBase === 'satelite' ? 'ativo' : ''} onClick={() => setCamadaBase('satelite')}>Satélite</button>
+        </div>
+        <button type="button" className={`radar-live-map-layer-button ${mostrarChuva ? 'ativo chuva' : ''}`} onClick={() => setMostrarChuva(prev => !prev)} aria-pressed={mostrarChuva}>
+          🌧️ Chuva {mostrarChuva ? 'ativa' : 'desativada'}
+        </button>
+        <button type="button" className={`radar-live-map-layer-button ${mostrarTemperatura ? 'ativo temperatura' : ''}`} onClick={() => setMostrarTemperatura(prev => !prev)} aria-pressed={mostrarTemperatura}>
+          🌡️ Temperatura {mostrarTemperatura ? 'ativa' : 'desativada'}
+        </button>
+        <button type="button" className={`radar-live-map-layer-button ${mostrarTrovoadas ? 'ativo trovoadas' : ''}`} onClick={() => setMostrarTrovoadas(prev => !prev)} aria-pressed={mostrarTrovoadas}>
+          ⚡ Trovoadas {mostrarTrovoadas ? 'ativas' : 'desativadas'}
+        </button>
+        <button
+          type="button"
+          className={`radar-live-map-layer-button ${mostrarNuvens ? 'ativo nuvens' : ''}`}
+          aria-pressed={mostrarNuvens}
+          title="Imagem infravermelha de nuvens NOAA GOES; não mede chuva"
+          onClick={() => setMostrarNuvens(prev => !prev)}
+        >
+          ☁️ Nuvens GOES
+        </button>
+        <button
+          type="button"
+          className="radar-live-map-layer-button"
+          onClick={() => mapaLeafletRef.current?.fitBounds(MINAS_GERAIS_BOUNDS, { padding: [20, 20], maxZoom: 7, animate: true })}
+          title="Enquadrar todo o estado; as camadas de chuva e nuvens cobrem a área visível"
+        >
+          🗺️ Toda MG
+        </button>
+        <button
+          type="button"
+          className="radar-live-map-layer-button"
+          onClick={() => mapaLeafletRef.current?.setView(RADAR_MAP_CENTER, RADAR_MAP_ZOOM, { animate: true })}
+          title="Voltar ao enquadramento local de Ouro Branco"
+        >
+          📍 Ouro Branco
+        </button>
+      </div>
+      <div className="radar-live-map-status">
+        <span><i className="radar-live-map-status-dot radar-live-map-status-dot-rain" /> Chuva observada</span>
+        <span><i className="radar-live-map-status-dot radar-live-map-status-dot-station" /> CEMADEN · Ouro Branco</span>
+        {zoomMapa >= 9 && <span><i className="radar-live-map-status-dot radar-live-map-status-dot-temperature" /> Temperatura local</span>}
+        {zoomMapa >= 9 && <span><i className="radar-live-map-status-dot radar-live-map-status-dot-lightning" /> Trovoadas previstas localmente · 36 h</span>}
+        {(radarErro || tempoMapaErro || trovoadasErro || cemadenMg.erro) && (
+          <strong>{[radarErro, tempoMapaErro, trovoadasErro, cemadenMg.erro].filter(Boolean).join(' · ')}</strong>
+        )}
+        {ocorrenciasComGps.length > 0 && (
+          <span>
+            📍 {ocorrenciasComGps.length} ocorrência(s) em {dataBonita(dataOcorrencias)} no mapa
+          </span>
+        )}
+      </div>
+      <div className="radar-live-map-frame">
+      {!tv && (
+        <div
+          className="radar-live-map-risk-anchor"
+          ref={setPainelAreasRiscoHost}
+          data-testid="radar-live-map-risk-anchor"
+        />
+      )}
+      {tv && (
+        <div
+          className="radar-live-map-risk-anchor radar-live-map-risk-anchor-tv"
+          ref={setPainelAreasRiscoHost}
+          data-testid="radar-live-map-risk-anchor"
+        />
+      )}
+      <MapContainer
+        className="radar-live-map"
+        center={RADAR_MAP_CENTER}
+        zoom={RADAR_MAP_ZOOM}
+        minZoom={5}
+        maxZoom={18}
+        scrollWheelZoom
+        zoomControl
+      >
+        <CapturaEstadoMapa referencia={mapaLeafletRef} aoMudarZoom={setZoomMapa} />
+        <RadarMapInvalidateSize tv={tv} />
+        {camadaBase === 'mapa' ? (
+          <TileLayer
+            key="radar-live-base-map"
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            subdomains={['a', 'b', 'c']}
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            maxZoom={19}
+          />
+        ) : (
+          <TileLayer
+            key="radar-live-base-satellite"
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            attribution="Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics"
+            maxNativeZoom={17}
+            maxZoom={18}
+          />
+        )}
+        {mostrarNuvens && templateTilesHttpsValido(GOES_CLOUD_TILE_URL) && (
+          <Pane name="radarLiveClouds" style={{ zIndex: 410 }}>
+            <TileLayer
+              key={`radar-live-clouds-${GOES_CLOUD_TILE_URL}`}
+              url={GOES_CLOUD_TILE_URL}
+              opacity={0.55}
+              maxNativeZoom={8}
+              maxZoom={18}
+              attribution='Cloud imagery &copy; <a href="https://gis.nnvl.noaa.gov/arcgis/rest/services/GOES/GOES_current/ImageServer" target="_blank" rel="noreferrer">NOAA GOES</a>'
+            />
+          </Pane>
+        )}
+        {mostrarChuva && radarChuva && (
+          <Pane name="radarLiveRain" style={{ zIndex: 420 }}>
+            <RadarChuvaAnimado
+              host={radarChuva.host}
+              quadros={radarChuva.quadros || []}
+              quadroReserva={{ time: radarChuva.frameTime, path: radarChuva.path }}
+              opacity={0.72}
+              maxZoom={18}
+            />
+          </Pane>
+        )}
+        {mostrarChuva && (
+          <Pane name="radarLiveCemadenStations" style={{ zIndex: 450 }}>
+            {estacoesOuroBrancoGeorreferenciadas.map(estacao => {
+              const estadoLeitura = statusLeituraCemaden(estacao.precipitacaoDataHora)
+              const intensidade = estadoLeitura === 'atualizada'
+                ? intensidadeCemadenRadar(estacao.precipitacaoAtual)
+                : { cor: '#94a3b8', alpha: 0 }
+              return (
+                <CircleMarker
+                  key={`radar-live-station-${estacao.id}`}
+                  center={[estacao.latitude as number, estacao.longitude as number]}
+                  radius={zoomMapa < 8 ? 2.5 : zoomMapa < 11 ? 4 : 8}
+                  pathOptions={{ color: '#fff', weight: 2, fillColor: intensidade.cor, fillOpacity: 0.95 }}
+                >
+                  <Tooltip permanent={zoomMapa >= 11} direction="top" offset={[0, -7]} opacity={0.96} className="radar-live-map-tooltip">
+                    {estadoLeitura === 'atualizada' && estacao.precipitacaoAtual != null
+                      ? formatarMmMapaRadar(estacao.precipitacaoAtual)
+                      : '—'}
+                  </Tooltip>
+                  <Popup>
+                    <strong>🌧️ {estacao.nome || 'Estação CEMADEN'}</strong>
+                    {estacao.municipio && <><br />{estacao.municipio} · Minas Gerais</>}
+                    <br />
+                    Última hora: <b>{formatarMmMapaRadar(estacao.precipitacaoAtual)}</b>
+                    <br />
+                    {estadoLeitura === 'atualizada' ? 'Leitura atualizada' : estadoLeitura === 'atrasada' ? 'Leitura atrasada' : 'Sem dados recentes'}
+                    <br />
+                    Leitura: {dataHoraRadar(estacao.precipitacaoDataHora)}
+                    {estacao.codigo ? <><br />Estação {estacao.codigo}</> : null}
+                  </Popup>
+                </CircleMarker>
+              )
+            })}
+          </Pane>
+        )}
+        {mostrarTemperatura && zoomMapa >= 9 && tempoMapa?.atual && Number.isFinite(Number(tempoMapa.atual.temperatura)) && (
+          <CircleMarker
+            center={[OURO_BRANCO.latitude, OURO_BRANCO.longitude]}
+            radius={8}
+            pathOptions={{ color: '#fff', weight: 2, fillColor: '#0284c7', fillOpacity: 1 }}
+          >
+            <Tooltip permanent direction="bottom" offset={[0, 9]} opacity={1} className="radar-live-map-tooltip radar-live-map-tooltip-temperature">
+              {`🌡️ ${Math.round(Number(tempoMapa.atual.temperatura))}°`}
+            </Tooltip>
+            <Popup>
+              <strong>🌡️ Temperatura atual · Ouro Branco</strong>
+              <br />
+              <b>{Math.round(Number(tempoMapa.atual.temperatura))} °C</b>
+              <br />
+              Umidade: {tempoMapa.atual.umidade ?? '—'}%
+              <br />
+              Vento: {tempoMapa.atual.vento ?? '—'} km/h
+              <br />
+              Rajada: {tempoMapa.atual.rajada ?? '—'} km/h
+              <br />
+              Fonte: {tempoMapa.fonte || 'Open-Meteo'}
+            </Popup>
+          </CircleMarker>
+        )}
+        {mostrarTrovoadas && zoomMapa >= 9 && pontosTrovoada.map(ponto => (
+          <CircleMarker
+            key={`radar-live-lightning-${ponto.id}`}
+            center={[ponto.latitude, ponto.longitude]}
+            radius={9}
+            pathOptions={{
+              color: '#fff',
+              weight: 2,
+              fillColor: ponto.risco === 'alto' ? '#dc2626' : ponto.risco === 'atenção' ? '#d97706' : '#7c3aed',
+              fillOpacity: 1,
+            }}
+          >
+            <Tooltip permanent direction="top" offset={[0, -10]} opacity={1} className="radar-live-map-tooltip radar-live-map-tooltip-lightning">
+              ⚡
+            </Tooltip>
+            <Popup>
+              <strong>⚡ {ponto.nome}</strong>
+              <br />
+              Trovoada prevista: {ponto.intensidade} · {ponto.modelosComTrovoada}/3 modelos
+              <br />
+              A partir de: {dataHoraTrovoadaRadar(ponto.primeiraTrovoada)}
+              <br />
+              Probabilidade de chuva: {ponto.probabilidadeChuva}% · até {Number(ponto.precipitacao).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mm
+              <br />
+              <small>Previsão numérica Open‑Meteo; não representa descargas observadas.</small>
+            </Popup>
+          </CircleMarker>
+        ))}
+        {mostrarChuva && zoomMapa >= 9 && (
+          <CircleMarker center={RADAR_MAP_CENTER} radius={5} pathOptions={{ color: '#0f172a', weight: 2, fillColor: '#f8fafc', fillOpacity: 1 }}>
+            <Popup>
+              <strong>Centro de Ouro Branco</strong>
+              <br />
+              Chuva observada e estações CEMADEN atualizadas automaticamente.
+            </Popup>
+          </CircleMarker>
+        )}
+        <Pane name="radarLiveTodayOccurrences" style={{ zIndex: 680 }}>
+          {ocorrenciasComGps.map(ocorrencia => {
+            const natureza = ocorrencia.natureza || ''
+            return (
+              <Marker
+                key={`radar-live-occurrence-${ocorrencia.id}`}
+                position={[Number(ocorrencia.lat), Number(ocorrencia.lng)]}
+                icon={iconeOcorrenciaRadar(natureza)}
+                zIndexOffset={1200}
+              >
+                <Popup>
+                  <strong>
+                    {NATUREZA_ICONE[natureza] || '📋'} {natureza || ocorrencia.tipo || 'Ocorrência'}
+                  </strong>
+                  {ocorrencia.tipo && <><br />Tipo: {ocorrencia.tipo}</>}
+                  {ocorrencia.endereco && <><br />{ocorrencia.endereco}</>}
+                  {ocorrencia.hora_inicio && <><br />Horário: {ocorrencia.hora_inicio}</>}
+                </Popup>
+              </Marker>
+            )
+          })}
+        </Pane>
+        <AreasRiscoMapa
+          painelHost={painelAreasRiscoHost}
+          areas={areasRisco}
+          previsaoPorArea={previsaoAreasRisco}
+          alertaSonoroAtivo={alertaSonoroAtivo}
+          onAlternarAlertaSonoro={alternarAlertaSonoro}
+          carregando={areasRiscoCarregando}
+          salvando={areasRiscoSalvando}
+          agenteLogado={agenteLogado}
+          senhaAgente={getSenhaAgente(agenteLogado)}
+          erro={[areasRiscoErro, previsaoAreasRiscoErro].filter(Boolean).join(' ') || null}
+          onSalvar={salvarAreaRisco}
+          onEditar={editarAreaRisco}
+          onExcluir={excluirAreaRisco}
+          onAbrirOcorrencia={id => disparar('dc:abrir-ocorrencia', { id })}
+          modoTv={tv}
+        />
+      </MapContainer>
+      </div>
+      <div className="radar-live-map-footer">
+        <span>
+          {cemadenMg.dados
+            ? `${estacoesOuroBrancoGeorreferenciadas.length} de ${estacoesOuroBranco.length} estações CEMADEN de Ouro Branco com posição`
+            : cemadenMg.carregando ? 'Consultando estações CEMADEN…' : 'Estações CEMADEN indisponíveis'}
+        </span>
+        {cemadenMg.dados && estacoesOuroBrancoSemCoordenadas > 0 && (
+          <span>{estacoesOuroBrancoSemCoordenadas} estação(ões) de Ouro Branco sem posição no cadastro geográfico</span>
+        )}
+        <span>
+          {radarChuva?.frameTime
+            ? `Quadro mais recente do RainViewer: ${new Date(radarChuva.frameTime * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · há ${Math.max(0, Math.floor((Date.now() - radarChuva.frameTime * 1000) / 60000))} min · fonte atualiza em intervalos de cerca de 10 min · zoom máx. 7`
+            : 'Radar RainViewer: —'}
+        </span>
+        <span>{tempoMapa?.atual?.temperatura != null ? `Ouro Branco: ${Math.round(Number(tempoMapa.atual.temperatura))} °C` : 'Temperatura local: —'}</span>
+        <span>{previsaoTrovoadas ? `${pontosTrovoada.length} ponto(s) previsto(s) perto de Ouro Branco` : 'Previsão local de trovoadas: —'}</span>
+        {!templateTilesHttpsValido(GOES_CLOUD_TILE_URL) && <span>Nuvens GOES: fonte não configurada</span>}
+      </div>
+    </section>
+  )
+}
+
 function eSerragem(nome: string) {
   return /serragem/i.test(nome)
 }
@@ -107,85 +1155,83 @@ function eControlePorQuantidade(nome: string) {
 function resumirFerramental(
   registros: AtividadeFerramenta[],
   catalogo: FerramentaCatalogo[],
-): ResumoFerramental | null {
-  if (registros.length === 0) return null
-
+): ResumoFerramental[] {
   const catalogoComCondicao = catalogo.filter(item => !eControlePorQuantidade(item.nome))
+  const totalTipos = catalogoComCondicao.length || new Set(
+    registros.filter(item => !eControlePorQuantidade(item.ferramentaNome)).map(item => item.ferramentaId).filter(Boolean),
+  ).size
   const catalogoPorId = new Map(catalogo.map(item => [item.id, item]))
-  const agentes = new Set<string>()
-  const registroMaisRecentePorFerramenta = new Map<string, AtividadeFerramenta>()
+  const porAgente = new Map<string, Map<string, AtividadeFerramenta>>()
 
   registros.forEach(registro => {
     const nomeAgente = registro.agente || 'Agente não informado'
-    agentes.add(nomeAgente)
     const ferramentaId = registro.ferramentaId || `registro-${registro.id}`
-    const anterior = registroMaisRecentePorFerramenta.get(ferramentaId)
+    const registrosDoAgente = porAgente.get(nomeAgente) || new Map<string, AtividadeFerramenta>()
+    const anterior = registrosDoAgente.get(ferramentaId)
     if (!anterior || new Date(registro.created_at || registro.data_checklist).getTime() >= new Date(anterior.created_at || anterior.data_checklist).getTime()) {
-      registroMaisRecentePorFerramenta.set(ferramentaId, registro)
+      registrosDoAgente.set(ferramentaId, registro)
     }
+    porAgente.set(nomeAgente, registrosDoAgente)
   })
 
-  const registrosUnicos = Array.from(registroMaisRecentePorFerramenta.values())
-  const idsVerificados = new Set(
-    registrosUnicos
-      .filter(item => !eControlePorQuantidade(item.ferramentaNome))
-      .map(item => item.ferramentaId)
-      .filter(Boolean),
-  )
-  const totalTipos = Math.max(catalogoComCondicao.length, idsVerificados.size)
-  const boa = registrosUnicos.filter(item => !eControlePorQuantidade(item.ferramentaNome) && item.condicao === 'boa').length
-  const media = registrosUnicos.filter(item => !eControlePorQuantidade(item.ferramentaNome) && item.condicao === 'media').length
-  const ruim = registrosUnicos.filter(item => !eControlePorQuantidade(item.ferramentaNome) && item.condicao === 'ruim').length
-  let itensCadastrados = 0
-  let itensConferidos = 0
-  const ferramentasRuins: string[] = []
-  const faltantes: string[] = []
-  const serragemAlertas: string[] = []
-  const litrosAlertas: string[] = []
+  return Array.from(porAgente.entries()).map(([agente, registrosMap]) => {
+    const registrosAgente = Array.from(registrosMap.values())
+    const idsVerificados = new Set(registrosAgente.filter(item => !eControlePorQuantidade(item.ferramentaNome)).map(item => item.ferramentaId))
+    const boa = registrosAgente.filter(item => !eControlePorQuantidade(item.ferramentaNome) && item.condicao === 'boa').length
+    const media = registrosAgente.filter(item => !eControlePorQuantidade(item.ferramentaNome) && item.condicao === 'media').length
+    const ruim = registrosAgente.filter(item => !eControlePorQuantidade(item.ferramentaNome) && item.condicao === 'ruim').length
+    let itensCadastrados = 0
+    let itensConferidos = 0
+    const ferramentasRuins: string[] = []
+    const faltantes: string[] = []
+    const serragemAlertas: string[] = []
+    const litrosAlertas: string[] = []
 
-  registrosUnicos.forEach(registro => {
-    const catalogoItem = catalogoPorId.get(registro.ferramentaId)
-    const cadastrada = Number(registro.quantidadeCadastrada) > 0
-      ? Number(registro.quantidadeCadastrada)
-      : Math.max(1, catalogoItem?.quantidade || 1)
-    const conferida = registro.quantidadeConferida == null
-      ? cadastrada
-      : Math.max(0, Number(registro.quantidadeConferida))
-    const quantidadeFaltante = Math.max(0, cadastrada - conferida)
-    itensCadastrados += cadastrada
-    itensConferidos += Math.min(cadastrada, conferida)
-    if (ehFerramentalPorLitro(registro.ferramentaNome)) {
-      if (conferida < 10) {
-        litrosAlertas.push(`${conferida} litro(s) de ${registro.ferramentaNome} — Repor estoque`)
+    registrosAgente.forEach(registro => {
+      const catalogoItem = catalogoPorId.get(registro.ferramentaId)
+      const cadastrada = Number(registro.quantidadeCadastrada) > 0
+        ? Number(registro.quantidadeCadastrada)
+        : Math.max(1, catalogoItem?.quantidade || 1)
+      const conferida = registro.quantidadeConferida == null
+        ? cadastrada
+        : Math.max(0, Number(registro.quantidadeConferida))
+      const quantidadeFaltante = Math.max(0, cadastrada - conferida)
+      itensCadastrados += cadastrada
+      itensConferidos += Math.min(cadastrada, conferida)
+      if (ehFerramentalPorLitro(registro.ferramentaNome)) {
+        if (conferida < 10) {
+          litrosAlertas.push(`${conferida} litro(s) de ${registro.ferramentaNome} — Repor estoque`)
+        }
+        return
       }
-      return
-    }
-    if (eSerragem(registro.ferramentaNome)) {
-      if (conferida <= 2) serragemAlertas.push(`${conferida} saco(s) de serragem — Repor serragem`)
-      return
-    }
-    if (registro.condicao === 'ruim') ferramentasRuins.push(registro.ferramentaNome)
-    if (quantidadeFaltante > 0) {
-      const nomeItem = String(registro.ferramentaNome || 'ferramental').trim()
-      const ondeEsta = String(registro.itemFaltante || '').trim()
-      const justificativa = String(registro.justificativa || '').trim()
-      const explicacao = ondeEsta
-        ? `Onde está: ${ondeEsta}`
-        : `Justificativa: ${justificativa || 'não informada'}`
-      faltantes.push(`${quantidadeFaltante} ${nomeItem} — ${explicacao}`)
-    }
-  })
+      if (eSerragem(registro.ferramentaNome)) {
+        if (conferida <= 2) serragemAlertas.push(`${conferida} saco(s) de serragem — Repor serragem`)
+        return
+      }
+      if (registro.condicao === 'ruim') ferramentasRuins.push(registro.ferramentaNome)
+      if (quantidadeFaltante > 0) {
+        const nomeItem = String(registro.ferramentaNome || 'ferramental').trim()
+        const ondeEsta = String(registro.itemFaltante || '').trim()
+        const justificativa = String(registro.justificativa || '').trim()
+        const explicacao = ondeEsta
+          ? `Onde está: ${ondeEsta}`
+          : `Justificativa: ${justificativa || 'não informada'}`
+        faltantes.push(
+          `${quantidadeFaltante} ${nomeItem} — ${explicacao}`,
+        )
+      }
+    })
 
-  const semChecklist = catalogoComCondicao
-    .filter(item => !idsVerificados.has(item.id))
-    .map(item => item.nome)
-  return {
-    agentes: Array.from(agentes).sort((a, b) => a.localeCompare(b)),
-    tiposVerificados: idsVerificados.size, totalTipos, itensConferidos, itensCadastrados,
-    boa, media, ruim, ferramentasRuins: [...new Set(ferramentasRuins)],
-    faltantes, semChecklist, serragemAlertas: [...new Set(serragemAlertas)],
-    litrosAlertas: [...new Set(litrosAlertas)],
-  }
+    const semChecklist = catalogoComCondicao
+      .filter(item => !idsVerificados.has(item.id))
+      .map(item => item.nome)
+    return {
+      agente, tiposVerificados: idsVerificados.size, totalTipos, itensConferidos, itensCadastrados,
+      boa, media, ruim, ferramentasRuins: [...new Set(ferramentasRuins)],
+      faltantes, semChecklist, serragemAlertas: [...new Set(serragemAlertas)],
+      litrosAlertas: [...new Set(litrosAlertas)],
+    }
+  }).sort((a, b) => a.agente.localeCompare(b.agente))
 }
 
 function temFotoCarregada(itens: unknown) {
@@ -241,126 +1287,19 @@ export default function RadarDC() {
     ocorrencias: Atividade[]
   }>({ checklists: [], checklistsFerramentas: [], ferramentasCatalogo: [], ocorrencias: [] })
   const [tempo, setTempo] = useState<TempoDC | null>(null)
+  const [dadosCNL, setDadosCNL] = useState<DadosRadarCNL | null>(null)
   const [horaAtual, setHoraAtual] = useState(() => new Date())
   const [erroTempo, setErroTempo] = useState('')
   const [salvando, setSalvando] = useState(false)
+  const [marcandoCienteId, setMarcandoCienteId] = useState<string | null>(null)
   const [erroSalvamento, setErroSalvamento] = useState('')
-  const [areasRisco, setAreasRisco] = useState<RiskArea[]>([])
-  const [carregandoAreasRisco, setCarregandoAreasRisco] = useState(true)
-  const [carregandoChuvaAreas, setCarregandoChuvaAreas] = useState(false)
-  const [salvandoAreaRisco, setSalvandoAreaRisco] = useState(false)
-  const [erroAreasRisco, setErroAreasRisco] = useState<string | null>(null)
-  const [erroPrevisaoAreas, setErroPrevisaoAreas] = useState<string | null>(null)
-  const [precipitacao24hAreas, setPrecipitacao24hAreas] = useState<Record<string, number | null>>({})
+  const [lembreteParaApagar, setLembreteParaApagar] = useState<RegistroRadar | null>(null)
+  const [registroEmEdicao, setRegistroEmEdicao] = useState<RegistroRadar | null>(null)
   const carregadoRef = useRef(false)
   const pendentesRef = useRef(new Set<string>())
   const ocorrenciasNotificadasRef = useRef(new Set<number>())
   const atividadesAssinaturaRef = useRef('')
   const calendarioRef = useRef<HTMLDivElement>(null)
-  const mutacaoAreaEmAndamentoRef = useRef(false)
-  const previsaoControllerRef = useRef<AbortController | null>(null)
-
-  const carregarAreasRisco = useCallback(async (mostrarCarregamento = true) => {
-    if (mostrarCarregamento) setCarregandoAreasRisco(true)
-    try {
-      const areas = await listarAreasRisco()
-      setAreasRisco(atuais => JSON.stringify(atuais) === JSON.stringify(areas) ? atuais : areas)
-      setErroAreasRisco(null)
-    } catch (error) {
-      setErroAreasRisco(error instanceof Error ? error.message : 'Não foi possível carregar as áreas de risco.')
-    } finally {
-      if (mostrarCarregamento) setCarregandoAreasRisco(false)
-    }
-  }, [])
-
-  const executarMutacaoArea = useCallback(async <T,>(mutacao: () => Promise<T>): Promise<T> => {
-    if (mutacaoAreaEmAndamentoRef.current) throw new Error('Aguarde a operação atual terminar.')
-    mutacaoAreaEmAndamentoRef.current = true
-    setSalvandoAreaRisco(true)
-    setErroAreasRisco(null)
-    try {
-      return await mutacao()
-    } catch (error) {
-      setErroAreasRisco(error instanceof Error ? error.message : 'Não foi possível salvar a área de risco.')
-      throw error
-    } finally {
-      mutacaoAreaEmAndamentoRef.current = false
-      setSalvandoAreaRisco(false)
-    }
-  }, [])
-
-  const criarAreaMonitorada = useCallback(async (area: RiskAreaDraft) => {
-    const criada = await executarMutacaoArea(() => criarAreaRisco(area, agente))
-    setAreasRisco(atuais => [criada, ...atuais.filter(item => item.id !== criada.id)])
-    wsSend({ tipo: 'radar_areas_risco_atualizadas' })
-  }, [agente, executarMutacaoArea])
-
-  const atualizarAreaMonitorada = useCallback(async (id: string, area: RiskAreaDraft) => {
-    const atualizada = await executarMutacaoArea(() => atualizarAreaRisco(id, area, agente))
-    setAreasRisco(atuais => atuais.map(item => item.id === id ? atualizada : item))
-    wsSend({ tipo: 'radar_areas_risco_atualizadas' })
-  }, [agente, executarMutacaoArea])
-
-  const excluirAreaMonitorada = useCallback(async (id: string) => {
-    await executarMutacaoArea(() => excluirAreaRisco(id))
-    setAreasRisco(atuais => atuais.filter(item => item.id !== id))
-    setPrecipitacao24hAreas(atuais => {
-      const proxima = { ...atuais }
-      delete proxima[id]
-      return proxima
-    })
-    wsSend({ tipo: 'radar_areas_risco_atualizadas' })
-  }, [executarMutacaoArea])
-
-  const atualizarPrevisaoAreas = useCallback(async () => {
-    previsaoControllerRef.current?.abort()
-    const controller = new AbortController()
-    previsaoControllerRef.current = controller
-    const ativas = areasRisco.filter(area => area.ativo)
-    if (!ativas.length) {
-      setPrecipitacao24hAreas({})
-      setErroPrevisaoAreas(null)
-      setCarregandoChuvaAreas(false)
-      return
-    }
-
-    setCarregandoChuvaAreas(true)
-    setErroPrevisaoAreas(null)
-    try {
-      const previsao = await buscarPrecipitacao24hAreas(areasRisco, controller.signal)
-      if (!controller.signal.aborted) setPrecipitacao24hAreas(previsao)
-    } catch (error) {
-      if (controller.signal.aborted) return
-      setPrecipitacao24hAreas({})
-      setErroPrevisaoAreas(error instanceof Error ? error.message : 'Não foi possível atualizar a previsão de chuva.')
-    } finally {
-      if (!controller.signal.aborted) setCarregandoChuvaAreas(false)
-    }
-  }, [areasRisco])
-
-  useEffect(() => {
-    void carregarAreasRisco()
-    const off = wsOn('radar_areas_risco_atualizadas', () => void carregarAreasRisco(false))
-    const timer = window.setInterval(() => void carregarAreasRisco(false), 60 * 1000)
-    return () => {
-      off()
-      window.clearInterval(timer)
-    }
-  }, [carregarAreasRisco])
-
-  useEffect(() => {
-    void atualizarPrevisaoAreas()
-    const timer = window.setInterval(() => void atualizarPrevisaoAreas(), 10 * 60 * 1000)
-    const atualizarAoVoltar = () => {
-      if (document.visibilityState === 'visible') void atualizarPrevisaoAreas()
-    }
-    document.addEventListener('visibilitychange', atualizarAoVoltar)
-    return () => {
-      window.clearInterval(timer)
-      document.removeEventListener('visibilitychange', atualizarAoVoltar)
-      previsaoControllerRef.current?.abort()
-    }
-  }, [atualizarPrevisaoAreas])
 
   useEffect(() => {
     const timer = window.setInterval(() => setHoraAtual(new Date()), 1000)
@@ -383,24 +1322,21 @@ export default function RadarDC() {
         id: String(row.id), texto: String(row.texto), data: String(row.data), hora: String(row.hora),
         prioridade: (row.prioridade as Prioridade) || 'normal', concluido: Boolean(row.concluido),
         criadoPor: String(row.criado_por), criadoEm: String(row.criado_em),
-        tipo: row.tipo === 'notificacao' ? 'notificacao' : 'lembrete',
+        tipo: row.tipo === 'notificacao' ? ('notificacao' as const) : ('lembrete' as const),
         agentesEnvolvidos: Array.isArray(row.agentes_envolvidos) ? row.agentes_envolvidos.map(String) : [],
         confirmacoesAgentes: lerConfirmacoes(row.confirmacoes_agentes),
       }))
-      const idsRemotos = new Set(remotos.map(row => row.id))
-      idsRemotos.forEach(id => pendentesRef.current.delete(id))
       setRegistros(prev => {
+        const idsRemotos = new Set(remotos.map(row => row.id))
         const aindaPendentes = prev.filter(row => pendentesRef.current.has(row.id) && !idsRemotos.has(row.id))
         return [...remotos, ...aindaPendentes]
       })
       carregadoRef.current = true
     } catch {
-      if (carregadoRef.current) return
       try {
-        const cache = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]')
-        setRegistros(Array.isArray(cache) ? cache : [])
+        setRegistros(JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'))
+        carregadoRef.current = true
       } catch { setRegistros([]) }
-      carregadoRef.current = true
     }
   }, [])
 
@@ -496,18 +1432,21 @@ export default function RadarDC() {
           return
         }
       }
-      const res = await fetch(`/api/atividades-dia?data=${dataSelecionada}`)
-      if (res.ok) {
-        const dados = await res.json() as {
-          checklists: Atividade[]
-          checklistsFerramentas: AtividadeFerramenta[]
-          ferramentasCatalogo: FerramentaCatalogo[]
-          ocorrencias: Atividade[]
-        }
+      if (!supabaseDisponivel) {
+        const res = await fetch(`/api/atividades-dia?data=${dataSelecionada}`)
+        const ct = res.headers.get('content-type') || ''
+        if (res.ok && ct.includes('application/json')) {
+          const dados = await res.json() as {
+            checklists: Atividade[]
+            checklistsFerramentas: AtividadeFerramenta[]
+            ferramentasCatalogo: FerramentaCatalogo[]
+            ocorrencias: Atividade[]
+          }
           atualizarAtividadesNaTela({
-            ...dados,
-            checklists: dados.checklists.map(c => ({ ...c, fotoCarregada: temFotoCarregada(c.itens) })),
-          }, avisar)
+              ...dados,
+              checklists: dados.checklists.map(c => ({ ...c, fotoCarregada: temFotoCarregada(c.itens) })),
+            }, avisar)
+        }
       }
     } catch { setAtividades({ checklists: [], checklistsFerramentas: [], ferramentasCatalogo: [], ocorrencias: [] }) }
   }, [dataSelecionada, atualizarAtividadesNaTela])
@@ -555,6 +1494,45 @@ export default function RadarDC() {
   }, [])
 
   useEffect(() => {
+    let ativo = true
+    const carregarNivelRio = async () => {
+      try {
+        const resposta = await fetch('/api/monitoramento-cnl', { cache: 'no-store' })
+         const corpo = await resposta.json() as {
+           sucesso?: boolean
+           estacao?: LeituraCNL
+           estacoes?: RadarEstacaoCNL[]
+           serie?: PontoSerie[]
+           serieChuvaCentro?: PontoSerie[]
+            estacaoChuvaCentro?: EstacaoChuvaCentro | null
+           serieNivel?: PontoNivel[]
+         }
+        if (!resposta.ok || !corpo.sucesso || !corpo.estacao || !Array.isArray(corpo.serieNivel)) {
+          throw new Error('Dados do Rio Bananeiras indisponíveis.')
+        }
+         if (ativo) {
+           setDadosCNL({
+             estacao: corpo.estacao,
+             estacoes: Array.isArray(corpo.estacoes) ? corpo.estacoes : [corpo.estacao],
+             serie: Array.isArray(corpo.serie) ? corpo.serie : [],
+              serieChuvaCentro: Array.isArray(corpo.serieChuvaCentro) ? corpo.serieChuvaCentro : [],
+              estacaoChuvaCentro: corpo.estacaoChuvaCentro || null,
+             serieNivel: corpo.serieNivel,
+           })
+         }
+      } catch {
+        // O gráfico é complementar ao Radar; a falha não deve ocultar os registros.
+      }
+    }
+    carregarNivelRio()
+    const timer = window.setInterval(carregarNivelRio, 5 * 60 * 1000)
+    return () => {
+      ativo = false
+      window.clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
     carregar()
     const off = wsOn('radar_bilhetes_atualizados', () => {
       tocarSininho()
@@ -587,8 +1565,10 @@ export default function RadarDC() {
   const lembretes = registros.filter(r => r.tipo === 'lembrete')
   const notificacoes = registros.filter(r => r.tipo === 'notificacao')
   const notificacoesDaData = notificacoes.filter(r => r.data === dataSelecionada)
-  const proximasNotificacoes = notificacoes
-    .filter(r => r.data >= hoje() && !r.concluido)
+  // Notificações vencidas continuam disponíveis no calendário como histórico,
+  // mas deixam de circular no Radar a partir do dia seguinte à data marcada.
+  const notificacoesDoRadar = notificacoes
+    .filter(r => !r.concluido && r.data >= hoje())
     .sort((a, b) => `${a.data}${a.hora}`.localeCompare(`${b.data}${b.hora}`))
   const resumosFerramental = useMemo(
     () => resumirFerramental(atividades.checklistsFerramentas, atividades.ferramentasCatalogo),
@@ -602,15 +1582,89 @@ export default function RadarDC() {
       rajada: tempo.dias.reduce((maior, dia) => dia.rajada > maior.rajada ? dia : maior),
     }
   }, [tempo])
+  const estadosClima = useMemo(
+    () => tempo ? estadosVisuaisTempo(tempo) : ['normal' as EstadoVisualTempo],
+    [tempo],
+  )
+  const cenaClima = useMemo(
+    () => tempo ? cenaClimaTempo(tempo) : null,
+    [tempo],
+  )
+  const diasPrecipitacao = useMemo(() => {
+    if (!dadosCNL) return []
+    return [...new Set(dadosCNL.estacoes.flatMap(estacao => estacao.precipitacaoDiaria.map(dia => dia.data)))]
+      .sort()
+      .reverse()
+      .slice(0, 2)
+  }, [dadosCNL])
+  const resumoPrecipitacao = useMemo(
+    () => dadosCNL?.estacoes.map(estacao => `${estacao.nome} ${formatarMmRadar(estacao.acumulados.vinteQuatroHoras)}`).join(' | ') || '',
+    [dadosCNL],
+  )
 
 
   async function salvarRegistro(tipo: RegistroRadar['tipo'], texto: string, data: string, horaRegistro: string) {
     if (!texto.trim() || salvando) return
-    if (tipo === 'notificacao' && data < hoje()) {
-      setErroSalvamento('Escolha hoje ou uma data futura para a notificação aparecer no texto rolante.')
+    const agentesParaRegistro = tipo === 'lembrete' ? agentesLembrete : agentesEnvolvidos
+    if (registroEmEdicao) {
+      const registroAtualizado = {
+        texto: texto.trim(),
+        data,
+        hora: horaRegistro,
+        prioridade,
+        agentes_envolvidos: agentesParaRegistro,
+        concluido: registroEmEdicao.concluido,
+      }
+      setSalvando(true)
+      setErroSalvamento('')
+      try {
+        let row: Record<string, unknown>
+        if (supabaseDisponivel) {
+          const result = agentePodeGerenciarCriacao(registroEmEdicao.criadoPor, agente) && registroEmEdicao.criadoPor === 'J'
+            ? await supabase.from('radar_bilhetes').update(registroAtualizado).eq('id', registroEmEdicao.id).select().single()
+            : await supabase.from('radar_bilhetes').update(registroAtualizado).eq('id', registroEmEdicao.id).eq('criado_por', agente).select().single()
+          if (result.error || !result.data) throw new Error(result.error?.message || 'Não foi possível atualizar o registro.')
+          row = result.data as Record<string, unknown>
+        } else {
+          const res = await fetch(`/api/radar-bilhetes/${registroEmEdicao.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agente, ...registroAtualizado }),
+          })
+          if (!res.ok) {
+            const detalhe = await res.json().catch(() => null) as { error?: string } | null
+            throw new Error(detalhe?.error || 'Não foi possível atualizar o registro.')
+          }
+          row = await res.json() as Record<string, unknown>
+        }
+        const salvo: RegistroRadar = {
+          ...registroEmEdicao,
+          id: String(row.id),
+          texto: String(row.texto),
+          data: String(row.data),
+          hora: String(row.hora),
+          prioridade: (row.prioridade as Prioridade) || prioridade,
+          concluido: Boolean(row.concluido),
+          agentesEnvolvidos: Array.isArray(row.agentes_envolvidos) ? row.agentes_envolvidos.map(String) : agentesParaRegistro,
+          confirmacoesAgentes: lerConfirmacoes(row.confirmacoes_agentes),
+        }
+        setRegistros(prev => prev.map(item => item.id === salvo.id ? salvo : item))
+        setRegistroEmEdicao(null)
+        setTextoLembrete('')
+        setTextoNotificacao('')
+        setAgentesLembrete([])
+        setAgentesEnvolvidos([])
+        setHora(horaAgora())
+        setLembreteEditorAberto(false)
+        setEditorAberto(false)
+        if (supabaseDisponivel) wsSend({ tipo: 'radar_bilhetes_atualizados' })
+      } catch (error) {
+        setErroSalvamento(error instanceof Error ? error.message : 'Não foi possível atualizar o registro.')
+      } finally {
+        setSalvando(false)
+      }
       return
     }
-    const agentesParaRegistro = tipo === 'lembrete' ? agentesLembrete : agentesEnvolvidos
     const novo: RegistroRadar = {
       id: crypto.randomUUID(), texto: texto.trim(), data, hora: horaRegistro,
       prioridade, concluido: false, criadoPor: agente, criadoEm: new Date().toISOString(), tipo,
@@ -640,11 +1694,12 @@ export default function RadarDC() {
         id: String(row.id), texto: String(row.texto), data: String(row.data), hora: String(row.hora),
         prioridade: (row.prioridade as Prioridade) || novo.prioridade, concluido: Boolean(row.concluido),
         criadoPor: String(row.criado_por || agente), criadoEm: String(row.criado_em || novo.criadoEm),
-        tipo: row.tipo === 'notificacao' ? 'notificacao' : tipo,
+        tipo: row.tipo === 'notificacao' ? 'notificacao' : 'lembrete',
         agentesEnvolvidos: Array.isArray(row.agentes_envolvidos) ? row.agentes_envolvidos.map(String) : novo.agentesEnvolvidos,
         confirmacoesAgentes: lerConfirmacoes(row.confirmacoes_agentes),
       }
       setRegistros(prev => [...prev.filter(r => r.id !== salvo.id && r.id !== novo.id), salvo])
+      pendentesRef.current.delete(novo.id)
       if (supabaseDisponivel) wsSend({ tipo: 'radar_bilhetes_atualizados' })
       if (tipo === 'lembrete') {
         setTextoLembrete('')
@@ -667,20 +1722,24 @@ export default function RadarDC() {
         registroTipo: tipo,
         agentesEnvolvidos: novo.agentesEnvolvidos,
       })
-      fetch('/api/push/radar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agentes: novo.agentesEnvolvidos,
-          texto: novo.texto,
-          data: novo.data,
-          hora: novo.hora,
-          prioridade: novo.prioridade,
-          remetente: agente,
-          notificacaoId: novo.id,
-          registroTipo: tipo,
-        }),
-      }).catch(() => {})
+      // No Netlify o bilhete já é sincronizado pelo Supabase Realtime.
+      // O envio de push de Radar continua sendo responsabilidade do backend Express.
+      if (!supabaseDisponivel) {
+        fetch('/api/push/radar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentes: novo.agentesEnvolvidos,
+            texto: novo.texto,
+            data: novo.data,
+            hora: novo.hora,
+            prioridade: novo.prioridade,
+            remetente: agente,
+            notificacaoId: novo.id,
+            registroTipo: tipo,
+          }),
+        }).catch(() => {})
+      }
     } catch (error) {
       pendentesRef.current.delete(novo.id)
       setErroSalvamento(error instanceof Error ? error.message : 'Não foi possível salvar o registro.')
@@ -689,15 +1748,20 @@ export default function RadarDC() {
     }
   }
 
-  async function remover(id: string) {
+  async function remover(registro: RegistroRadar, senha?: string) {
+    const id = registro.id
     setErroSalvamento('')
     try {
       if (supabaseDisponivel) {
-        const result = await supabase.from('radar_bilhetes').delete().eq('id', id).eq('criado_por', agente)
+        const result = agentePodeGerenciarCriacao(registro.criadoPor, agente) && registro.criadoPor === 'J'
+          ? await supabase.from('radar_bilhetes').delete().eq('id', id)
+          : await supabase.from('radar_bilhetes').delete().eq('id', id).eq('criado_por', agente)
         if (result.error) throw new Error(result.error.message)
       } else {
         const res = await fetch('/api/radar-bilhetes/' + id, {
-          method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agente }),
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agente, senha }),
         })
         if (!res.ok) {
           const detalhe = await res.json().catch(() => null) as { error?: string } | null
@@ -705,9 +1769,67 @@ export default function RadarDC() {
         }
       }
       setRegistros(prev => prev.filter(r => r.id !== id))
+      setLembreteParaApagar(null)
       if (supabaseDisponivel) wsSend({ tipo: 'radar_bilhetes_atualizados' })
     } catch (error) {
       setErroSalvamento(error instanceof Error ? error.message : 'Não foi possível remover o registro.')
+    }
+  }
+
+  function iniciarEdicaoRegistro(registro: RegistroRadar) {
+    if (!agentePodeGerenciarCriacao(registro.criadoPor, agente)) return
+    setRegistroEmEdicao(registro)
+    setPrioridade(registro.prioridade)
+    setDataSelecionada(registro.data)
+    setHora(registro.hora)
+    if (registro.tipo === 'lembrete') {
+      setTextoLembrete(registro.texto)
+      setAgentesLembrete(registro.agentesEnvolvidos)
+      setLembreteEditorAberto(true)
+    } else {
+      setTextoNotificacao(registro.texto)
+      setAgentesEnvolvidos(registro.agentesEnvolvidos)
+      setEditorAberto(true)
+      requestAnimationFrame(() => calendarioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+    }
+  }
+
+  async function marcarLembreteCiente(registro: RegistroRadar) {
+    if (marcandoCienteId) return
+    setMarcandoCienteId(registro.id)
+    setErroSalvamento('')
+    const confirmacoes = [
+      ...registro.confirmacoesAgentes.filter(item => item.agente !== agente),
+      { agente, confirmado: true, confirmedAt: new Date().toISOString() },
+    ]
+    try {
+      if (supabaseDisponivel) {
+        const result = await supabase
+          .from('radar_bilhetes')
+          .update({ confirmacoes_agentes: confirmacoes })
+          .eq('id', registro.id)
+          .select()
+          .single()
+        if (result.error) throw new Error(result.error.message)
+      } else {
+        const res = await fetch(`/api/radar-bilhetes/${registro.id}/ciente`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agente }),
+        })
+        if (!res.ok) {
+          const detalhe = await res.json().catch(() => null) as { error?: string } | null
+          throw new Error(detalhe?.error || 'Não foi possível marcar o lembrete como ciente.')
+        }
+      }
+      setRegistros(prev => prev.map(item => (
+        item.id === registro.id ? { ...item, confirmacoesAgentes: confirmacoes } : item
+      )))
+      if (supabaseDisponivel) wsSend({ tipo: 'radar_bilhetes_atualizados' })
+    } catch (error) {
+      setErroSalvamento(error instanceof Error ? error.message : 'Não foi possível marcar o lembrete como ciente.')
+    } finally {
+      setMarcandoCienteId(null)
     }
   }
 
@@ -725,8 +1847,8 @@ export default function RadarDC() {
   useEffect(() => wsOn('radar_confirmacao', (mensagem) => {
     if (String(mensagem.criadoPor) !== agente || !('Notification' in window) || Notification.permission !== 'granted') return
     const nome = String(mensagem.agente || 'Agente')
-    const texto = String(mensagem.texto || 'notificação do Radar DC')
-    new Notification(mensagem.confirmado === true ? '✅ Radar DC — presença confirmada' : '❌ Radar DC — presença recusada', {
+      const texto = String(mensagem.texto || 'notificação do Radar DC')
+      new Notification(mensagem.confirmado === true ? '✅ Radar DC — presença confirmada' : '❌ Radar DC — presença recusada', {
       body: mensagem.confirmado === true ? `${nome} confirmou presença: ${texto}` : `${nome} informou que não poderá ir: ${texto}`,
       tag: `radar-confirmacao-${String(mensagem.id)}-${nome}`,
     })
@@ -749,229 +1871,427 @@ export default function RadarDC() {
     return () => document.body.classList.remove('radar-tv-active')
   }, [tv])
 
+  useEffect(() => {
+    if (!tv) return
+    let diaConhecido = hoje()
+    const timer = window.setInterval(() => {
+      const novoDia = hoje()
+      if (novoDia === diaConhecido) return
+      diaConhecido = novoDia
+      setDataSelecionada(novoDia)
+      setMes(new Date(`${novoDia}T12:00:00`))
+    }, 15 * 1000)
+    return () => window.clearInterval(timer)
+  }, [tv])
+
+  const alternarModoTv = useCallback(async () => {
+    if (tv) {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        await document.exitFullscreen().catch(() => {})
+      }
+      setTv(false)
+      return
+    }
+
+    const dataAtual = hoje()
+    setDataSelecionada(dataAtual)
+    setMes(new Date(`${dataAtual}T12:00:00`))
+    prepararAudioAlertaRadar()
+    setTv(true)
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen().catch(() => {
+        // O modo TV continua disponível mesmo quando o navegador bloqueia a tela cheia.
+      })
+    }
+  }, [tv])
+
+  useEffect(() => {
+    const sincronizarTelaCheia = () => {
+      if (!document.fullscreenElement) setTv(false)
+    }
+    document.addEventListener('fullscreenchange', sincronizarTelaCheia)
+    return () => document.removeEventListener('fullscreenchange', sincronizarTelaCheia)
+  }, [])
+
   return (
-    <section className={`radar-page ${tv ? 'radar-tv' : ''}`}>
-       <section className="radar-weather radar-weather-compact" aria-labelledby="radar-weather-title">
-         <div className="radar-weather-bar">
-           <strong className="radar-weather-place" id="radar-weather-title">Ouro Branco – MG</strong>
-           {erroTempo && <span className="radar-weather-error">{erroTempo}</span>}
-           {!tempo && !erroTempo && <span className="radar-weather-loading">Carregando previsão...</span>}
-           {tempo && <div className="radar-weather-condition"><span>{iconeTempo(tempo.atual.codigo)}</span><div><strong>{Math.round(tempo.atual.temperatura)}°C</strong><b>{nomesTempo[tempo.atual.codigo] || 'Condição variável'}</b></div></div>}
-           {tempo && <div className="radar-weather-metrics"><span>🌧️ Chuva <b>{tempo.atual.chuva.toFixed(1)} mm</b></span><span>☔ Prob. hoje <b>{tempo.dias[0]?.probabilidade ?? 0}%</b></span><span>💨 Vento <b>{Math.round(tempo.atual.vento)} km/h</b></span><span>💨 Rajadas <b>{Math.round(tempo.atual.rajada)} km/h</b></span><span>💧 Umidade <b>{Math.round(tempo.atual.umidade)}%</b></span></div>}
-           <div className="radar-clock" aria-label="Hora atual"><span>HORA ATUAL</span><strong>{horaAtual.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</strong></div>
-           <div className="radar-weather-actions"><button className="radar-tv-btn" onClick={() => setTv(!tv)}>{tv ? '↙ Voltar ao app' : '▣ Modo TV'}</button></div>
+       <section className={`radar-page ${tv ? 'radar-tv' : ''}`}>
+       <div className="radar-tv-launcher">
+         <div className="radar-tv-launcher-copy">
+           <span className="radar-tv-launcher-label">RADAR DC</span>
+           <span className="radar-tv-launcher-hint">Painel operacional</span>
          </div>
-        {erroTempo && <p className="radar-save-error" role="alert">{erroTempo}</p>}
-        {tempo && (
-          <div className="radar-weather-detail">
-             <div className="weather-section-title">Previsão nas próximas horas</div>
-            <div className="weather-hourly" aria-label="Previsão do tempo nas próximas horas">
-              {tempo.horas.map(hora => (
-                <div className="weather-hour" key={hora.time} title={`${nomesTempo[hora.codigo] || 'Condição variável'} · ${hora.probabilidade}% de chuva`}>
-                  <b>{new Date(hora.time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</b>
-                   <span className="weather-hour-icon">{iconeTempo(hora.codigo, hora.time)}</span>
-                  <strong>{Math.round(hora.probabilidade)}%</strong>
-                  <div className="weather-probability"><i style={{ height: `${Math.max(3, hora.probabilidade)}%` }} /></div>
-                  <small>{Math.round(hora.temperatura)}° · {hora.precipitacao.toFixed(1)} mm</small>
-                </div>
-              ))}
-            </div>
-            <div className="weather-section-title weather-days-title">Previsão para os próximos dias</div>
-            <div className="weather-days" aria-label="Previsão do tempo para os próximos dias">
-              {tempo.dias.map((dia, indice) => (
-                <div className="weather-day" key={dia.data}>
-                  <b>{indice === 0 ? 'Hoje' : new Date(`${dia.data}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</b>
-                  <span>{iconeTempo(dia.codigo)}</span>
-                  <strong>{Math.round(dia.temperaturaMax)}° <small>{Math.round(dia.temperaturaMin)}°</small></strong>
-                  <em>☔ {Math.round(dia.probabilidade)}%</em>
-                </div>
-              ))}
-            </div>
+          <div className="radar-tv-clock" aria-label="Hora atual">
+            <span>HORA ATUAL</span>
+            <strong>{horaAtual.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</strong>
           </div>
-        )}
-      </section>
-      <div className="radar-layout">
-        <div className="radar-left-column">
-          <div className="radar-note-card radar-bilhete-large">
-            <div className="card-label"><span className="label-dot" /> LEMBRETE</div>
-            <div className="radar-reminder-heading">
-              <h2>Lembrete</h2>
-              {!tv && <button
-                type="button"
-                className="radar-reminder-create"
-                onClick={() => {
-                  setErroSalvamento('')
-                  setLembreteEditorAberto(true)
-                }}
-                aria-label="Criar lembrete"
-                aria-expanded={lembreteEditorAberto}
-                aria-controls="radar-reminder-editor"
-                data-testid="button-create-reminder"
-              >+</button>}
+         <button
+           className="radar-tv-launcher-btn"
+           type="button"
+           aria-pressed={tv}
+           onClick={() => { void alternarModoTv() }}
+         >
+           {tv ? '↙ Voltar ao app' : '⛶ Modo TV — Tela cheia'}
+         </button>
+       </div>
+        <div className="radar-dashboard">
+        <div className="radar-overview">
+        <section className="radar-weather radar-weather-compact radar-google-weather" aria-labelledby="radar-weather-title">
+          <div className="weather-google-header">
+            <div>
+              <span className="weather-google-kicker">CLIMA</span>
+              <h2 id="radar-weather-title">Ouro Branco</h2>
+              <p>Minas Gerais · atualização automática</p>
             </div>
-            <div className="radar-mini-list">
-              {lembretes.length === 0 ? (
-                <span>Nenhum lembrete cadastrado.</span>
-              ) : lembretes.map(l => (
-                <div className="radar-mini-item" key={l.id}>
-                   <b>{l.agentesEnvolvidos.length > 0 ? l.agentesEnvolvidos.join(', ') : l.criadoPor}</b>
-                  <span>{l.texto}</span>
-                   {l.criadoPor === agente && (
-                     <button onClick={() => remover(l.id)} title="Apagar meu lembrete" aria-label="Apagar meu lembrete">×</button>
-                   )}
-                </div>
-              ))}
-            </div>
-            {lembreteEditorAberto && <div id="radar-reminder-editor" className="radar-reminder-editor">
-             <textarea data-testid="input-reminder-text" value={textoLembrete} onChange={e => setTextoLembrete(e.target.value)} placeholder="Deixe um lembrete para a equipe..." rows={7} />
-             <fieldset className="radar-agentes-fieldset radar-lembrete-agentes">
-               <legend>Destinatários do lembrete (opcional)</legend>
-               <div className="radar-agentes-grid">
-                 {AGENTES.map(nome => (
-                   <label key={nome} className="radar-agente-option">
-                     <input type="checkbox" checked={agentesLembrete.includes(nome)} onChange={e => setAgentesLembrete(prev => e.target.checked ? [...prev, nome] : prev.filter(item => item !== nome))} />
-                     <span>{nome}</span>
-                   </label>
-                 ))}
-               </div>
-             </fieldset>
-             <button className="radar-add" data-testid="button-save-reminder" onClick={() => salvarRegistro('lembrete', textoLembrete, hoje(), horaAgora())} disabled={!textoLembrete.trim() || salvando}>{salvando ? 'Salvando...' : '+ Salvar lembrete'}</button>
-             <small>Sem destinatários, o lembrete fica visível no painel; quem o criou pode removê-lo.</small>
-            </div>}
-            {erroSalvamento && <p className="radar-save-error" role="alert">{erroSalvamento}</p>}
-          </div>
-          <div className="radar-right-column">
-          <div className="radar-calendar-card" ref={calendarioRef}>
-            <div className="calendar-top"><div><span>CALENDÁRIO DE NOTIFICAÇÕES</span><h2>{mes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</h2></div><div className="month-buttons"><button type="button" aria-label="Mês anterior" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}>‹</button><button type="button" aria-label="Próximo mês" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + 1, 1))}>›</button></div></div>
-            <div className="weekdays">{['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'].map(d => <span key={d}>{d}</span>)}</div>
-            <div className="calendar-grid">{dias.map(d => { const key = dataLocalISO(d); const count = notificacoes.filter(n => n.data === key && !n.concluido).length; return <button type="button" key={key} aria-label={`Criar notificação em ${dataBonita(key)}`} data-testid={`button-notification-date-${key}`} className={`${d.getMonth() !== mes.getMonth() ? 'other-month ' : ''}${key === dataSelecionada ? 'selected ' : ''}${key === hoje() ? 'today' : ''}`} onClick={() => { setDataSelecionada(key); setErroSalvamento(''); if (!tv) setEditorAberto(true) }}><span>{d.getDate()}</span>{count > 0 && <i>{count}</i>}</button> })}</div>
-            <div className="calendar-legend"><span><i className="legend-red" /> notificações</span></div>
-            {editorAberto && <form id="radar-calendar-editor" className="radar-calendar-editor" onSubmit={e => { e.preventDefault(); salvarRegistro('notificacao', textoNotificacao, dataSelecionada, hora) }}>
-              <strong>Notificar em {dataBonita(dataSelecionada)}</strong>
-               <div className="radar-date-notifications">
-                 <span className="radar-date-notifications-title">Notificações desta data</span>
-                 {notificacoesDaData.length === 0 ? (
-                   <span className="radar-date-notifications-empty">Nenhuma notificação cadastrada.</span>
-                 ) : notificacoesDaData.map(n => (
-                   <div className="radar-date-notification" key={n.id}>
-                     <div>
-                       <b>{n.hora} · {n.prioridade}</b>
-                       <span>{n.texto}</span>
-                       <small>Por {n.criadoPor}</small>
-                       {n.criadoPor === agente && <small className="radar-confirmacoes-status">
-                         {n.agentesEnvolvidos.map(nome => {
-                           const confirmacao = n.confirmacoesAgentes.find(item => item.agente === nome)
-                           return `${nome}: ${confirmacao ? confirmacao.confirmado ? 'vai ✅' : 'não vai ❌' : 'aguardando…'}`
-                         }).join(' · ')}
-                       </small>}
-                     </div>
-                     {n.criadoPor === agente && <button type="button" onClick={() => remover(n.id)} aria-label={`Remover notificação: ${n.texto}`} title="Remover notificação">×</button>}
-                   </div>
-                 ))}
-               </div>
-              <textarea value={textoNotificacao} onChange={e => setTextoNotificacao(e.target.value)} placeholder="Escreva a notificação..." rows={3} />
-               <div className="radar-form-row"><label>⏰ Hora<input type="time" value={hora} onChange={e => setHora(e.target.value)} /></label><label>Nível<select value={prioridade} onChange={e => setPrioridade(e.target.value as Prioridade)}>{Object.entries(prioridadeConfig).map(([key, c]) => <option key={key} value={key}>{c.emoji} {c.label}</option>)}</select></label></div>
-               <fieldset className="radar-agentes-fieldset">
-                 <legend>Agentes envolvidos (opcional; sem seleção, só aparece no Radar DC)</legend>
-                 <div className="radar-agentes-grid">
-                   {AGENTES.map(nome => (
-                     <label key={nome} className="radar-agente-option">
-                       <input
-                         type="checkbox"
-                         checked={agentesEnvolvidos.includes(nome)}
-                         onChange={e => setAgentesEnvolvidos(prev => e.target.checked ? [...prev, nome] : prev.filter(item => item !== nome))}
-                       />
-                       <span>{nome}</span>
-                     </label>
-                   ))}
-                 </div>
-               </fieldset>
-               <button className="radar-add" type="submit" disabled={!textoNotificacao.trim() || salvando}>{salvando ? 'Salvando...' : '+ Salvar notificação'}</button>
-              {erroSalvamento && <p className="radar-save-error" role="alert">{erroSalvamento}</p>}
-            </form>}
-          </div>
-          <section className="radar-activities">
-           <div className="radar-list-heading"><div><span className="card-label">REGISTROS OPERACIONAIS</span><h2>Atividades de {dataBonita(dataSelecionada)}</h2></div><strong>{atividades.checklists.length + atividades.checklistsFerramentas.length + atividades.ocorrencias.length} registro(s)</strong></div>
-          <div className="radar-activity-columns">
-            <div><h3>🚗 Checklists do dia</h3>{atividades.checklists.length === 0 ? <div className="radar-empty">Nenhum checklist de viatura registrado.</div> : atividades.checklists.map(c => <button className="radar-activity" key={c.id} onClick={() => disparar('dc:abrir-checklist', { id: c.id })}><b>{c.agente}{c.fotoCarregada && <strong className="radar-foto-carregada">Foto Carregada</strong>}</b><span className="radar-checklist-resumo">{c.hora} - {c.placa || 'Placa não informada'} - KM {c.km || 'não informado'} - ⛽ {c.nivelCombustivel || 'não informado'}</span><em>abrir ›</em></button>)}
-            <h3 className="radar-subtitulo-ferramentas">🧰 Checklists de ferramentas</h3>
-             {!resumosFerramental ? (
-              <div className="radar-empty">Nenhum checklist de ferramenta registrado.</div>
-            ) : (
-              <div className="radar-ferramental-resumos">
-                    <article className="radar-ferramental-resumo">
-                    <div className="radar-ferramental-cabecalho">
-                        <strong className="radar-ferramental-agentes">{resumosFerramental.agentes.join(' · ')}</strong>
-                       <b>Ferramental {resumosFerramental.tiposVerificados}/{resumosFerramental.totalTipos}</b>
-                    </div>
-                      {(resumosFerramental.boa + resumosFerramental.media + resumosFerramental.ruim) > 0 && (
-                       <div className="radar-ferramental-itens">
-                          <span className="radar-ferramental-boa">Boa - {percentual(resumosFerramental.boa, resumosFerramental.totalTipos)}%</span>
-                          <span className="radar-ferramental-media">Média - {percentual(resumosFerramental.media, resumosFerramental.totalTipos)}%</span>
-                          <span className="radar-ferramental-ruim">Ruim - {percentual(resumosFerramental.ruim, resumosFerramental.totalTipos)}%</span>
-                       </div>
-                     )}
-                    <div className="radar-ferramental-quantidade">
-                        Itens/litros conferidos: {resumosFerramental.itensConferidos}/{resumosFerramental.itensCadastrados}
-                    </div>
-                     {resumosFerramental.ferramentasRuins.length > 0 && (
-                      <div className="radar-ferramental-alerta radar-ferramental-alerta-ruim">
-                         <strong>Ruim:</strong> {resumosFerramental.ferramentasRuins.join(', ')}
-                      </div>
-                    )}
-                     {resumosFerramental.faltantes.length > 0 && (
-                      <div className="radar-ferramental-alerta radar-ferramental-alerta-falta">
-                         <strong>Faltando:</strong> {resumosFerramental.faltantes.join(', ')}
-                      </div>
-                    )}
-                     {resumosFerramental.serragemAlertas.length > 0 && (
-                      <div className="radar-ferramental-alerta radar-ferramental-alerta-serragem">
-                         <strong>⚠️ Serragem:</strong> {resumosFerramental.serragemAlertas.join(', ')}
-                      </div>
-                    )}
-                      {resumosFerramental.litrosAlertas.length > 0 && (
-                       <div className="radar-ferramental-alerta radar-ferramental-alerta-serragem">
-                          <strong>⚠️ Estoque baixo:</strong> {resumosFerramental.litrosAlertas.join(', ')}
-                       </div>
-                     )}
-                     {resumosFerramental.semChecklist.length > 0 && (
-                      <div className="radar-ferramental-alerta radar-ferramental-alerta-pendente">
-                         <strong>Sem checklist:</strong> {resumosFerramental.semChecklist.slice(0, 3).join(', ')}
-                         {resumosFerramental.semChecklist.length > 3 ? ` e mais ${resumosFerramental.semChecklist.length - 3}` : ''}
-                      </div>
-                    )}
-                  </article>
+            <div className="weather-google-header-actions">
+              <div className="radar-clock" aria-label="Hora atual">
+                <span>HORA ATUAL</span>
+                <strong>{horaAtual.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</strong>
               </div>
-            )}
+              <span className="weather-google-menu" aria-hidden="true">⋮</span>
             </div>
-            <div><h3>⚠️ Ocorrências do dia</h3>{atividades.ocorrencias.length === 0 ? <div className="radar-empty">Nenhuma ocorrência registrada.</div> : atividades.ocorrencias.map(o => <button className="radar-activity" key={o.id} onClick={() => disparar('dc:abrir-ocorrencia', { id: o.id })}><b>{o.agente}</b><span>{o.hora} · {o.natureza || 'Natureza não informada'}</span><small>{o.endereco || 'Endereço não informado'}</small><em>abrir ›</em></button>)}</div>
           </div>
-          </section>
+          {erroTempo && <p className="radar-weather-error" role="alert">{erroTempo}</p>}
+          {!tempo && !erroTempo && <p className="radar-weather-loading">Carregando previsão...</p>}
+          {tempo && (
+            <>
+              <div className="weather-google-body">
+                <div className="weather-google-location">
+                  <span className="weather-google-kicker">CLIMA</span>
+                  <h2>Ouro Branco</h2>
+                  <p>Minas Gerais</p>
+                  <div className="weather-google-current">
+                    <div className="weather-google-temperature">
+                      <span>Agora</span>
+                      <strong>{Math.round(tempo.atual.temperatura)}°</strong>
+                    </div>
+                    <div className="weather-google-current-icon" aria-label={nomesTempo[tempo.atual.codigo] || 'Condição variável'}>
+                      <span className="weather-google-sun" />
+                      <span className="weather-google-cloud">{iconeTempo(tempo.atual.codigo)}</span>
+                    </div>
+                    <div className="weather-google-summary">
+                      <strong>{nomesTempo[tempo.atual.codigo] || 'Condição variável'}</strong>
+                      <span>Umidade {Math.round(tempo.atual.umidade)}% · vento {Math.round(tempo.atual.vento)} km/h</span>
+                    </div>
+                  </div>
+                  <div className="weather-google-metrics" aria-label="Resumo das condições atuais">
+                    <span>🌧️ Chuva <b>{tempo.atual.chuva.toFixed(1)} mm</b></span>
+                    <span>☔ Prob. hoje <b>{tempo.dias[0]?.probabilidade ?? 0}%</b></span>
+                    <span>💨 Rajadas <b>{Math.round(tempo.atual.rajada)} km/h</b></span>
+                  </div>
+                </div>
+                <div className="weather-google-current-column">
+                   <div
+                     className={`weather-google-frog-scene weather-scene-${cenaClima?.tipo ?? 'ensolarado'} ${estadosClima.map(estado => `weather-state-${estado}`).join(' ')}`}
+                     style={{ backgroundImage: `url(${cenaClima?.caminho ?? '/weather-scenes/ensolarado.jpg'})` }}
+                     aria-label={`Sapinho em cenário ${cenaClima?.nome.toLowerCase() ?? 'ensolarado'}`}
+                   />
+                </div>
+                <div className="weather-google-forecast-column">
+                  <div className="weather-google-hours-heading">
+                    <strong>Previsão por hora</strong>
+                    <span>Próximas horas</span>
+                  </div>
+                  <div className="weather-google-hourly" aria-label="Previsão do tempo nas próximas horas">
+                    {tempo.horas.slice(0, 7).map((hora, indice) => (
+                      <div className="weather-google-hour" key={hora.time} title={`${nomesTempo[hora.codigo] || 'Condição variável'} · ${hora.probabilidade}% de chuva`}>
+                        <strong>{indice === 0 ? 'Agora' : new Date(hora.time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong>
+                        <span className="weather-google-hour-temperature">{Math.round(hora.temperatura)}°</span>
+                        <span className="weather-google-hour-icon">{iconeTempo(hora.codigo, hora.time)}</span>
+                        <small>{Math.round(hora.probabilidade)}%</small>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="weather-google-days-heading">
+                    <strong>Previsão para os próximos dias</strong>
+                  </div>
+                  <div className="weather-google-days" aria-label="Previsão do tempo para os próximos dias">
+                    {tempo.dias.map((dia, indice) => (
+                      <div className={`weather-google-day ${indice === 0 ? 'weather-google-day-today' : ''}`} key={dia.data}>
+                        <b>{indice === 0 ? 'Hoje' : new Date(`${dia.data}T12:00:00`).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</b>
+                        <span>{iconeTempo(dia.codigo)}</span>
+                        <strong>{Math.round(dia.temperaturaMax)}° <small>{Math.round(dia.temperaturaMin)}°</small></strong>
+                        <em>☔ {Math.round(dia.probabilidade)}%</em>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </section>
+       <div className="radar-calendar-card" ref={calendarioRef}>
+         <div className="calendar-top"><div><span>CALENDÁRIO DE NOTIFICAÇÕES</span><h2>{mes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</h2></div><div className="month-buttons"><button type="button" aria-label="Mês anterior" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() - 1, 1))}>‹</button><button type="button" aria-label="Próximo mês" onClick={() => setMes(new Date(mes.getFullYear(), mes.getMonth() + 1, 1))}>›</button></div></div>
+         <div className="weekdays">{['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'].map(d => <span key={d}>{d}</span>)}</div>
+         <div className="calendar-grid">{dias.map(d => { const key = dataLocalISO(d); const count = notificacoes.filter(n => n.data === key && !n.concluido).length; return <button type="button" key={key} aria-label={dataBonita(key)} className={`${d.getMonth() !== mes.getMonth() ? 'other-month ' : ''}${key === dataSelecionada ? 'selected ' : ''}${key === hoje() ? 'today' : ''}`} onClick={() => { setRegistroEmEdicao(null); setDataSelecionada(key); setEditorAberto(true) }}><span>{d.getDate()}</span>{count > 0 && <i>{count}</i>}</button> })}</div>
+         <div className="calendar-legend"><span><i className="legend-red" /> notificações</span></div>
+         {editorAberto && <form className="radar-calendar-editor" onSubmit={e => { e.preventDefault(); salvarRegistro('notificacao', textoNotificacao, dataSelecionada, hora) }}>
+           <strong>{registroEmEdicao ? 'Editar notificação' : `Notificar em ${dataBonita(dataSelecionada)}`}</strong>
+           <div className="radar-date-notifications">
+             <span className="radar-date-notifications-title">Notificações desta data</span>
+             {notificacoesDaData.length === 0 ? (
+               <span className="radar-date-notifications-empty">Nenhuma notificação cadastrada.</span>
+             ) : notificacoesDaData.map(n => (
+               <div className="radar-date-notification" key={n.id}>
+                 <div>
+                   <b>{n.hora} · {n.prioridade}</b>
+                   <span>{n.texto}</span>
+                   <small>Por {n.criadoPor}</small>
+                   {agentePodeGerenciarCriacao(n.criadoPor, agente) && <small className="radar-confirmacoes-status">
+                     {n.agentesEnvolvidos.map(nome => {
+                       const confirmacao = n.confirmacoesAgentes.find(item => item.agente === nome)
+                       return `${nome}: ${confirmacao ? confirmacao.confirmado ? 'vai ✅' : 'não vai ❌' : 'aguardando…'}`
+                     }).join(' · ')}
+                   </small>}
+                 </div>
+                 {agentePodeGerenciarCriacao(n.criadoPor, agente) && (
+                   <div className="radar-record-actions">
+                     <button type="button" onClick={() => iniciarEdicaoRegistro(n)} aria-label={`Editar notificação: ${n.texto}`} title="Editar notificação">✏️</button>
+                     <button type="button" onClick={() => setLembreteParaApagar(n)} aria-label={`Remover notificação: ${n.texto}`} title="Remover notificação">×</button>
+                   </div>
+                 )}
+               </div>
+             ))}
+           </div>
+           <textarea value={textoNotificacao} onChange={e => setTextoNotificacao(e.target.value)} placeholder="Escreva a notificação..." rows={3} />
+           <div className="radar-form-row"><label>⏰ Hora<input type="time" value={hora} onChange={e => setHora(e.target.value)} /></label><label>Nível<select value={prioridade} onChange={e => setPrioridade(e.target.value as Prioridade)}>{Object.entries(prioridadeConfig).map(([key, c]) => <option key={key} value={key}>{c.emoji} {c.label}</option>)}</select></label></div>
+           <fieldset className="radar-agentes-fieldset">
+             <legend>Agentes envolvidos</legend>
+             <div className="radar-agentes-grid">
+               {AGENTES.map(nome => (
+                 <label key={nome} className="radar-agente-option">
+                   <input
+                     type="checkbox"
+                     checked={agentesEnvolvidos.includes(nome)}
+                     onChange={e => setAgentesEnvolvidos(prev => e.target.checked ? [...prev, nome] : prev.filter(item => item !== nome))}
+                   />
+                   <span>{nome}</span>
+                 </label>
+               ))}
+             </div>
+           </fieldset>
+           <button className="radar-add" type="submit" disabled={!textoNotificacao.trim() || salvando}>{salvando ? 'Salvando...' : registroEmEdicao ? 'Salvar alterações' : '+ Colocar no Radar DC'}</button>
+           {registroEmEdicao && <button type="button" className="radar-cancel-edit" onClick={() => { setRegistroEmEdicao(null); setTextoNotificacao(''); setAgentesEnvolvidos([]); setEditorAberto(false) }}>Cancelar edição</button>}
+           {erroSalvamento && <p className="radar-save-error" role="alert">{erroSalvamento}</p>}
+         </form>}
+       </div>
+       </div>
+      <div className="radar-layout">
+         <div className="radar-note-card radar-bilhete-large">
+          <div className="radar-tv-reminder-panel">
+          <div className="radar-note-heading">
+            <div className="card-label"><span className="label-dot" /> LEMBRETE</div>
+            <button
+              type="button"
+              className={`radar-reminder-trigger${lembreteEditorAberto ? ' ativo' : ''}`}
+              onClick={() => setLembreteEditorAberto(prev => !prev)}
+              aria-expanded={lembreteEditorAberto}
+            >
+              {lembreteEditorAberto ? 'Fechar lembrete' : 'Lembrete'} {lembreteEditorAberto ? '×' : '+'}
+            </button>
           </div>
+          <div className="radar-mini-list">
+            {lembretes.length === 0 ? (
+              <span>Nenhum lembrete criado.</span>
+           ) : lembretes.map(l => (
+              <div className="radar-mini-item" key={l.id}>
+                 <b>{l.criadoPor === agente ? 'Criado por você' : `Criado por ${l.criadoPor}`}</b>
+                <span>{l.texto}</span>
+                 <div className="radar-reminder-statuses" aria-label="Status de visualização do lembrete">
+                   {l.agentesEnvolvidos.map(nome => {
+                     const ciente = l.confirmacoesAgentes.some(item => item.agente === nome && item.confirmado)
+                     return <small key={nome}><strong>{nome}</strong>: <em className={ciente ? 'radar-reminder-read' : 'radar-reminder-unread'}>{ciente ? 'Ciente' : 'Não visualizou'}</em></small>
+                   })}
+                 </div>
+                 {l.agentesEnvolvidos.includes(agente) && !l.confirmacoesAgentes.some(item => item.agente === agente && item.confirmado) && (
+                   <button
+                     type="button"
+                     className="radar-reminder-ack"
+                     onClick={() => marcarLembreteCiente(l)}
+                     disabled={marcandoCienteId === l.id}
+                   >
+                     {marcandoCienteId === l.id ? 'Salvando…' : 'Marcar Ciente'}
+                   </button>
+                 )}
+                 {agentePodeGerenciarCriacao(l.criadoPor, agente) && (
+                   <div className="radar-record-actions">
+                     <button type="button" onClick={() => iniciarEdicaoRegistro(l)} title="Editar lembrete" aria-label="Editar lembrete">✏️</button>
+                     <button type="button" onClick={() => setLembreteParaApagar(l)} title="Apagar lembrete" aria-label="Apagar lembrete">×</button>
+                   </div>
+                 )}
+              </div>
+            ))}
+          </div>
+          {lembreteEditorAberto && (
+            <div className="radar-reminder-editor">
+              <textarea
+                value={textoLembrete}
+                onChange={e => setTextoLembrete(e.target.value)}
+                placeholder="Anote um lembrete..."
+                rows={2}
+                aria-label="Texto do lembrete"
+              />
+              <fieldset className="radar-agentes-fieldset radar-lembrete-agentes">
+                <legend>Agentes que receberão o lembrete</legend>
+                <div className="radar-agentes-grid">
+                  {AGENTES.map(nome => (
+                    <label key={nome} className="radar-agente-option">
+                      <input type="checkbox" checked={agentesLembrete.includes(nome)} onChange={e => setAgentesLembrete(prev => e.target.checked ? [...prev, nome] : prev.filter(item => item !== nome))} />
+                      <span>{nome}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <button className="radar-add" onClick={() => salvarRegistro('lembrete', textoLembrete, registroEmEdicao?.data || hoje(), registroEmEdicao?.hora || horaAgora())} disabled={!textoLembrete.trim() || salvando}>{salvando ? 'Salvando...' : registroEmEdicao ? 'Salvar alterações' : '+ Salvar lembrete'}</button>
+              {registroEmEdicao && <button type="button" className="radar-cancel-edit" onClick={() => { setRegistroEmEdicao(null); setTextoLembrete(''); setAgentesLembrete([]); setLembreteEditorAberto(false) }}>Cancelar edição</button>}
+              {erroSalvamento && <p className="radar-save-error" role="alert">{erroSalvamento}</p>}
+            </div>
+          )}
+          </div>
+          {!lembreteEditorAberto && (
+            <section className="radar-cnl-inline" aria-labelledby="radar-nivel-rio-titulo">
+              <div className="radar-cnl-card-heading">
+                <div><span className="card-label">MONITORAMENTO HIDROLÓGICO</span><h2 id="radar-nivel-rio-titulo">Nível do Rio Bananeiras</h2></div>
+                <span className="radar-cnl-live">CEMADEN · ao vivo</span>
+              </div>
+              {dadosCNL ? (
+                <div className="radar-tv-hydro-panels">
+                  <section className="radar-tv-hydro-panel radar-tv-hydro-level">
+                    <h3 className="radar-tv-hydro-title">Nível do Rio Bananeiras</h3>
+                    <GraficoNivel pontos={dadosCNL.serieNivel} estacao={dadosCNL.estacao} mostrarTooltip={false} mostrarFonte={false} mostrarLeituraAtual />
+                  </section>
+                  <section className="radar-tv-hydro-panel radar-tv-hydro-rain">
+                    <ChuvaCentro24h
+                      estacao={dadosCNL.estacaoChuvaCentro}
+                      pontos={dadosCNL.serieChuvaCentro || []}
+                    />
+                    <details className="radar-cnl-diaria-detalhe">
+                      <summary className="radar-precipitacao-resumo" aria-label="Precipitação atual por estação">
+                        {resumoPrecipitacao || 'Consultando precipitações...'}
+                      </summary>
+                      {diasPrecipitacao.length > 0 && (
+                        <div className="radar-precipitacao-scroll">
+                          <table className="radar-precipitacao-table radar-precipitacao-diaria-table">
+                            <thead>
+                              <tr>
+                                <th>Estação</th>
+                                {diasPrecipitacao.map(dia => <th key={dia}>{dia.split('-').reverse().slice(0, 2).join('/')}</th>)}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dadosCNL.estacoes.map(estacao => (
+                                <tr key={estacao.id}>
+                                  <th scope="row">
+                                    <strong>{estacao.nome || `Estação ${estacao.id}`}</strong>
+                                    <small>{estacao.codigo || `CEMADEN ${estacao.id}`}</small>
+                                  </th>
+                                  {diasPrecipitacao.map(dia => {
+                                    const leitura = estacao.precipitacaoDiaria.find(item => item.data === dia)
+                                    return <td key={dia}>{formatarMmRadar(leitura?.total)}</td>
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </details>
+                  </section>
+                </div>
+              ) : (
+                <div className="radar-tv-hydro-panels radar-tv-hydro-loading">
+                  <section className="radar-tv-hydro-panel radar-tv-hydro-level">
+                    <h3 className="radar-tv-hydro-title">Nível do Rio Bananeiras</h3>
+                    <p className="radar-cnl-loading">Consultando a estação Centro…</p>
+                  </section>
+                  <section className="radar-tv-hydro-panel radar-tv-hydro-rain">
+                    <h3 className="radar-tv-hydro-title">Chuva acumulada · últimas 24 horas</h3>
+                    <p className="radar-cnl-loading">Consultando os pluviômetros…</p>
+                  </section>
+                </div>
+              )}
+            </section>
+          )}
         </div>
-        <div className="radar-map-column">
-          <RadarMapaRisco
-            modoTV={tv}
-            areas={areasRisco}
-            precipitacao24h={precipitacao24hAreas}
-            carregando={carregandoAreasRisco}
-            carregandoChuva={carregandoChuvaAreas}
-            erro={erroPrevisaoAreas || erroAreasRisco}
-            salvando={salvandoAreaRisco}
-            onCriar={criarAreaMonitorada}
-            onAtualizar={atualizarAreaMonitorada}
-            onExcluir={excluirAreaMonitorada}
-            onAtualizarChuva={() => void atualizarPrevisaoAreas()}
-          />
+
+        <div className="radar-right-column">
+        <section className="radar-activities">
+         <div className="radar-list-heading"><div><span className="card-label">REGISTROS OPERACIONAIS</span><h2>Atividades de {dataBonita(dataSelecionada)}</h2></div><strong>{atividades.checklists.length + atividades.checklistsFerramentas.length + atividades.ocorrencias.length} registro(s)</strong></div>
+        <div className="radar-activity-columns">
+          <div><h3>🚗 Checklists do dia</h3>{atividades.checklists.length === 0 ? <div className="radar-empty">Nenhum checklist de viatura registrado.</div> : atividades.checklists.map(c => <button className="radar-activity" key={c.id} onClick={() => disparar('dc:abrir-checklist', { id: c.id })}><b>{c.agente}{c.fotoCarregada && <strong className="radar-foto-carregada">Foto Carregada</strong>}</b><span className="radar-checklist-resumo">{c.hora} - {c.placa || 'Placa não informada'} - KM {c.km || 'não informado'} - ⛽ {c.nivelCombustivel || 'não informado'}</span><em>abrir ›</em></button>)}
+          <h3 className="radar-subtitulo-ferramentas">🧰 Checklists de ferramentas</h3>
+          {resumosFerramental.length === 0 ? (
+            <div className="radar-empty">Nenhum checklist de ferramenta registrado.</div>
+          ) : (
+            <div className="radar-ferramental-resumos">
+              {resumosFerramental.map(resumo => (
+                <article className="radar-ferramental-resumo" key={resumo.agente}>
+                  <div className="radar-ferramental-cabecalho">
+                    <strong>{resumo.agente}</strong>
+                    <b>Ferramental {resumo.tiposVerificados}/{resumo.totalTipos}</b>
+                  </div>
+                   {(resumo.boa + resumo.media + resumo.ruim) > 0 && (
+                     <div className="radar-ferramental-itens">
+                       <span className="radar-ferramental-boa">Boa - {percentual(resumo.boa, resumo.totalTipos)}%</span>
+                       <span className="radar-ferramental-media">Média - {percentual(resumo.media, resumo.totalTipos)}%</span>
+                       <span className="radar-ferramental-ruim">Ruim - {percentual(resumo.ruim, resumo.totalTipos)}%</span>
+                     </div>
+                   )}
+                  <div className="radar-ferramental-quantidade">
+                     Itens/litros conferidos: {resumo.itensConferidos}/{resumo.itensCadastrados}
+                  </div>
+                  {resumo.ferramentasRuins.length > 0 && (
+                    <div className="radar-ferramental-alerta radar-ferramental-alerta-ruim">
+                      <strong>Ruim:</strong> {resumo.ferramentasRuins.join(', ')}
+                    </div>
+                  )}
+                  {resumo.faltantes.length > 0 && (
+                    <div className="radar-ferramental-alerta radar-ferramental-alerta-falta">
+                      <strong>Faltando:</strong> {resumo.faltantes.join(', ')}
+                    </div>
+                  )}
+                  {resumo.serragemAlertas.length > 0 && (
+                    <div className="radar-ferramental-alerta radar-ferramental-alerta-serragem">
+                      <strong>⚠️ Serragem:</strong> {resumo.serragemAlertas.join(', ')}
+                    </div>
+                  )}
+                   {resumo.litrosAlertas.length > 0 && (
+                     <div className="radar-ferramental-alerta radar-ferramental-alerta-serragem">
+                       <strong>⚠️ Estoque baixo:</strong> {resumo.litrosAlertas.join(', ')}
+                     </div>
+                   )}
+                  {resumo.semChecklist.length > 0 && (
+                    <div className="radar-ferramental-alerta radar-ferramental-alerta-pendente">
+                      <strong>Sem checklist:</strong> {resumo.semChecklist.slice(0, 3).join(', ')}
+                      {resumo.semChecklist.length > 3 ? ` e mais ${resumo.semChecklist.length - 3}` : ''}
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+          </div>
+          <div><h3>⚠️ Ocorrências do dia</h3>{atividades.ocorrencias.length === 0 ? <div className="radar-empty">Nenhuma ocorrência registrada.</div> : atividades.ocorrencias.map(o => <button className="radar-activity" key={o.id} onClick={() => disparar('dc:abrir-ocorrencia', { id: o.id })}><b>{o.agente}</b><span>{o.hora} · {o.natureza || 'Natureza não informada'}</span><small>{o.endereco || 'Endereço não informado'}</small><em>abrir ›</em></button>)}</div>
+        </div>
+         </section>
+          <RadarMapaTempoReal tv={tv} dataOcorrencias={dataSelecionada} />
+       {lembreteParaApagar && (
+         <ModalSenha
+           titulo={`Apagar lembrete de ${lembreteParaApagar.criadoPor}`}
+           senhaCorreta={getSenhaAgente(lembreteParaApagar.criadoPor) || ''}
+           onCancelar={() => setLembreteParaApagar(null)}
+           onConfirmar={(senha) => { void remover(lembreteParaApagar, senha) }}
+         />
+       )}
         </div>
       </div>
+       </div>
       <div className="radar-ticker">
         <span>RADAR DC</span>
         <div className="radar-ticker-viewport">
           {(() => {
-            const filaTicker = proximasNotificacoes
+             const filaTicker = notificacoesDoRadar
             return filaTicker.length > 0 ? (
-              <div className="radar-ticker-track" style={{ '--ticker-duration': `${Math.max(12, filaTicker.length * 4.2)}s` } as React.CSSProperties}>
+               <div className="radar-ticker-track" style={{ '--ticker-duration': `${Math.max(8 / RADAR_TICKER_SPEED, (filaTicker.length * 2.8) / RADAR_TICKER_SPEED)}s` } as React.CSSProperties}>
                 {[0, 1].map(copia => (
                   <div className="radar-ticker-group" key={copia} aria-hidden={copia === 1}>
                     {filaTicker.map(n => <b key={`${copia}-${n.id}`}>● {dataBonita(n.data)} · {n.texto}</b>)}

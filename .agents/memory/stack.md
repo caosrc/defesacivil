@@ -48,3 +48,10 @@ description: Stack técnica, configuração do ambiente Replit, e decisões de b
 **Why:** O ambiente pode servir leituras e gravações do Radar por armazenamentos diferentes conforme as variáveis disponíveis; escolher um único banco pode retornar sucesso sem atualizar a fila exibida aos agentes.
 
 **How to apply:** Ao alterar mutações ou notificações do Radar, preserve a coerência entre criação, confirmação, polling, WebSocket e push nos dois caminhos de persistência.
+
+## Importação de layout do Radar DC
+- Ao trazer a interface do Radar de outro projeto, mantenha a conexão Supabase e os fluxos de dados deste app; não substitua a origem das ocorrências, checklists ou lembretes.
+
+**Why:** O usuário pediu que interfaces importadas preservem os dados e as relações já existentes neste app.
+
+**How to apply:** Reutilize os clientes e adaptadores locais; confirme o nome e o formato de cada tabela antes de integrar consultas ou gravações do projeto de origem.
