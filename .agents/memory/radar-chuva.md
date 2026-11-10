@@ -21,7 +21,9 @@ Para reproduzir a evolução das áreas de chuva, usar a sequência `radar.past`
 
 **Why:** O endpoint entrega metadados de vários quadros, mas usar apenas o último quadro faz a chuva parecer desaparecer e não mostra o deslocamento das células.
 
-**How to apply:** Reiniciar a sequência ao atualizar os metadados, exibir horário e tipo de cada quadro, e manter a grade Open-Meteo como complemento quando houver poucos pixels de radar no município.
+**How to apply:** Reiniciar a sequência ao atualizar os metadados, exibir horário e tipo de cada quadro, e manter a grade Open-Meteo como complemento quando houver poucos pixels de radar no município. Normalize `time` e `frameTime` ao consumir quadros e use o quadro mais recente como reserva.
+
+**Why:** O endpoint local envia `frameTime`, enquanto componentes de tile podem esperar `time`; uma lista não vazia com nomes diferentes elimina todos os quadros válidos e impede até o fallback.
 
 ## Nuvens GOES e controle da precipitação
 Mantenha GOES e RainViewer como camadas independentes: “Nuvens GOES” mostra apenas nuvens de satélite; “Chuva” mostra os ecos de precipitação observada. No Radar DC, RainViewer começa ativo e GOES desligado; na aba Mapa, ambos começam desligados.

@@ -2,7 +2,8 @@ import { useMemo } from 'react'
 import { TileLayer } from 'react-leaflet'
 
 export type QuadroRadarChuva = {
-  time: number
+  time?: number
+  frameTime?: number
   path: string
 }
 
@@ -22,15 +23,23 @@ export default function RadarChuvaAnimado({
   maxZoom,
 }: Props) {
   const quadroAtual = useMemo(() => {
-    const fonte = quadros.length > 0 ? quadros : quadroReserva ? [quadroReserva] : []
-    return fonte
-      .filter(quadro =>
-        Number.isFinite(quadro.time) &&
-        typeof quadro.path === 'string' &&
-        quadro.path.startsWith('/v2/radar/'),
-      )
+    const normalizar = (quadro: QuadroRadarChuva | null | undefined) => {
+      const time = Number(quadro?.time ?? quadro?.frameTime)
+      if (
+        !quadro ||
+        !Number.isFinite(time) ||
+        time <= 0 ||
+        typeof quadro.path !== 'string' ||
+        !quadro.path.startsWith('/v2/radar/')
+      ) return null
+      return { time, path: quadro.path }
+    }
+
+    const validos = quadros
+      .map(normalizar)
+      .filter((quadro): quadro is { time: number; path: string } => quadro !== null)
       .sort((a, b) => a.time - b.time)
-      .at(-1)
+    return validos.at(-1) || normalizar(quadroReserva)
   }, [quadros, quadroReserva])
   if (!host || !quadroAtual) return null
 
