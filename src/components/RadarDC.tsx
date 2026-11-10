@@ -460,7 +460,7 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
   const [mostrarChuva, setMostrarChuva] = useState(true)
   const [mostrarTemperatura, setMostrarTemperatura] = useState(true)
   const [mostrarTrovoadas, setMostrarTrovoadas] = useState(true)
-  const [mostrarNuvens, setMostrarNuvens] = useState(true)
+  const [mostrarNuvens, setMostrarNuvens] = useState(false)
   const [zoomMapa, setZoomMapa] = useState(RADAR_MAP_ZOOM)
   const [painelAreasRiscoHost, setPainelAreasRiscoHost] = useState<HTMLDivElement | null>(null)
   const mapaLeafletRef = useRef<LeafletMap | null>(null)
@@ -868,7 +868,6 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
           onClick={() => {
             const proximoEstado = !mostrarChuva
             setMostrarChuva(proximoEstado)
-            setMostrarNuvens(proximoEstado)
           }}
           aria-pressed={mostrarChuva}
         >

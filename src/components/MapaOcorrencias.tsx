@@ -579,6 +579,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [legendaAberta, setLegendaAberta] = useState(false)
   const [camadaMapa, setCamadaMapa] = useState<CamadaMapa>('padrao')
   const [mostrarChuva, setMostrarChuva] = useState(false)
+  const [mostrarNuvens, setMostrarNuvens] = useState(false)
   const [erroCamadasClima, setErroCamadasClima] = useState('')
   const [camadaMonitoramento, setCamadaMonitoramento] = useState<CamadaMonitoramentoId>(null)
   const [painelMonitoramentoAberto, setPainelMonitoramentoAberto] = useState(false)
@@ -1331,7 +1332,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         <RadarWeatherLayers
           mostrarChuva={mostrarChuva}
           mostrarSintetico={false}
-          mostrarNuvens={mostrarChuva}
+          mostrarNuvens={mostrarNuvens}
           satelite={false}
           renderizarBase={false}
           onErro={receberErroCamadasClima}
@@ -1619,9 +1620,21 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           }}
           aria-pressed={mostrarChuva}
           data-testid="toggle-chuva-mapa"
-          title="Mostrar a chuva observada, as nuvens e a temperatura de Ouro Branco"
+          title="Mostrar precipitação observada pelo radar RainViewer"
         >
           🌧️ Chuva
+        </button>
+        <button
+          className={`mapa-camada-btn ${mostrarNuvens ? 'ativo' : ''}`}
+          onClick={() => {
+            setMostrarNuvens(value => !value)
+            setErroCamadasClima('')
+          }}
+          aria-pressed={mostrarNuvens}
+          data-testid="toggle-nuvens-goes-mapa"
+          title="Mostrar somente a imagem de nuvens do satélite GOES"
+        >
+          ☁️ Nuvens GOES
         </button>
         <button
           className={`mapa-camada-btn ${mostrarMateriais ? 'ativo' : ''}`}
