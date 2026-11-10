@@ -896,36 +896,37 @@ input, select, textarea { font-family: inherit; }
   font-size: 0.68rem;
 }
 
-.mapa-radar-clima-card {
-  position: absolute;
-  top: auto;
-  bottom: 108px;
-  right: 12px;
-  z-index: 500;
-  width: min(210px, calc(100vw - 24px));
-  padding: .65rem .75rem;
-  border: 1px solid rgba(148, 163, 184, .55);
-  border-radius: 12px;
-  color: #172b3c;
-  background: rgba(255, 255, 255, .96);
-  box-shadow: 0 3px 14px rgba(0, 0, 0, .2);
-  pointer-events: none;
+.leaflet-div-icon.mapa-temperatura-icon { border: 0; background: transparent; }
+.mapa-temperatura-chip {
+  display: flex;
+  width: 160px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: .48rem;
+  border: 2px solid #fff;
+  border-radius: 24px;
+  color: #17324b;
+  background: rgba(255, 255, 255, .97);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .32);
+  white-space: nowrap;
 }
-.mapa-radar-clima-card-cabecalho { display: flex; align-items: center; gap: .5rem; }
-.mapa-radar-clima-card-cabecalho > span { font-size: 1.2rem; }
-.mapa-radar-clima-card-cabecalho strong,
-.mapa-radar-clima-card-cabecalho small { display: block; }
-.mapa-radar-clima-card-cabecalho strong { font-size: .76rem; }
-.mapa-radar-clima-card-cabecalho small,
-.mapa-radar-clima-card-fonte { color: #64748b; font-size: .59rem; }
-.mapa-radar-clima-card-dados { display: flex; align-items: baseline; justify-content: space-between; gap: .4rem; margin-top: .45rem; }
-.mapa-radar-clima-card-dados strong { color: #0f4c81; font-size: 1.55rem; font-weight: 750; letter-spacing: -.04em; }
-.mapa-radar-clima-card-dados span { color: #475569; font-size: .6rem; text-align: right; }
-.mapa-radar-clima-card-fonte { display: block; margin-top: .25rem; }
-.mapa-radar-clima-card-status,
-.mapa-radar-clima-card-erro { margin: .4rem 0 0; font-size: .62rem; line-height: 1.35; }
-.mapa-radar-clima-card-status { color: #64748b; }
-.mapa-radar-clima-card-erro { color: #b42318; }
+.mapa-temperatura-chip-local { font-size: .7rem; font-weight: 750; }
+.mapa-temperatura-chip-valor { color: #0f4c81; font-size: 1rem; font-weight: 850; }
+.mapa-chuva-erro {
+  position: absolute;
+  right: 12px;
+  bottom: 108px;
+  z-index: 500;
+  max-width: min(280px, calc(100vw - 24px));
+  border: 1px solid #f2b8b5;
+  border-radius: 8px;
+  padding: .45rem .65rem;
+  color: #8b1d18;
+  background: #fff4f2;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .16);
+  font-size: .68rem;
+}
 
 /* ─── Submenu de filtro de tipos de ocorrências ─── */
 .mapa-ocorr-wrap {
@@ -1219,7 +1220,7 @@ input, select, textarea { font-family: inherit; }
   .mapa-legenda {
     top: 94px;
   }
-  .mapa-radar-clima-card { right: 8px; width: min(190px, calc(100vw - 16px)); }
+  .mapa-chuva-erro { right: 8px; bottom: 108px; }
 }
 .mapa-legenda-header {
   display: flex;

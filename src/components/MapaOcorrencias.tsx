@@ -519,14 +519,12 @@ const MAX_TRILHA = 300
 const ignorarAtualizacaoRadar = () => {}
 
 type TempoAtualMapa = {
-  atualizadoEm?: string
   atual?: {
     temperatura?: number | null
-    precipitacao?: number | null
   } | null
 }
 
-function CartaoClimaMapa({ ativo, erroCamadas }: { ativo: boolean; erroCamadas: string }) {
+function TemperaturaMapaMarker({ ativo }: { ativo: boolean }) {
   const [tempo, setTempo] = useState<TempoAtualMapa | null>(null)
   const [carregando, setCarregando] = useState(false)
   const [erro, setErro] = useState('')
@@ -564,42 +562,30 @@ function CartaoClimaMapa({ ativo, erroCamadas }: { ativo: boolean; erroCamadas: 
     }
   }, [ativo])
 
+  const temperatura = tempo?.atual?.temperatura
+  const temperaturaValida = typeof temperatura === 'number' && Number.isFinite(temperatura)
+  const textoTemperatura = temperaturaValida
+    ? `${Math.round(temperatura)}°C`
+    : carregando
+      ? '…'
+      : erro
+        ? 'Indisponível'
+        : '—'
+  const descricaoAcessivel = temperaturaValida
+    ? `Temperatura atual de Ouro Branco: ${Math.round(temperatura)} graus Celsius`
+    : erro
+      ? 'Temperatura atual de Ouro Branco indisponível'
+      : 'Carregando temperatura atual de Ouro Branco'
+  const iconeTemperatura = useMemo(() => L.divIcon({
+    className: 'mapa-temperatura-icon',
+    html: `<div class="mapa-temperatura-chip" role="status" aria-label="${descricaoAcessivel}" data-testid="mapa-temperatura-atual"><span class="mapa-temperatura-chip-local">Ouro Branco</span><strong class="mapa-temperatura-chip-valor">${textoTemperatura}</strong></div>`,
+    iconSize: [160, 44],
+    iconAnchor: [80, 22],
+  }), [descricaoAcessivel, textoTemperatura])
+
   if (!ativo) return null
 
-  const temperatura = tempo?.atual?.temperatura
-  const chuva = tempo?.atual?.precipitacao
-  return (
-    <section className="mapa-radar-clima-card" aria-label="Clima atual em Ouro Branco" data-testid="mapa-clima-atual">
-      <div className="mapa-radar-clima-card-cabecalho">
-        <span aria-hidden="true">🌡️</span>
-        <div>
-          <strong>Ouro Branco</strong>
-          <small>Condições atuais</small>
-        </div>
-      </div>
-      {carregando && !tempo && <p className="mapa-radar-clima-card-status">Carregando temperatura…</p>}
-      {!carregando && !tempo && erro && <p className="mapa-radar-clima-card-erro" role="alert">{erro}</p>}
-      {tempo && (
-        <>
-          <div className="mapa-radar-clima-card-dados">
-            <strong>{typeof temperatura === 'number' && Number.isFinite(temperatura) ? `${Math.round(temperatura)}°C` : '—'}</strong>
-            <span>
-              Chuva atual:{' '}
-              {typeof chuva === 'number' && Number.isFinite(chuva)
-                ? `${chuva.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mm`
-                : '—'}
-            </span>
-          </div>
-          <small className="mapa-radar-clima-card-fonte">
-            Open-Meteo{tempo.atualizadoEm ? ` · ${new Date(tempo.atualizadoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}
-          </small>
-          {erro && <p className="mapa-radar-clima-card-erro" role="status">{erro}</p>}
-        </>
-      )}
-      {erroCamadas && <p className="mapa-radar-clima-card-erro" role="status">{erroCamadas}</p>}
-      <small className="mapa-radar-clima-card-fonte">Radar de chuva · nuvens GOES-19</small>
-    </section>
-  )
+  return <Marker position={OURO_BRANCO} icon={iconeTemperatura} zIndexOffset={1600} interactive={false} />
 }
 
 // ── Componente principal ────────────────────────────────────────
@@ -1360,12 +1346,13 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         <RadarWeatherLayers
           mostrarChuva={mostrarChuva}
           mostrarSintetico={false}
-          mostrarNuvens={mostrarChuva}
+          mostrarNuvens={false}
           satelite={false}
           renderizarBase={false}
           onErro={receberErroCamadasClima}
           onAtualizado={ignorarAtualizacaoRadar}
         />
+        <TemperaturaMapaMarker ativo={mostrarChuva} />
         {camadaMonitoramento && camadasMonitoramento.find(c => c.id === camadaMonitoramento)?.url && (
           <TileLayer
             key={`earth-engine-${camadaMonitoramento}`}
@@ -1647,7 +1634,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           }}
           aria-pressed={mostrarChuva}
           data-testid="toggle-chuva-mapa"
-          title="Mostrar ou ocultar a temperatura e as camadas de chuva e nuvens"
+          title="Mostrar a temperatura de Ouro Branco e a chuva ativa do Radar DC"
         >
           🌧️ Chuva
         </button>
@@ -1738,7 +1725,9 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         </div>
       </div>
 
-      <CartaoClimaMapa ativo={mostrarChuva} erroCamadas={erroCamadasClima} />
+      {erroCamadasClima && (
+        <div className="mapa-chuva-erro" role="status">{erroCamadasClima}</div>
+      )}
 
       {painelMonitoramentoAberto && (
         <div className="mapa-monitoramento-painel">
