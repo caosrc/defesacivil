@@ -1244,7 +1244,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
       <MapContainer
         center={OURO_BRANCO}
         zoom={13}
-        minZoom={11}
+        minZoom={3}
         // O mapa pode ser arrastado livremente para consultar outras regiões.
         dragging={true}
         style={{ width: '100%', height: '100%' }}
