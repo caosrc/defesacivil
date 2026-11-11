@@ -1172,25 +1172,29 @@ input, select, textarea { font-family: inherit; }
   .mapa-camadas {
     top: 54px;
     width: calc(100vw - 16px);
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.08rem;
-    padding: 0.16rem;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0;
+    padding: 0.12rem;
     overflow: visible;
   }
   .mapa-camadas > .mapa-camada-btn,
   .mapa-camadas > .mapa-ocorr-wrap,
   .mapa-camadas > .mapa-incendios-wrap {
     min-width: 0;
+    flex: 0 1 auto;
   }
   .mapa-camadas .mapa-camada-btn {
-    width: 100%;
+    width: auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
-    padding: 0.25rem 0.16rem;
-    font-size: 0.59rem;
-    letter-spacing: -0.01em;
+    padding: 0.22rem 0.1rem;
+    font-size: 0.54rem;
+    letter-spacing: -0.025em;
+    white-space: nowrap;
   }
   .mapa-camadas .mapa-ocorr-wrap,
   .mapa-camadas .mapa-incendios-wrap {
@@ -1198,7 +1202,7 @@ input, select, textarea { font-family: inherit; }
   }
   .mapa-camadas .mapa-ocorr-wrap > .mapa-camada-btn,
   .mapa-camadas .mapa-incendios-wrap > .mapa-camada-btn {
-    flex: 1;
+    flex: 0 1 auto;
   }
   .mapa-legenda {
     top: 94px;
