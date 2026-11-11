@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CircleMarker, MapContainer, Marker, Pane, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import './RadarDC.css'
@@ -303,7 +303,7 @@ function cenaClimaTempo(tempo: TempoDC): { tipo: CenaClima; caminho: string; nom
 function dataTempo(data: string) { return new Date(data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) }
 
 const STORAGE_KEY = 'defesacivil-radar-dc-v2'
-const RADAR_TICKER_SPEED = 1.5
+const RADAR_TICKER_PIXELS_PER_SECOND = 30
 const prioridadeConfig: Record<Prioridade, { label: string; emoji: string }> = {
   normal: { label: 'Normal', emoji: '🟢' },
   importante: { label: 'Importante', emoji: '🟠' },
@@ -1280,6 +1280,8 @@ export default function RadarDC() {
   const ocorrenciasNotificadasRef = useRef(new Set<number>())
   const atividadesAssinaturaRef = useRef('')
   const calendarioRef = useRef<HTMLDivElement>(null)
+  const tickerGrupoRef = useRef<HTMLDivElement>(null)
+  const [tickerDuration, setTickerDuration] = useState(20)
 
   useEffect(() => {
     const timer = window.setInterval(() => setHoraAtual(new Date()), 1000)
@@ -1542,6 +1544,25 @@ export default function RadarDC() {
   const notificacoesDoRadar = notificacoes
     .filter(r => !r.concluido && r.data >= hoje())
     .sort((a, b) => `${a.data}${a.hora}`.localeCompare(`${b.data}${b.hora}`))
+  const tickerContentKey = notificacoesDoRadar.map(n => `${n.id}:${n.data}:${n.texto}`).join('|')
+
+  useLayoutEffect(() => {
+    const grupo = tickerGrupoRef.current
+    if (!grupo) return
+
+    const atualizarDuracao = () => {
+      const largura = grupo.scrollWidth
+      if (largura > 0) {
+        setTickerDuration(largura / RADAR_TICKER_PIXELS_PER_SECOND)
+      }
+    }
+
+    atualizarDuracao()
+    const observer = new ResizeObserver(atualizarDuracao)
+    observer.observe(grupo)
+    return () => observer.disconnect()
+  }, [tickerContentKey])
+
   const resumosFerramental = useMemo(
     () => resumirFerramental(atividades.checklistsFerramentas, atividades.ferramentasCatalogo),
     [atividades.checklistsFerramentas, atividades.ferramentasCatalogo],
@@ -2207,9 +2228,9 @@ export default function RadarDC() {
           {(() => {
              const filaTicker = notificacoesDoRadar
             return filaTicker.length > 0 ? (
-               <div className="radar-ticker-track" style={{ '--ticker-duration': `${Math.max(8 / RADAR_TICKER_SPEED, (filaTicker.length * 2.8) / RADAR_TICKER_SPEED)}s` } as React.CSSProperties}>
+                <div className="radar-ticker-track" style={{ '--ticker-duration': `${tickerDuration}s` } as React.CSSProperties}>
                 {[0, 1].map(copia => (
-                  <div className="radar-ticker-group" key={copia} aria-hidden={copia === 1}>
+                  <div className="radar-ticker-group" key={copia} ref={copia === 0 ? tickerGrupoRef : undefined} aria-hidden={copia === 1}>
                     {filaTicker.map(n => <b key={`${copia}-${n.id}`}>● {dataBonita(n.data)} · {n.texto}</b>)}
                   </div>
                 ))}
