@@ -203,6 +203,7 @@ function agentePodeGerenciarCriacao(criador: string | null | undefined, agente: 
 
 const RADAR_MAP_CENTER: [number, number] = [OURO_BRANCO.latitude, OURO_BRANCO.longitude]
 const RADAR_MAP_ZOOM = 12
+const INMET_A513_POSITION: [number, number] = [-20.556667, -43.756111]
 const ESTACOES_CEMADEN_VAZIAS_RADAR: EstacaoCemadenMg[] = []
 const ALERTA_SONORO_AREAS_RISCO_STORAGE_KEY = 'radar-dc-alerta-sonoro-areas-risco-v1'
 const ICONES_OCORRENCIA_RADAR = new Map<string, L.DivIcon>()
@@ -1001,6 +1002,26 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
             })}
           </Pane>
         )}
+        <Pane name="radarLiveInmetStation" style={{ zIndex: 470 }}>
+          <CircleMarker
+            center={INMET_A513_POSITION}
+            radius={10}
+            pathOptions={{ color: '#fff', weight: 3, fillColor: '#7c3aed', fillOpacity: 1 }}
+          >
+            <Tooltip permanent={zoomMapa >= 10} direction="top" offset={[0, -9]} opacity={1} className="radar-live-map-tooltip">
+              INMET A513 · sem leitura
+            </Tooltip>
+            <Popup>
+              <strong>🌧️ Estação INMET A513 · Ouro Branco</strong>
+              <br />
+              Precipitação atual: <b>indisponível</b>
+              <br />
+              A estação está marcada no mapa, mas a leitura ao vivo do INMET ainda não está conectada.
+              <br />
+              Coordenadas: −20.556667, −43.756111
+            </Popup>
+          </CircleMarker>
+        </Pane>
         {mostrarTemperatura && zoomMapa >= 9 && tempoMapa?.atual && Number.isFinite(Number(tempoMapa.atual.temperatura)) && (
           <CircleMarker
             center={[OURO_BRANCO.latitude, OURO_BRANCO.longitude]}
