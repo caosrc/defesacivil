@@ -11,6 +11,7 @@ import { supabase, supabaseDisponivel } from '../supabaseClient'
 import { listarOcorrencias } from '../api'
 import type { Ocorrencia } from '../types'
 import type { AreaRisco, AreaRiscoInput, TipoAreaRisco } from '../areasRisco'
+import { OURO_BRANCO } from '../localidades'
 import {
   buscarPrecipitacao24hAreas as buscarPrecipitacaoAreasPersistidas,
   criarAreaRisco as criarAreaRiscoPersistida,
@@ -20,8 +21,7 @@ import {
   type RiskAreaDraft,
 } from '../radarAreasRiscoApi'
 import { ehFerramentalPorLitro } from '../ferramentalUtils'
-import { GraficoNivel, type EstacaoCNL, type LeituraCNL, type PontoNivel, type PontoSerie } from './MonitoramentoCNL'
-import { ChuvaCentro24h, type EstacaoChuvaCentro } from './ChuvaCentro24h'
+import { GraficoNivel, type LeituraCNL, type PontoNivel } from './MonitoramentoCNL'
 import type { Map as LeafletMap } from 'leaflet'
 import {
   CapturaEstadoMapa,
@@ -70,15 +70,7 @@ type EstadoVisualTempo = 'normal' | 'quente' | 'frio' | 'chuva' | 'trovoada' | '
 type CenaClima = 'nublado' | 'chuva-fraca' | 'ensolarado' | 'chuva-forte' | 'nuvem-e-sol' | 'raios' | 'frio' | 'chuva-frio'
 type DadosRadarCNL = {
   estacao: LeituraCNL
-  estacoes: RadarEstacaoCNL[]
-  serie: PontoSerie[]
-  serieChuvaCentro?: PontoSerie[]
-  estacaoChuvaCentro?: EstacaoChuvaCentro | null
   serieNivel: PontoNivel[]
-}
-type RadarEstacaoCNL = EstacaoCNL & {
-  latitude: number | null
-  longitude: number | null
 }
 
 type DadosRadarChuvaLive = {
@@ -209,7 +201,6 @@ function agentePodeGerenciarCriacao(criador: string | null | undefined, agente: 
   return nomeCriador === nomeAgente || (nomeAgente === 'arthur' && nomeCriador === 'j')
 }
 
-const OURO_BRANCO = { latitude: -20.5236, longitude: -43.6949 }
 const RADAR_MAP_CENTER: [number, number] = [OURO_BRANCO.latitude, OURO_BRANCO.longitude]
 const RADAR_MAP_ZOOM = 12
 const ESTACOES_CEMADEN_VAZIAS_RADAR: EstacaoCemadenMg[] = []
@@ -343,12 +334,6 @@ function disparar(nome: string, detail: unknown) {
 
 function percentual(valor: number, total: number) {
   return total > 0 ? Math.round((valor / total) * 100) : 0
-}
-
-function formatarMmRadar(valor: number | null | undefined) {
-  return valor == null || !Number.isFinite(valor)
-    ? '—'
-    : `${valor.toLocaleString('pt-BR', { maximumFractionDigits: 2 })} mm`
 }
 
 function formatarMmMapaRadar(valor: number | null | undefined) {
@@ -1493,28 +1478,20 @@ export default function RadarDC() {
     const carregarNivelRio = async () => {
       try {
         const resposta = await fetch('/api/monitoramento-cnl', { cache: 'no-store' })
-         const corpo = await resposta.json() as {
-           sucesso?: boolean
-           estacao?: LeituraCNL
-           estacoes?: RadarEstacaoCNL[]
-           serie?: PontoSerie[]
-           serieChuvaCentro?: PontoSerie[]
-            estacaoChuvaCentro?: EstacaoChuvaCentro | null
-           serieNivel?: PontoNivel[]
-         }
+        const corpo = await resposta.json() as {
+          sucesso?: boolean
+          estacao?: LeituraCNL
+          serieNivel?: PontoNivel[]
+        }
         if (!resposta.ok || !corpo.sucesso || !corpo.estacao || !Array.isArray(corpo.serieNivel)) {
           throw new Error('Dados do Rio Bananeiras indisponíveis.')
         }
-         if (ativo) {
-           setDadosCNL({
-             estacao: corpo.estacao,
-             estacoes: Array.isArray(corpo.estacoes) ? corpo.estacoes : [corpo.estacao],
-             serie: Array.isArray(corpo.serie) ? corpo.serie : [],
-              serieChuvaCentro: Array.isArray(corpo.serieChuvaCentro) ? corpo.serieChuvaCentro : [],
-              estacaoChuvaCentro: corpo.estacaoChuvaCentro || null,
-             serieNivel: corpo.serieNivel,
-           })
-         }
+        if (ativo) {
+          setDadosCNL({
+            estacao: corpo.estacao,
+            serieNivel: corpo.serieNivel,
+          })
+        }
       } catch {
         // O gráfico é complementar ao Radar; a falha não deve ocultar os registros.
       }
@@ -1585,19 +1562,6 @@ export default function RadarDC() {
     () => tempo ? cenaClimaTempo(tempo) : null,
     [tempo],
   )
-  const diasPrecipitacao = useMemo(() => {
-    if (!dadosCNL) return []
-    return [...new Set(dadosCNL.estacoes.flatMap(estacao => estacao.precipitacaoDiaria.map(dia => dia.data)))]
-      .sort()
-      .reverse()
-      .slice(0, 2)
-  }, [dadosCNL])
-  const resumoPrecipitacao = useMemo(
-    () => dadosCNL?.estacoes.map(estacao => `${estacao.nome} ${formatarMmRadar(estacao.acumulados.vinteQuatroHoras)}`).join(' | ') || '',
-    [dadosCNL],
-  )
-
-
   async function salvarRegistro(tipo: RegistroRadar['tipo'], texto: string, data: string, horaRegistro: string) {
     if (!texto.trim() || salvando) return
     const agentesParaRegistro = tipo === 'lembrete' ? agentesLembrete : agentesEnvolvidos
@@ -2149,58 +2113,15 @@ export default function RadarDC() {
                 <span className="radar-cnl-live">CEMADEN · ao vivo</span>
               </div>
               {dadosCNL ? (
-                <div className="radar-tv-hydro-panels">
+                <div className="radar-tv-hydro-panels radar-tv-hydro-panels-single">
                   <section className="radar-tv-hydro-panel radar-tv-hydro-level">
-                    <h3 className="radar-tv-hydro-title">Nível do Rio Bananeiras</h3>
                     <GraficoNivel pontos={dadosCNL.serieNivel} estacao={dadosCNL.estacao} mostrarTooltip={false} mostrarFonte={false} mostrarLeituraAtual />
-                  </section>
-                  <section className="radar-tv-hydro-panel radar-tv-hydro-rain">
-                    <ChuvaCentro24h
-                      estacao={dadosCNL.estacaoChuvaCentro}
-                      pontos={dadosCNL.serieChuvaCentro || []}
-                    />
-                    <details className="radar-cnl-diaria-detalhe">
-                      <summary className="radar-precipitacao-resumo" aria-label="Precipitação atual por estação">
-                        {resumoPrecipitacao || 'Consultando precipitações...'}
-                      </summary>
-                      {diasPrecipitacao.length > 0 && (
-                        <div className="radar-precipitacao-scroll">
-                          <table className="radar-precipitacao-table radar-precipitacao-diaria-table">
-                            <thead>
-                              <tr>
-                                <th>Estação</th>
-                                {diasPrecipitacao.map(dia => <th key={dia}>{dia.split('-').reverse().slice(0, 2).join('/')}</th>)}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {dadosCNL.estacoes.map(estacao => (
-                                <tr key={estacao.id}>
-                                  <th scope="row">
-                                    <strong>{estacao.nome || `Estação ${estacao.id}`}</strong>
-                                    <small>{estacao.codigo || `CEMADEN ${estacao.id}`}</small>
-                                  </th>
-                                  {diasPrecipitacao.map(dia => {
-                                    const leitura = estacao.precipitacaoDiaria.find(item => item.data === dia)
-                                    return <td key={dia}>{formatarMmRadar(leitura?.total)}</td>
-                                  })}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </details>
                   </section>
                 </div>
               ) : (
-                <div className="radar-tv-hydro-panels radar-tv-hydro-loading">
+                <div className="radar-tv-hydro-panels radar-tv-hydro-panels-single radar-tv-hydro-loading">
                   <section className="radar-tv-hydro-panel radar-tv-hydro-level">
-                    <h3 className="radar-tv-hydro-title">Nível do Rio Bananeiras</h3>
                     <p className="radar-cnl-loading">Consultando a estação Centro…</p>
-                  </section>
-                  <section className="radar-tv-hydro-panel radar-tv-hydro-rain">
-                    <h3 className="radar-tv-hydro-title">Chuva acumulada · últimas 24 horas</h3>
-                    <p className="radar-cnl-loading">Consultando os pluviômetros…</p>
                   </section>
                 </div>
               )}

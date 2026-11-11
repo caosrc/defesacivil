@@ -5984,7 +5984,7 @@ html:-webkit-full-screen {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.82fr);
     grid-template-rows:
       clamp(70px, 9vh, 90px)
-      minmax(0, .72fr)
+      minmax(min-content, .72fr)
       minmax(0, .9fr)
       minmax(0, 1fr);
     grid-template-areas:
@@ -5997,7 +5997,8 @@ html:-webkit-full-screen {
     min-height: 0;
     gap: clamp(4px, .42vw, 8px);
     padding: clamp(4px, .45vw, 8px) clamp(5px, .55vw, 10px);
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   body.radar-tv-active .radar-tv .radar-overview,
@@ -6036,13 +6037,13 @@ html:-webkit-full-screen {
     display: flex;
     flex-direction: column;
     min-width: 0;
-    min-height: 0;
+    min-height: min-content;
     padding: clamp(.35rem, .55vw, .55rem);
     border: 1px solid rgba(135, 185, 211, .25);
     border-radius: 8px;
     background: linear-gradient(145deg, #0b2d4b, #08233e);
     box-shadow: 0 4px 12px rgba(0, 12, 27, .16);
-    overflow: hidden;
+    overflow: visible;
   }
 
   body.radar-tv-active .radar-tv .radar-tv-reminder-panel .radar-note-heading {
@@ -6051,9 +6052,10 @@ html:-webkit-full-screen {
   }
 
   body.radar-tv-active .radar-tv .radar-tv-reminder-panel .radar-mini-list {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: auto;
+    flex: 0 0 auto;
+    min-height: min-content;
+    max-height: none;
+    overflow: visible;
     font-size: clamp(.58rem, .66vw, .72rem);
   }
 
@@ -6189,6 +6191,10 @@ html:-webkit-full-screen {
     grid-area: level;
   }
 
+  body.radar-tv-active .radar-tv .radar-tv-hydro-panels-single .radar-tv-hydro-level {
+    grid-column: 1 / 3;
+  }
+
   body.radar-tv-active .radar-tv .radar-tv-hydro-rain {
     grid-area: rain;
   }
@@ -6251,6 +6257,25 @@ html:-webkit-full-screen {
     flex: 0 0 auto;
     min-height: 22px;
   }
+}
+
+.radar-tv-hydro-panels-single {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Lembretes crescem com a lista; a rolagem, quando necessária, fica no painel geral. */
+body.radar-tv-active .radar-tv .radar-note-card,
+body.radar-tv-active .radar-tv .radar-tv-reminder-panel {
+  height: auto;
+  overflow: visible;
+}
+
+body.radar-tv-active .radar-tv .radar-mini-list {
+  flex: 0 0 auto;
+  min-height: min-content;
+  max-height: none;
+  overflow: visible;
 }
 
 /*

@@ -1,5 +1,6 @@
 import { supabase, supabaseDisponivel } from './supabaseClient'
 import type { RiskArea } from './components/RadarMapaRisco'
+import { OURO_BRANCO } from './localidades'
 
 export type RiskAreaDraft = Omit<RiskArea, 'id'>
 
@@ -166,16 +167,6 @@ function horaLocalOuroBranco() {
   return `${values.year}-${values.month}-${values.day}T${values.hour}:00`
 }
 
-function centroide(area: RiskArea): { latitude: number; longitude: number } {
-  return area.poligono.reduce(
-    (center, point) => ({
-      latitude: center.latitude + point.lat / area.poligono.length,
-      longitude: center.longitude + point.lng / area.poligono.length,
-    }),
-    { latitude: 0, longitude: 0 }
-  )
-}
-
 export async function buscarPrecipitacao24hAreas(
   areas: RiskArea[],
   signal?: AbortSignal,
@@ -183,10 +174,9 @@ export async function buscarPrecipitacao24hAreas(
   const monitoradas = areas.filter(area => area.ativo && area.poligono.length >= 3)
   if (!monitoradas.length) return {}
 
-  const centros = monitoradas.map(centroide)
   const params = new URLSearchParams({
-    latitude: centros.map(center => center.latitude.toFixed(5)).join(','),
-    longitude: centros.map(center => center.longitude.toFixed(5)).join(','),
+    latitude: OURO_BRANCO.latitude.toFixed(5),
+    longitude: OURO_BRANCO.longitude.toFixed(5),
     hourly: 'precipitation',
     forecast_days: '2',
     timezone: 'America/Sao_Paulo',
@@ -199,28 +189,16 @@ export async function buscarPrecipitacao24hAreas(
   if (!response.ok) throw new Error('Não foi possível atualizar a previsão de chuva das áreas.')
 
   const data: unknown = await response.json()
-  const locations = Array.isArray(data) ? data as RiskAreaRow[] : [data as RiskAreaRow]
-  if (locations.length !== monitoradas.length) {
-    throw new Error('A previsão não retornou dados para todas as áreas cadastradas.')
-  }
-
+  const location = Array.isArray(data) ? data[0] as RiskAreaRow | undefined : data as RiskAreaRow
+  const hourly = location?.hourly as Record<string, unknown> | undefined
+  const times = Array.isArray(hourly?.time) ? hourly.time.map(String) : []
+  const amounts = Array.isArray(hourly?.precipitation) ? hourly.precipitation : []
   const inicio = horaLocalOuroBranco()
-  const result: Record<string, number | null> = {}
-  monitoradas.forEach((area, index) => {
-    const hourly = locations[index]?.hourly as Record<string, unknown> | undefined
-    const times = Array.isArray(hourly?.time) ? hourly.time.map(String) : []
-    const amounts = Array.isArray(hourly?.precipitation) ? hourly.precipitation : []
-    const startIndex = times.findIndex(time => time >= inicio)
-    if (startIndex < 0) {
-      result[area.id] = null
-      return
-    }
-    const next24Hours = amounts.slice(startIndex, startIndex + 24)
-    if (next24Hours.length < 24 || next24Hours.some(value => typeof value !== 'number' || !Number.isFinite(value))) {
-      result[area.id] = null
-      return
-    }
-    result[area.id] = next24Hours.reduce((total, value) => total + (value as number), 0)
-  })
+  const startIndex = times.findIndex(time => time >= inicio)
+  const next24Hours = startIndex < 0 ? [] : amounts.slice(startIndex, startIndex + 24)
+  const total = next24Hours.length === 24 && next24Hours.every(value => typeof value === 'number' && Number.isFinite(value))
+    ? next24Hours.reduce((sum, value) => sum + (value as number), 0)
+    : null
+  const result = Object.fromEntries(monitoradas.map(area => [area.id, total]))
   return result
 }
