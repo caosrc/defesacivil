@@ -20,6 +20,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/radar-chuva/tiles"
+  to = "/.netlify/functions/radar-chuva-tiles"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/radar-chuva"
   to = "/.netlify/functions/radar-chuva"
   status = 200

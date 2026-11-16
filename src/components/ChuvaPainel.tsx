@@ -191,8 +191,6 @@ export default function ChuvaPainel({
   onClose,
   condicaoAtual,
   previsaoProximaHora = [],
-  horarioAtualizado,
-  condicaoStatus,
   condicaoErro,
   carregandoCondicoes = false,
   previsaoTrovoada,
@@ -246,9 +244,8 @@ export default function ChuvaPainel({
       {refreshing && <div className="chuva-panel__loading" aria-label="Atualizando fontes meteorológicas" />}
       <header className="chuva-panel__header">
         <div>
-          <p className="chuva-panel__eyebrow"><span className="chuva-panel__eyebrow-mark" /> Monitoramento local</p>
-          <h2 className="chuva-panel__title">Chuva ao vivo</h2>
-          <span className="chuva-panel__location">Ouro Branco, MG · previsão e radar local</span>
+          <h2 className="chuva-panel__title"><span aria-hidden="true">🌧️</span> Chuva ao vivo</h2>
+          <span className="chuva-panel__location">Ouro Branco, MG · área monitorada: raio de 10 km</span>
         </div>
         <button type="button" className="chuva-panel__close" onClick={onClose} aria-label="Fechar painel de chuva">
           <span aria-hidden="true">×</span>
@@ -257,14 +254,7 @@ export default function ChuvaPainel({
 
       <div className="chuva-panel__scroll">
         <div className="chuva-panel__content">
-          <section className="chuva-card" aria-labelledby="chuva-condicoes-title">
-            <div className="chuva-card__heading">
-              <h3 id="chuva-condicoes-title" className="chuva-card__title">
-                <span className="chuva-card__title-mark" aria-hidden="true">01</span>
-                Condições e próxima hora
-              </h3>
-              <span className="chuva-source__state">{horarioAtualizado ? `Atualizado ${horarioAtualizado}` : condicaoStatus}</span>
-            </div>
+          <section className="chuva-card" aria-label="Condições atuais de Ouro Branco">
             <div className="chuva-weather">
               {condicaoAtual ? (
                 <>
@@ -322,19 +312,22 @@ export default function ChuvaPainel({
           <section className="chuva-card" aria-labelledby="chuva-trovoada-title">
             <div className="chuva-card__heading">
               <h3 id="chuva-trovoada-title" className="chuva-card__title">
-                <span className="chuva-card__title-mark" aria-hidden="true">02</span>
+                <span className="chuva-card__title-mark" aria-hidden="true">⚡</span>
                 Previsão de raios e trovoadas
               </h3>
-              <button
-                type="button"
-                className={`chuva-button${camadaTrovoadaAtiva ? ' chuva-button--active' : ''}`}
-                aria-pressed={camadaTrovoadaAtiva}
-                onClick={onAlternarCamadaTrovoada}
-              >
-                {camadaTrovoadaAtiva ? 'Raios no mapa' : 'Exibir no mapa'}
-              </button>
+              <div className="chuva-heading-actions">
+                <button
+                  type="button"
+                  className={`chuva-button${camadaTrovoadaAtiva ? ' chuva-button--active' : ''}`}
+                  aria-pressed={camadaTrovoadaAtiva}
+                  onClick={onAlternarCamadaTrovoada}
+                >
+                  {camadaTrovoadaAtiva ? 'Raios ativos' : 'Raios'}
+                </button>
+                <button type="button" className="chuva-button" onClick={onEnquadrarMinasGerais}>Ver MG</button>
+              </div>
             </div>
-            <p className="chuva-card__caption">Resumo de risco para Ouro Branco. Os pontos no mapa incluem outras cidades de MG; não são detecção de descargas.</p>
+            <p className="chuva-card__caption">Ouro Branco, MG · previsão por modelos, não detecção de descargas.</p>
             {previsaoTrovoada ? (
               <>
                 <div className="chuva-summary">
@@ -361,14 +354,13 @@ export default function ChuvaPainel({
                     </div>
                   ))}
                 </div>
-                <div className="chuva-card__heading">
-                  <span className="chuva-source__state">
-                    {previsaoTrovoada.locaisPrevistos == null
-                      ? 'Abrangência estadual'
-                      : `${previsaoTrovoada.locaisPrevistos} locais previstos`}
-                  </span>
-                  <button type="button" className="chuva-button" onClick={onEnquadrarMinasGerais}>Ver MG</button>
-                </div>
+                <p className="chuva-card__footnote">
+                  {previsaoTrovoada.locaisPrevistos == null
+                    ? 'Previsão disponível para Minas Gerais.'
+                    : `${previsaoTrovoada.locaisPrevistos} local(is) com trovoada prevista nas próximas 36 horas.`}
+                  {' '}Atualização automática a cada 10 min.
+                  {previsaoTrovoada.atualizadoEm ? ` Última atualização ${previsaoTrovoada.atualizadoEm}.` : ''}
+                </p>
                 {(previsaoTrovoada.erro || previsaoTrovoadaErro || previsaoTrovoada.status) && (
                   <p className="chuva-card__footnote" role={previsaoTrovoada.erro ? 'alert' : 'status'}>
                     {previsaoTrovoada.erro || previsaoTrovoadaErro || previsaoTrovoada.status}
@@ -392,10 +384,14 @@ export default function ChuvaPainel({
           <section className="chuva-card" aria-labelledby="chuva-alertas-title">
             <div className="chuva-card__heading">
               <h3 id="chuva-alertas-title" className="chuva-card__title">
-                <span className="chuva-card__title-mark" aria-hidden="true">03</span>
-                Alertas oficiais
+                <span className="chuva-card__title-mark" aria-hidden="true">⚠️</span>
+                Alertas e condições
               </h3>
-              <span className="chuva-source__state">{alertasCarregando ? 'Consultando INMET' : 'INMET'}</span>
+              <span className="chuva-source__state">
+                {alertasCarregando
+                  ? 'Consultando INMET'
+                  : `${alertasOficiais.length} aviso${alertasOficiais.length === 1 ? '' : 's'} do INMET`}
+              </span>
             </div>
             <div className="chuva-alerts">
               {alertasOficiais.length ? alertasOficiais.map(alerta => (
@@ -425,26 +421,22 @@ export default function ChuvaPainel({
 
           <section className="chuva-card" aria-label="Enquadramento do mapa">
             <div className="chuva-map-actions">
-              <button type="button" className="chuva-button" onClick={onEnquadrarMinasGerais}>Enquadrar toda MG</button>
-              <button type="button" className="chuva-button" onClick={onVoltarParaOuroBranco}>Voltar para Ouro Branco</button>
+              <button type="button" className="chuva-button" onClick={onEnquadrarMinasGerais}>Toda MG</button>
+              <button type="button" className="chuva-button" onClick={onVoltarParaOuroBranco}>Ouro Branco</button>
+              <span className="chuva-map-actions__note">Enquadramento local continua sendo Ouro Branco.</span>
             </div>
           </section>
 
-          <section className="chuva-card" aria-labelledby="chuva-camadas-title">
-            <div className="chuva-card__heading">
-              <h3 id="chuva-camadas-title" className="chuva-card__title">
-                <span className="chuva-card__title-mark" aria-hidden="true">04</span>
-                Camadas e fontes
-              </h3>
-            </div>
-            <p className="chuva-card__caption">Ative as fontes que deseja comparar no mapa.</p>
+          <section className="chuva-card" aria-label="Camadas e fontes meteorológicas">
             <div className="chuva-source-list">
               <FonteAlternavel
-                titulo="RainViewer · radar observado"
-                nota="Quadros observados de precipitação; não é previsão."
+                titulo="Radar RainViewer"
+                nota="Quadro observado mais recente · consulte a hora da imagem."
                 ativa={rainViewerAtivo}
                 aoAlternar={onAlternarRainViewer}
                 fonte={statusFontes?.rainViewer}
+                rotuloLigado="Ativo"
+                rotuloDesligado="Radar RainViewer"
               />
 
               <div className="chuva-source">
@@ -513,36 +505,8 @@ export default function ChuvaPainel({
                   Abrir CPTEC
                 </a>
               </div>
-              <FonteAlternavel
-                titulo="NOAA GOES · infravermelho"
-                nota="Imagem de nuvens; não confirma precipitação no solo."
-                ativa={nuvensGoesAtivas}
-                aoAlternar={onAlternarNuvensGoes}
-                fonte={statusFontes?.goes}
-              />
-              <FonteAlternavel
-                titulo="CEMADEN · estimativa por satélite"
-                nota="Estimativa raster de chuva; não é medição de pluviômetro."
-                ativa={estimativaCemadenAtiva}
-                aoAlternar={onAlternarEstimativaCemaden}
-                fonte={statusFontes?.cemadenEstimativa}
-              />
-              <FonteAlternavel
-                titulo="CEMADEN · pluviômetros"
-                nota="Medições pontuais de estações; disponibilidade e horários variam."
-                ativa={pluviometrosAtivos}
-                aoAlternar={onAlternarPluviometros}
-                fonte={statusFontes?.pluviometros}
-              />
-              <a className="chuva-button chuva-button--wide" href={urlMapaOficialCemaden} target="_blank" rel="noreferrer">
-                Abrir mapa oficial do CEMADEN
-              </a>
               {rainViewerAtivo && (
                 <div className="chuva-history">
-                  <div className="chuva-history__heading">
-                    <strong>Histórico observado RainViewer</strong>
-                    <span>Não representa previsão</span>
-                  </div>
                   {controleHistoricoRadar.quadros.length > 1 ? (
                     <ControleHistoricoRadar controle={controleHistoricoRadar} />
                   ) : (
@@ -554,10 +518,34 @@ export default function ChuvaPainel({
                   )}
                 </div>
               )}
+              <FonteAlternavel
+                titulo="Nuvens GOES"
+                nota="Imagem de nuvens; não confirma precipitação no solo."
+                ativa={nuvensGoesAtivas}
+                aoAlternar={onAlternarNuvensGoes}
+                fonte={statusFontes?.goes}
+              />
+              <FonteAlternavel
+                titulo="Radar sintético · CEMADEN"
+                nota="Estimativa raster de chuva; não é medição de pluviômetro."
+                ativa={estimativaCemadenAtiva}
+                aoAlternar={onAlternarEstimativaCemaden}
+                fonte={statusFontes?.cemadenEstimativa}
+              />
+              <FonteAlternavel
+                titulo="CEMADEN · Ouro Branco"
+                nota="Medições pontuais de estações; disponibilidade e horários variam."
+                ativa={pluviometrosAtivos}
+                aoAlternar={onAlternarPluviometros}
+                fonte={statusFontes?.pluviometros}
+              />
+              <a className="chuva-button chuva-button--wide" href={urlMapaOficialCemaden} target="_blank" rel="noreferrer">
+                Abrir mapa oficial do CEMADEN ↗
+              </a>
             </div>
             <div className="chuva-opacity">
               <label className="chuva-opacity__row" htmlFor="chuva-opacidade-radar">
-                <span>Chuva / radar</span>
+                <span>Radar</span>
                 <input
                   id="chuva-opacidade-radar"
                   type="range"
@@ -591,6 +579,14 @@ export default function ChuvaPainel({
               <div className="chuva-observations__cell">
                 <span>CEMADEN</span>
                 <strong>{horarioCemadenMaisRecente || 'Sem horário recente'}</strong>
+              </div>
+              <div className="chuva-observations__cell">
+                <span>Trovoadas previstas</span>
+                <strong>
+                  {previsaoTrovoada?.locaisPrevistos == null
+                    ? 'Sem indicação'
+                    : `${previsaoTrovoada.locaisPrevistos} locais`}
+                </strong>
               </div>
               <div className="chuva-observations__cell">
                 <span>Chuva em 1 h</span>

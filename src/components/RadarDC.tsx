@@ -426,11 +426,28 @@ function emitirSinalSonoroAlertaRadar() {
 function RadarMapInvalidateSize({ tv }: { tv: boolean }) {
   const map = useMap()
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      map.invalidateSize()
-      map.setView(RADAR_MAP_CENTER, tv ? RADAR_MAP_ZOOM + 1 : RADAR_MAP_ZOOM, { animate: false })
-    })
-    return () => window.cancelAnimationFrame(frame)
+    let frame = 0
+    const invalidarTamanho = () => {
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(() => map.invalidateSize({ pan: false }))
+    }
+
+    map.setView(RADAR_MAP_CENTER, tv ? RADAR_MAP_ZOOM + 1 : RADAR_MAP_ZOOM, { animate: false })
+    invalidarTamanho()
+
+    const observador = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(invalidarTamanho)
+    observador?.observe(map.getContainer())
+    window.addEventListener('resize', invalidarTamanho)
+    document.addEventListener('fullscreenchange', invalidarTamanho)
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      observador?.disconnect()
+      window.removeEventListener('resize', invalidarTamanho)
+      document.removeEventListener('fullscreenchange', invalidarTamanho)
+    }
   }, [map, tv])
   return null
 }
@@ -840,6 +857,10 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
   const pontosTrovoada = (previsaoTrovoadas?.pontos || []).filter(ponto =>
     Number.isFinite(ponto.latitude) && Number.isFinite(ponto.longitude),
   )
+  const quadroRadarAtivo = linhaTempoRadar.quadroAtual
+  const tileUrlRadarTv = tv && quadroRadarAtivo
+    ? `/api/radar-chuva/tiles?z={z}&x={x}&y={y}&frame=${encodeURIComponent(quadroRadarAtivo.path)}`
+    : undefined
   return (
     <section className="radar-live-map-card" aria-labelledby="radar-live-map-title">
       <div className="radar-live-map-heading">
@@ -986,6 +1007,8 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
               quadros={radarChuva.quadros || []}
               quadroReserva={{ time: radarChuva.frameTime, path: radarChuva.path }}
               quadroSelecionado={linhaTempoRadar.quadroAtual}
+              tileUrlTemplate={tileUrlRadarTv}
+              onTileError={() => setRadarErro('Não foi possível carregar os tiles de chuva do radar.')}
               opacity={0.72}
               maxZoom={18}
             />
@@ -1931,6 +1954,7 @@ export default function RadarDC() {
     setDataSelecionada(dataAtual)
     setMes(new Date(`${dataAtual}T12:00:00`))
     prepararAudioAlertaRadar()
+    setMostrarChuva(true)
     setTv(true)
     if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
       await document.documentElement.requestFullscreen().catch(() => {

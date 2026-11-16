@@ -879,3 +879,433 @@
     transition-duration: .01ms !important;
   }
 }
+
+/* Compacte a janela para acompanhar a referência do monitoramento de chuva. */
+.chuva-panel {
+  --cp-paper: #fff;
+  --cp-white: #fff;
+  width: min(370px, calc(100% - 16px));
+  inset: 88px 8px 8px auto;
+  border: 1px solid #d5e0e8;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 5px 20px rgba(18, 48, 72, .2);
+  font-size: 11px;
+}
+
+.chuva-panel__header {
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #1783b9;
+}
+
+.chuva-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 15px;
+  letter-spacing: -.02em;
+}
+
+.chuva-panel__location {
+  margin-top: 3px;
+  color: #e5f4fb;
+  font-size: 9px;
+}
+
+.chuva-panel__close {
+  flex-basis: 27px;
+  width: 27px;
+  height: 27px;
+  border-radius: 7px;
+  font-size: 18px;
+}
+
+.chuva-panel__scroll {
+  background: #fff;
+}
+
+.chuva-panel__content {
+  display: block;
+  padding: 0 7px;
+}
+
+.chuva-card {
+  border: 0;
+  border-bottom: 1px solid #dfe7ed;
+  border-radius: 0;
+  background: #fff;
+}
+
+.chuva-card__heading {
+  gap: 5px;
+  padding: 5px 4px 3px;
+}
+
+.chuva-card__title {
+  gap: 5px;
+  font-size: 10px;
+}
+
+.chuva-card__title-mark {
+  width: auto;
+  height: auto;
+  flex-basis: auto;
+  border-radius: 0;
+  background: transparent;
+  font-size: 11px;
+}
+
+.chuva-card__caption {
+  margin: 0 5px 4px;
+  font-size: 8px;
+}
+
+.chuva-weather {
+  padding: 5px 5px 6px;
+}
+
+.chuva-weather__now {
+  gap: 8px;
+  padding: 3px 0 5px;
+}
+
+.chuva-weather__temperature {
+  font-size: 19px;
+}
+
+.chuva-weather__symbol {
+  margin-right: 2px;
+  font-size: 14px;
+  vertical-align: 2px;
+}
+
+.chuva-weather__description {
+  gap: 2px;
+  font-size: 9px;
+}
+
+.chuva-weather__description small,
+.chuva-weather__metrics {
+  font-size: 8px;
+}
+
+.chuva-weather__metrics {
+  gap: 2px 6px;
+}
+
+.chuva-weather__hours {
+  gap: 2px;
+  padding-top: 6px;
+}
+
+.chuva-weather__hour {
+  gap: 2px;
+  font-size: 8px;
+}
+
+.chuva-weather__hour strong {
+  font-size: 8px;
+}
+
+.chuva-weather__icon {
+  min-height: 14px;
+  font-size: 12px;
+}
+
+.chuva-weather__hour span:last-child {
+  font-size: 8px;
+}
+
+.chuva-summary {
+  gap: 3px;
+  padding: 0 5px 5px;
+}
+
+.chuva-summary__item {
+  gap: 2px;
+  padding: 5px;
+  border-radius: 5px;
+}
+
+.chuva-summary__label {
+  font-size: 8px;
+}
+
+.chuva-summary__value {
+  font-size: 10px;
+}
+
+.chuva-models {
+  margin: 0 6px 4px;
+}
+
+.chuva-models__row {
+  padding: 3px 1px;
+  font-size: 8px;
+}
+
+.chuva-models__row strong {
+  font-size: 8px;
+}
+
+.chuva-card__footnote {
+  padding: 0 6px 6px;
+  font-size: 8px;
+  line-height: 1.35;
+}
+
+.chuva-alerts {
+  gap: 4px;
+  padding: 0 6px 6px;
+}
+
+.chuva-alerts__item {
+  gap: 2px;
+  padding: 5px 7px;
+}
+
+.chuva-alerts__item strong {
+  font-size: 9px;
+}
+
+.chuva-alerts__item span,
+.chuva-alerts__empty,
+.chuva-alerts__error {
+  font-size: 8px;
+}
+
+.chuva-map-actions {
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+}
+
+.chuva-map-actions__note {
+  color: var(--cp-muted);
+  font-size: 8px;
+  line-height: 1.25;
+}
+
+.chuva-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.chuva-button {
+  min-height: 26px;
+  padding: 4px 7px;
+  border-color: #c8d9e7;
+  border-radius: 6px;
+  color: #155b83;
+  background: #fff;
+  font-size: 8px;
+}
+
+.chuva-button:hover:not(:disabled) {
+  border-color: #65acd0;
+  color: #0e5f8e;
+  background: #f1f8fc;
+}
+
+.chuva-button--active {
+  border-color: #64acd0;
+  color: #145f82;
+  background: #e8f5fb;
+}
+
+.chuva-button--primary,
+.chuva-button--primary:hover:not(:disabled) {
+  border-color: #167ba9;
+  color: #fff;
+  background: #167ba9;
+}
+
+.chuva-source-list {
+  padding: 0 5px 6px;
+}
+
+.chuva-source {
+  gap: 3px 6px;
+  padding: 5px 1px;
+  border-color: #e5ebef;
+}
+
+.chuva-source__main {
+  gap: 2px;
+}
+
+.chuva-source__title {
+  font-size: 9px;
+}
+
+.chuva-source__note,
+.chuva-source__state,
+.chuva-source__error {
+  font-size: 8px;
+  line-height: 1.25;
+}
+
+.chuva-source__toggle {
+  min-width: 62px;
+  min-height: 25px;
+  padding: 3px 5px;
+  font-size: 8px;
+}
+
+.chuva-source-list > .chuva-source:first-child .chuva-source__toggle {
+  min-width: 103px;
+}
+
+.chuva-switch {
+  width: 20px;
+  height: 12px;
+  flex-basis: 20px;
+}
+
+.chuva-switch::after {
+  width: 8px;
+  height: 8px;
+}
+
+.chuva-button[aria-pressed="true"] .chuva-switch::after {
+  transform: translateX(8px);
+}
+
+.chuva-product-row {
+  grid-column: 1 / -1;
+  gap: 5px;
+  padding: 0 0 2px;
+}
+
+.chuva-product-row label {
+  font-size: 8px;
+}
+
+.chuva-panel select {
+  min-height: 25px;
+  max-width: 160px;
+  padding: 3px 20px 3px 6px;
+  border-color: #c8d9e7;
+  border-radius: 5px;
+  color: #185b82;
+  font-size: 8px;
+}
+
+.chuva-history {
+  gap: 4px;
+  margin: 0;
+  padding: 5px 1px;
+  border: 0;
+  border-top: 1px solid #e5ebef;
+  border-radius: 0;
+  background: #fff;
+}
+
+.chuva-panel .mapa-chuva-historico {
+  gap: 4px;
+}
+
+.chuva-panel .mapa-chuva-historico-topo button {
+  min-height: 24px;
+  padding: 3px 6px;
+  font-size: 8px;
+}
+
+.chuva-panel .mapa-chuva-historico-topo strong {
+  font-size: 9px;
+}
+
+.chuva-panel .mapa-chuva-historico-escala,
+.chuva-panel .mapa-chuva-historico > small {
+  font-size: 7px;
+}
+
+.chuva-opacity {
+  gap: 5px;
+  padding: 6px 5px;
+}
+
+.chuva-opacity__row {
+  grid-template-columns: 62px minmax(0, 1fr) 30px;
+  gap: 5px;
+  font-size: 8px;
+}
+
+.chuva-opacity__row output {
+  font-size: 8px;
+}
+
+.chuva-observations {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  padding: 6px 5px;
+}
+
+.chuva-observations__cell span {
+  font-size: 7px;
+}
+
+.chuva-observations__cell strong {
+  font-size: 9px;
+}
+
+.chuva-panel__notice {
+  padding: 6px;
+  font-size: 7px;
+}
+
+.chuva-panel__refresh {
+  padding: 0 5px 6px;
+}
+
+@media (max-width: 600px) {
+  .chuva-panel {
+    position: fixed;
+    inset: 86px 4px 0;
+    width: auto;
+    max-height: none;
+    border-radius: 8px 8px 0 0;
+  }
+
+  .chuva-panel__header {
+    padding: 7px 9px;
+  }
+
+  .chuva-panel__content {
+    padding: 0 6px;
+  }
+
+  .chuva-weather__metrics {
+    display: grid;
+  }
+
+  .chuva-map-actions {
+    padding: 5px;
+  }
+}
+
+@media (max-width: 350px) {
+  .chuva-panel {
+    inset-inline: 2px;
+  }
+
+  .chuva-panel__title {
+    font-size: 14px;
+  }
+
+  .chuva-panel__location {
+    font-size: 8px;
+  }
+
+  .chuva-source-list > .chuva-source:first-child .chuva-source__toggle {
+    min-width: 92px;
+  }
+
+  .chuva-map-actions {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+}

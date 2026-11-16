@@ -3396,9 +3396,9 @@ app.get('/api/chuva-area', async (_req, res) => {
 })
 
 // ── Radar de chuva ao vivo (RainViewer) ─────────────────────────────────────
-// O RainViewer fornece os tiles de radar sem chave. O servidor busca apenas os
-// metadados e o navegador solicita os tiles diretamente ao host informado pela
-// própria API, sempre usando o último quadro disponível.
+// O RainViewer fornece os tiles de radar sem chave. O servidor busca os
+// metadados; o navegador pode carregar os tiles pelo host da fonte ou por uma
+// rota local que os encaminha para aparelhos com restrições de rede.
 let radarChuvaCache = null
 let radarChuvaCacheTs = 0
 const RADAR_CHUVA_TTL_MS = 2 * 60 * 1000
@@ -3458,6 +3458,49 @@ app.get('/api/radar-chuva', async (_req, res) => {
       return res.json({ ...radarChuvaCache, cache: true, erroAtualizacao: true })
     }
     return res.status(503).json({ erro: 'Radar de chuva indisponível' })
+  }
+})
+
+app.get('/api/radar-chuva/tiles', async (req, res) => {
+  const frame = typeof req.query.frame === 'string' ? req.query.frame : ''
+  const z = Number(req.query.z)
+  const x = Number(req.query.x)
+  const y = Number(req.query.y)
+  const limite = Number.isInteger(z) && z >= 0 && z <= 7 ? 2 ** z : 0
+
+  if (
+    !/^\/v2\/radar\/[a-z0-9]+$/i.test(frame) ||
+    !limite ||
+    !Number.isInteger(x) ||
+    !Number.isInteger(y) ||
+    x < 0 ||
+    y < 0 ||
+    x >= limite ||
+    y >= limite
+  ) {
+    return res.status(400).json({ erro: 'Quadro ou coordenadas de radar inválidos.' })
+  }
+
+  try {
+    const url = `https://tilecache.rainviewer.com${frame}/256/${z}/${x}/${y}/2/1_0.png`
+    const resposta = await fetch(url, {
+      headers: { Accept: 'image/png' },
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!resposta.ok) throw new Error(`RainViewer respondeu ${resposta.status}`)
+
+    const tipoConteudo = resposta.headers.get('content-type') || ''
+    if (!tipoConteudo.toLowerCase().includes('image/png')) {
+      throw new Error('RainViewer não retornou um tile PNG')
+    }
+
+    res.set('Content-Type', 'image/png')
+    res.set('Cache-Control', 'public, max-age=300, stale-while-revalidate=300')
+    res.set('X-Content-Type-Options', 'nosniff')
+    return res.send(Buffer.from(await resposta.arrayBuffer()))
+  } catch (erro) {
+    console.warn('[Radar RainViewer] Falha ao buscar tile:', erro?.message || erro)
+    return res.status(502).json({ erro: 'Tile de chuva indisponível no momento.' })
   }
 })
 

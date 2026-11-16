@@ -9,6 +9,8 @@ interface Props {
   quadros: QuadroRadarChuva[]
   quadroReserva?: QuadroRadarChuva | null
   quadroSelecionado?: QuadroRadarChuva | null
+  tileUrlTemplate?: string
+  onTileError?: () => void
   opacity: number
   maxZoom: number
 }
@@ -73,6 +75,8 @@ export default function RadarChuvaAnimado({
   quadros,
   quadroReserva,
   quadroSelecionado,
+  tileUrlTemplate,
+  onTileError,
   opacity,
   maxZoom,
 }: Props) {
@@ -92,7 +96,7 @@ export default function RadarChuvaAnimado({
   return (
     <TileLayer
       key={`${quadroAtual.time}:${quadroAtual.path}`}
-      url={`${host.replace(/\/$/, '')}${quadroAtual.path}/256/{z}/{x}/{y}/2/1_0.png`}
+      url={tileUrlTemplate || `${host.replace(/\/$/, '')}${quadroAtual.path}/256/{z}/{x}/{y}/2/1_0.png`}
       opacity={opacity}
       attribution='Weather data by <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer">RainViewer</a>'
       maxNativeZoom={7}
@@ -100,6 +104,7 @@ export default function RadarChuvaAnimado({
       tileSize={256}
       updateWhenZooming={false}
       updateWhenIdle
+      eventHandlers={onTileError ? { tileerror: onTileError } : undefined}
     />
   )
 }
