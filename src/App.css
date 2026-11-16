@@ -967,24 +967,6 @@ input, select, textarea { font-family: inherit; }
   z-index: 700;
   width: min(360px, calc(100% - 24px));
 }
-.mapa-radar-sintetico-info {
-  position: absolute;
-  top: 98px;
-  left: 50%;
-  z-index: 700;
-  max-width: calc(100% - 24px);
-  transform: translateX(-50%);
-  border: 1px solid #bae6fd;
-  border-radius: 8px;
-  padding: .35rem .55rem;
-  color: #075985;
-  background: rgba(240, 249, 255, .96);
-  box-shadow: 0 2px 8px rgba(15, 23, 42, .16);
-  font-size: .62rem;
-  font-weight: 700;
-  text-align: center;
-}
-
 /* ─── Submenu de filtro de tipos de ocorrências ─── */
 .mapa-ocorr-wrap {
   position: relative;
@@ -1287,7 +1269,6 @@ input, select, textarea { font-family: inherit; }
     left: 8px;
     width: min(340px, calc(100% - 16px));
   }
-  .mapa-radar-sintetico-info { top: 94px; }
 }
 .mapa-legenda-header {
   display: flex;
