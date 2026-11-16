@@ -3425,14 +3425,17 @@ app.get('/api/radar-chuva', async (_req, res) => {
       .filter(validarQuadro)
     const quadrosPrevisao = (Array.isArray(dados?.radar?.nowcast) ? dados.radar.nowcast : [])
       .filter(validarQuadro)
-    const quadros = [
-      ...quadrosObservados.map(quadro => ({ ...quadro, tipoQuadro: 'observado' })),
-      ...quadrosPrevisao.map(quadro => ({ ...quadro, tipoQuadro: 'nowcast' })),
-    ].sort((a, b) => Number(a.time) - Number(b.time))
-    // A imagem observada é preferível ao nowcast para representar chuva atual.
-    const ultimo = (quadrosObservados.length > 0
-      ? quadrosObservados.at(-1)
-      : quadrosPrevisao.at(-1))
+    const quadros = quadrosObservados
+      .sort((a, b) => Number(a.time) - Number(b.time))
+      .slice(-12)
+      .map(quadro => ({
+        path: quadro.path,
+        time: Number(quadro.time),
+        tipoQuadro: 'observado',
+      }))
+    // A chuva ativa usa primeiro observações reais; nowcast só serve de reserva
+    // quando a fonte não publicou nenhum quadro observado.
+    const ultimo = quadrosObservados.at(-1) || quadrosPrevisao.at(-1)
 
     if (!host || !ultimo) throw new Error('RainViewer não retornou quadros de radar')
 
@@ -3443,11 +3446,7 @@ app.get('/api/radar-chuva', async (_req, res) => {
       atualizadoEm: new Date(Number(ultimo.time) * 1000).toISOString(),
       fonte: 'RainViewer',
       tipoQuadro: quadrosObservados.length > 0 ? 'observado' : 'nowcast',
-      quadros: quadros.map(quadro => ({
-        path: quadro.path,
-        frameTime: Number(quadro.time),
-        tipoQuadro: quadro.tipoQuadro,
-      })),
+      quadros,
     }
     radarChuvaCacheTs = agora
     return res.json(radarChuvaCache)

@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Pane, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import RadarChuvaAnimado from '../RadarChuvaAnimado'
+import RadarChuvaAnimado, { type QuadroRadarChuva } from '../RadarChuvaAnimado'
 import NuvensGoesLayer from '../NuvensGoesLayer'
 
-export type QuadroRadar = {
+export type QuadroRadar = QuadroRadarChuva & {
   host: string
   path: string
   frameTime: number
-  quadros?: { path: string; time?: number; frameTime?: number }[]
+  quadros?: QuadroRadarChuva[]
   atualizadoEm?: string
   erroAtualizacao?: boolean
 }
@@ -33,6 +33,8 @@ type Props = {
   satelite: boolean
   renderizarBase?: boolean
   quadroExterno?: QuadroRadar | null
+  quadroSelecionado?: QuadroRadarChuva | null
+  onRadarCarregado?: (quadro: QuadroRadar) => void
   onErro: (mensagem: string) => void
   onAtualizado: (horario: string) => void
 }
@@ -146,6 +148,8 @@ export default function RadarWeatherLayers({
   satelite,
   renderizarBase = true,
   quadroExterno,
+  quadroSelecionado,
+  onRadarCarregado,
   onErro,
   onAtualizado,
 }: Props) {
@@ -170,6 +174,7 @@ export default function RadarWeatherLayers({
         }
         if (cancelado) return
         setQuadroInterno(proximo)
+        onRadarCarregado?.(proximo)
         onErro('')
         onAtualizado(proximo.atualizadoEm || '')
       } catch (error) {
@@ -190,7 +195,7 @@ export default function RadarWeatherLayers({
       window.clearInterval(intervalo)
       document.removeEventListener('visibilitychange', atualizarAoVoltar)
     }
-  }, [radarAtivo, usaQuadroExterno, onAtualizado, onErro])
+  }, [radarAtivo, usaQuadroExterno, onAtualizado, onErro, onRadarCarregado])
 
   return (
     <>
@@ -229,6 +234,7 @@ export default function RadarWeatherLayers({
             host={quadro.host}
             quadros={quadro.quadros || []}
             quadroReserva={{ time: quadro.frameTime, path: quadro.path }}
+            quadroSelecionado={quadroSelecionado}
             opacity={0.72}
             maxZoom={18}
           />

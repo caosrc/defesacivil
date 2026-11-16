@@ -25,6 +25,7 @@ import { GraficoNivel, type LeituraCNL, type PontoNivel } from './MonitoramentoC
 import type { Map as LeafletMap } from 'leaflet'
 import {
   CapturaEstadoMapa,
+  CamadaChuvaEstimadaCemaden,
   MINAS_GERAIS_BOUNDS,
   useEstacoesCemadenMg,
   type EstacaoCemadenMg,
@@ -33,7 +34,8 @@ import { statusLeituraCemaden } from '../cemadenLeitura'
 import './MonitoramentoCNL.css'
 import ModalSenha from './ModalSenha'
 import AreasRiscoMapa from './AreasRiscoMapa'
-import RadarChuvaAnimado, { type QuadroRadarChuva } from './RadarChuvaAnimado'
+import RadarChuvaAnimado, { ControleHistoricoRadar, type QuadroRadarChuva } from './RadarChuvaAnimado'
+import { useRadarFrameTimeline } from './radarTimeline'
 import NuvensGoesLayer from './NuvensGoesLayer'
 import type { RiskArea as AreaRiscoPersistida } from './RadarMapaRisco'
 
@@ -436,14 +438,22 @@ function RadarMapInvalidateSize({ tv }: { tv: boolean }) {
 function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrencias: string }) {
   const [camadaBase, setCamadaBase] = useState<'mapa' | 'satelite'>('mapa')
   const [radarChuva, setRadarChuva] = useState<DadosRadarChuvaLive | null>(null)
+  const quadroReservaRadar = useMemo(() => (
+    radarChuva
+      ? { time: radarChuva.frameTime, path: radarChuva.path }
+      : null
+  ), [radarChuva])
+  const linhaTempoRadar = useRadarFrameTimeline(radarChuva?.quadros || [], quadroReservaRadar)
   const [tempoMapa, setTempoMapa] = useState<TempoMapaRadar | null>(null)
   const [previsaoTrovoadas, setPrevisaoTrovoadas] = useState<PrevisaoTrovoadaRadar | null>(null)
   const [radarErro, setRadarErro] = useState('')
+  const [radarSinteticoErro, setRadarSinteticoErro] = useState('')
   const [nuvensErro, setNuvensErro] = useState('')
   const [tempoMapaErro, setTempoMapaErro] = useState('')
   const [trovoadasErro, setTrovoadasErro] = useState('')
   const [radarCarregando, setRadarCarregando] = useState(false)
   const [mostrarChuva, setMostrarChuva] = useState(true)
+  const [mostrarRadarSintetico, setMostrarRadarSintetico] = useState(false)
   const [mostrarTemperatura, setMostrarTemperatura] = useState(true)
   const [mostrarTrovoadas, setMostrarTrovoadas] = useState(true)
   const [mostrarNuvens, setMostrarNuvens] = useState(false)
@@ -859,6 +869,19 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
         >
           🌧️ Chuva {mostrarChuva ? 'ativa' : 'desativada'}
         </button>
+        <button
+          type="button"
+          className={`radar-live-map-layer-button ${mostrarRadarSintetico ? 'ativo chuva' : ''}`}
+          onClick={() => {
+            setMostrarRadarSintetico(value => !value)
+            setRadarSinteticoErro('')
+          }}
+          aria-pressed={mostrarRadarSintetico}
+          data-testid="toggle-radar-sintetico-radar-dc"
+          title="Estimativa de chuva por satélite CEMADEN/GOES; não é medição de pluviômetro"
+        >
+          ☁️ Radar sintético {mostrarRadarSintetico ? 'ativo' : 'desativado'}
+        </button>
         <button type="button" className={`radar-live-map-layer-button ${mostrarTemperatura ? 'ativo temperatura' : ''}`} onClick={() => setMostrarTemperatura(prev => !prev)} aria-pressed={mostrarTemperatura}>
           🌡️ Temperatura {mostrarTemperatura ? 'ativa' : 'desativada'}
         </button>
@@ -896,8 +919,8 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
         <span><i className="radar-live-map-status-dot radar-live-map-status-dot-station" /> CEMADEN · Ouro Branco</span>
         {zoomMapa >= 9 && <span><i className="radar-live-map-status-dot radar-live-map-status-dot-temperature" /> Temperatura local</span>}
         {zoomMapa >= 9 && <span><i className="radar-live-map-status-dot radar-live-map-status-dot-lightning" /> Trovoadas previstas localmente · 36 h</span>}
-        {(radarErro || nuvensErro || tempoMapaErro || trovoadasErro || cemadenMg.erro) && (
-          <strong>{[radarErro, nuvensErro, tempoMapaErro, trovoadasErro, cemadenMg.erro].filter(Boolean).join(' · ')}</strong>
+        {(radarErro || radarSinteticoErro || nuvensErro || tempoMapaErro || trovoadasErro || cemadenMg.erro) && (
+          <strong>{[radarErro, radarSinteticoErro, nuvensErro, tempoMapaErro, trovoadasErro, cemadenMg.erro].filter(Boolean).join(' · ')}</strong>
         )}
         {ocorrenciasComGps.length > 0 && (
           <span>
@@ -962,11 +985,17 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
               host={radarChuva.host}
               quadros={radarChuva.quadros || []}
               quadroReserva={{ time: radarChuva.frameTime, path: radarChuva.path }}
+              quadroSelecionado={linhaTempoRadar.quadroAtual}
               opacity={0.72}
               maxZoom={18}
             />
           </Pane>
         )}
+        <CamadaChuvaEstimadaCemaden
+          ativa={mostrarRadarSintetico}
+          nomePane="radarLiveHidroestimadorCemaden"
+          onErro={setRadarSinteticoErro}
+        />
         {mostrarChuva && (
           <Pane name="radarLiveCemadenStations" style={{ zIndex: 450 }}>
             {estacoesOuroBrancoGeorreferenciadas.map(estacao => {
@@ -1124,6 +1153,7 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
         />
       </MapContainer>
       </div>
+      {mostrarChuva && <ControleHistoricoRadar controle={linhaTempoRadar} temaEscuro />}
       <div className="radar-live-map-footer">
         <span>
           {cemadenMg.dados
@@ -1134,10 +1164,13 @@ function RadarMapaTempoReal({ tv, dataOcorrencias }: { tv: boolean; dataOcorrenc
           <span>{estacoesOuroBrancoSemCoordenadas} estação(ões) de Ouro Branco sem posição no cadastro geográfico</span>
         )}
         <span>
-          {radarChuva?.frameTime
-            ? `Quadro mais recente do RainViewer: ${new Date(radarChuva.frameTime * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · há ${Math.max(0, Math.floor((Date.now() - radarChuva.frameTime * 1000) / 60000))} min · fonte atualiza em intervalos de cerca de 10 min · zoom máx. 7`
+          {linhaTempoRadar.quadroAtual
+            ? `Quadro ${linhaTempoRadar.aoVivo ? 'mais recente' : 'histórico'} do RainViewer: ${new Date(linhaTempoRadar.quadroAtual.time * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${linhaTempoRadar.quadros.length} quadros para comparar · zoom máx. 7`
             : 'Radar RainViewer: —'}
         </span>
+        {mostrarRadarSintetico && (
+          <span>Radar sintético CEMADEN/GOES · estimativa por satélite; não é leitura de pluviômetro</span>
+        )}
         <span>{tempoMapa?.atual?.temperatura != null ? `Ouro Branco: ${Math.round(Number(tempoMapa.atual.temperatura))} °C` : 'Temperatura local: —'}</span>
         <span>{previsaoTrovoadas ? `${pontosTrovoada.length} ponto(s) previsto(s) perto de Ouro Branco` : 'Previsão local de trovoadas: —'}</span>
       </div>

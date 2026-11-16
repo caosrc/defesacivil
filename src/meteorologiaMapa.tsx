@@ -1,11 +1,69 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useMap, useMapEvents } from 'react-leaflet'
+import { Pane, WMSTileLayer, useMap, useMapEvents } from 'react-leaflet'
 import type { Map as LeafletMap } from 'leaflet'
 
 export const MINAS_GERAIS_BOUNDS: [[number, number], [number, number]] = [
   [-22.92, -51.05],
   [-14.22, -39.85],
 ]
+
+export const CEMADEN_MAPA_OFICIAL_URL = 'https://mapainterativo.cemaden.gov.br/'
+export const CEMADEN_HIDROESTIMADOR_WMS_URL = 'https://gsc.cemaden.gov.br/geoserver/cemaden_dev/wms'
+export const CEMADEN_HIDROESTIMADOR_LAYER = 'cemaden_dev:goes_hidroestimador_0'
+
+export function CamadaChuvaEstimadaCemaden({
+  ativa,
+  opacidade = 0.52,
+  nomePane = 'cemadenHidroestimador',
+  onErro,
+}: {
+  ativa: boolean
+  opacidade?: number
+  nomePane?: string
+  onErro?: (mensagem: string) => void
+}) {
+  const [versaoAtualizacao, setVersaoAtualizacao] = useState(
+    () => Math.floor(Date.now() / (5 * 60 * 1000)),
+  )
+
+  useEffect(() => {
+    if (!ativa) return
+    const atualizar = () => {
+      if (document.visibilityState === 'visible') {
+        setVersaoAtualizacao(Math.floor(Date.now() / (5 * 60 * 1000)))
+      }
+    }
+    const atualizarAoAtivar = window.setTimeout(atualizar, 0)
+    const intervalo = window.setInterval(atualizar, 5 * 60 * 1000)
+    document.addEventListener('visibilitychange', atualizar)
+    return () => {
+      window.clearTimeout(atualizarAoAtivar)
+      window.clearInterval(intervalo)
+      document.removeEventListener('visibilitychange', atualizar)
+    }
+  }, [ativa])
+
+  if (!ativa) return null
+  return (
+    <Pane name={nomePane} style={{ zIndex: 425 }}>
+      <WMSTileLayer
+        key={versaoAtualizacao}
+        url={`${CEMADEN_HIDROESTIMADOR_WMS_URL}?refresh=${versaoAtualizacao}`}
+        layers={CEMADEN_HIDROESTIMADOR_LAYER}
+        format="image/png"
+        transparent
+        version="1.1.1"
+        opacity={opacidade}
+        maxZoom={18}
+        updateWhenIdle
+        attribution="Estimativa de chuva por satélite: CEMADEN/GOES"
+        eventHandlers={{
+          tileerror: () => onErro?.('Camada estimada de chuva do CEMADEN indisponível.'),
+        }}
+      />
+    </Pane>
+  )
+}
 
 export interface EstacaoCemadenMg {
   id: number

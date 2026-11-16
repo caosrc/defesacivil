@@ -426,6 +426,29 @@
   cursor: not-allowed;
   opacity: .48;
 }
+.radar-live-map-card .mapa-chuva-historico--escuro {
+  margin: .1rem 0 .45rem;
+  border-color: #285576;
+  color: #c9e7fa;
+  background: #0b2944;
+  box-shadow: none;
+}
+.radar-live-map-card .mapa-chuva-historico--escuro button {
+  border-color: #39718f;
+  color: #c9e7fa;
+  background: #123652;
+}
+.radar-live-map-card .mapa-chuva-historico--escuro button.ao-vivo {
+  border-color: #34d399;
+  color: #a7f3d0;
+}
+.radar-live-map-card .mapa-chuva-historico--escuro .mapa-chuva-historico-topo strong {
+  color: #e7f2ff;
+}
+.radar-live-map-card .mapa-chuva-historico--escuro .mapa-chuva-historico-escala,
+.radar-live-map-card .mapa-chuva-historico--escuro > small {
+  color: #9ebbd0;
+}
 .radar-live-map-status {
   display: flex;
   flex-wrap: wrap;

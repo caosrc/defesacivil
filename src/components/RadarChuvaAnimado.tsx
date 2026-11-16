@@ -1,46 +1,92 @@
 import { useMemo } from 'react'
 import { TileLayer } from 'react-leaflet'
+import { normalizarQuadroRadar, type ControleLinhaTempoRadar, type QuadroRadarChuva } from './radarTimeline'
 
-export type QuadroRadarChuva = {
-  time?: number
-  frameTime?: number
-  path: string
-}
+export type { QuadroRadarChuva } from './radarTimeline'
 
 interface Props {
   host: string
   quadros: QuadroRadarChuva[]
   quadroReserva?: QuadroRadarChuva | null
+  quadroSelecionado?: QuadroRadarChuva | null
   opacity: number
   maxZoom: number
+}
+
+export function ControleHistoricoRadar({
+  controle,
+  temaEscuro = false,
+}: {
+  controle: ControleLinhaTempoRadar
+  temaEscuro?: boolean
+}) {
+  const { quadros, quadroAtual, indiceAtual, animando } = controle
+  if (quadros.length < 2 || !quadroAtual) return null
+
+  const formatarHorario = (time: number) => new Date(time * 1000).toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  return (
+    <div className={`mapa-chuva-historico${temaEscuro ? ' mapa-chuva-historico--escuro' : ''}`}>
+      <div className="mapa-chuva-historico-topo">
+        <button
+          type="button"
+          onClick={controle.alternarAnimacao}
+          aria-pressed={animando}
+          title="Reproduzir os quadros observados; não é previsão"
+        >
+          {animando ? '⏸ Pausar' : '▶ Animar histórico'}
+        </button>
+        <button
+          type="button"
+          className={controle.aoVivo ? 'ao-vivo' : ''}
+          onClick={controle.irAoVivo}
+          aria-pressed={controle.aoVivo}
+        >
+          ● Ao vivo
+        </button>
+        <strong>{formatarHorario(quadroAtual.time)}</strong>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={quadros.length - 1}
+        step={1}
+        value={indiceAtual}
+        aria-label="Selecionar horário dos quadros observados de chuva"
+        onChange={evento => controle.selecionar(quadros[Number(evento.target.value)].time)}
+      />
+      <div className="mapa-chuva-historico-escala">
+        <span>{formatarHorario(quadros[0].time)}</span>
+        <span>Quadro {indiceAtual + 1} de {quadros.length}</span>
+        <span>{formatarHorario(quadros[quadros.length - 1].time)}</span>
+      </div>
+      <small>Histórico observado RainViewer; não representa nowcasting ou previsão.</small>
+    </div>
+  )
 }
 
 export default function RadarChuvaAnimado({
   host,
   quadros,
   quadroReserva,
+  quadroSelecionado,
   opacity,
   maxZoom,
 }: Props) {
   const quadroAtual = useMemo(() => {
-    const normalizar = (quadro: QuadroRadarChuva | null | undefined) => {
-      const time = Number(quadro?.time ?? quadro?.frameTime)
-      if (
-        !quadro ||
-        !Number.isFinite(time) ||
-        time <= 0 ||
-        typeof quadro.path !== 'string' ||
-        !quadro.path.startsWith('/v2/radar/')
-      ) return null
-      return { time, path: quadro.path }
-    }
-
     const validos = quadros
-      .map(normalizar)
+      .filter(quadro => quadro.tipoQuadro !== 'nowcast')
+      .map(normalizarQuadroRadar)
       .filter((quadro): quadro is { time: number; path: string } => quadro !== null)
       .sort((a, b) => a.time - b.time)
-    return validos.at(-1) || normalizar(quadroReserva)
-  }, [quadros, quadroReserva])
+    const selecionado = normalizarQuadroRadar(quadroSelecionado)
+    return validos.find(quadro => quadro.time === selecionado?.time)
+      || validos.at(-1)
+      || normalizarQuadroRadar(quadroReserva)
+  }, [quadros, quadroReserva, quadroSelecionado])
   if (!host || !quadroAtual) return null
 
   return (

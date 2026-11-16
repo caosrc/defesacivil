@@ -21,7 +21,10 @@ import {
   descartarMalhaEmMemoria,
 } from '../malhaViaria'
 import { wsOn, wsSend, wsOnOpen } from '../wsClient'
-import RadarWeatherLayers from './RadarMapaRisco/RadarWeatherLayers'
+import { CamadaChuvaEstimadaCemaden } from '../meteorologiaMapa'
+import { useRadarFrameTimeline } from './radarTimeline'
+import { ControleHistoricoRadar, type QuadroRadarChuva } from './RadarChuvaAnimado'
+import RadarWeatherLayers, { type QuadroRadar } from './RadarMapaRisco/RadarWeatherLayers'
 import {
   ativarGps as ativarGpsGlobal,
   desativarGps as desativarGpsGlobal,
@@ -523,6 +526,9 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [legendaAberta, setLegendaAberta] = useState(false)
   const [camadaMapa, setCamadaMapa] = useState<CamadaMapa>('padrao')
   const [mostrarChuva, setMostrarChuva] = useState(false)
+  const [mostrarRadarSintetico, setMostrarRadarSintetico] = useState(false)
+  const [mostrarNuvens, setMostrarNuvens] = useState(false)
+  const [radarChuvaMapa, setRadarChuvaMapa] = useState<QuadroRadar | null>(null)
   const [erroCamadasClima, setErroCamadasClima] = useState('')
   const [camadaMonitoramento, setCamadaMonitoramento] = useState<CamadaMonitoramentoId>(null)
   const [painelMonitoramentoAberto, setPainelMonitoramentoAberto] = useState(false)
@@ -1236,6 +1242,15 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const receberErroCamadasClima = useCallback((mensagem: string) => {
     setErroCamadasClima(mensagem)
   }, [])
+  const receberQuadroRadar = useCallback((quadro: QuadroRadar) => {
+    setRadarChuvaMapa(quadro)
+  }, [])
+  const quadroReservaRadar = useMemo<QuadroRadarChuva | null>(() => (
+    radarChuvaMapa
+      ? { time: radarChuvaMapa.frameTime, path: radarChuvaMapa.path }
+      : null
+  ), [radarChuvaMapa])
+  const linhaTempoRadar = useRadarFrameTimeline(radarChuvaMapa?.quadros || [], quadroReservaRadar)
 
   // ── Render ────────────────────────────────────────────────────
   return (
@@ -1275,11 +1290,18 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         <RadarWeatherLayers
           mostrarChuva={mostrarChuva}
           mostrarSintetico={false}
-          mostrarNuvens={false}
+          mostrarNuvens={mostrarNuvens}
           satelite={false}
           renderizarBase={false}
+          quadroSelecionado={linhaTempoRadar.quadroAtual}
+          onRadarCarregado={receberQuadroRadar}
           onErro={receberErroCamadasClima}
           onAtualizado={ignorarAtualizacaoRadar}
+        />
+        <CamadaChuvaEstimadaCemaden
+          ativa={mostrarRadarSintetico}
+          nomePane="mapaRadarSinteticoCemaden"
+          onErro={receberErroCamadasClima}
         />
         {camadaMonitoramento && camadasMonitoramento.find(c => c.id === camadaMonitoramento)?.url && (
           <TileLayer
@@ -1497,6 +1519,13 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         ))}
       </MapContainer>
 
+      {mostrarRadarSintetico && (
+        <div className="mapa-radar-sintetico-info" role="status">
+          Estimativa CEMADEN/GOES por satélite · não é medição de pluviômetro
+        </div>
+      )}
+      {mostrarChuva && <ControleHistoricoRadar controle={linhaTempoRadar} temaEscuro />}
+
       {/* Banner de alerta — focos de incêndio detectados */}
       {focosIncendio.length > 0 && !alertaFocosVisto && (
         <div className="mapa-fogo-alerta">
@@ -1565,6 +1594,30 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           title="Mostrar precipitação observada pelo radar RainViewer"
         >
           🌧️ Chuva
+        </button>
+        <button
+          className={`mapa-camada-btn ${mostrarNuvens ? 'ativo' : ''}`}
+          onClick={() => {
+            setMostrarNuvens(value => !value)
+            setErroCamadasClima('')
+          }}
+          aria-pressed={mostrarNuvens}
+          data-testid="toggle-nuvens-goes-mapa"
+          title="Imagem de nuvens do satélite NOAA GOES; não mede chuva no solo"
+        >
+          ☁️ Nuvens
+        </button>
+        <button
+          className={`mapa-camada-btn ${mostrarRadarSintetico ? 'ativo' : ''}`}
+          onClick={() => {
+            setMostrarRadarSintetico(value => !value)
+            setErroCamadasClima('')
+          }}
+          aria-pressed={mostrarRadarSintetico}
+          data-testid="toggle-radar-sintetico-mapa"
+          title="Estimativa de chuva por satélite CEMADEN/GOES; não é medição de pluviômetro"
+        >
+          🌧️ Sintético
         </button>
         <button
           className={`mapa-camada-btn ${mostrarMateriais ? 'ativo' : ''}`}
