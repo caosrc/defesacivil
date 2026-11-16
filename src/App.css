@@ -911,62 +911,6 @@ input, select, textarea { font-family: inherit; }
   font-size: .68rem;
 }
 
-.mapa-chuva-historico {
-  display: grid;
-  gap: .35rem;
-  padding: .55rem .65rem;
-  border: 1px solid #bfdbfe;
-  border-radius: 10px;
-  color: #334155;
-  background: rgba(248, 252, 255, .97);
-  box-shadow: 0 2px 12px rgba(15, 23, 42, .2);
-  font-size: .65rem;
-}
-.mapa-chuva-historico-topo {
-  display: flex;
-  align-items: center;
-  gap: .4rem;
-}
-.mapa-chuva-historico button {
-  border: 1px solid #bfdbfe;
-  border-radius: 6px;
-  padding: .28rem .45rem;
-  color: #075985;
-  background: #fff;
-  font: inherit;
-  font-weight: 800;
-  cursor: pointer;
-}
-.mapa-chuva-historico button.ao-vivo {
-  border-color: #10b981;
-  color: #047857;
-}
-.mapa-chuva-historico-topo strong {
-  margin-left: auto;
-  color: #0f172a;
-  font-variant-numeric: tabular-nums;
-}
-.mapa-chuva-historico input[type="range"] {
-  width: 100%;
-  margin: 0;
-  accent-color: #0284c7;
-}
-.mapa-chuva-historico-escala {
-  display: flex;
-  justify-content: space-between;
-  gap: .4rem;
-  font-size: .58rem;
-  font-variant-numeric: tabular-nums;
-}
-.mapa-chuva-historico-escala span:nth-child(2) { text-align: center; }
-.mapa-chuva-historico > small { font-size: .57rem; }
-.mapa-wrapper > .mapa-chuva-historico {
-  position: absolute;
-  bottom: 14px;
-  left: 12px;
-  z-index: 700;
-  width: min(360px, calc(100% - 24px));
-}
 /* ─── Submenu de filtro de tipos de ocorrências ─── */
 .mapa-ocorr-wrap {
   position: relative;
@@ -1264,11 +1208,6 @@ input, select, textarea { font-family: inherit; }
     top: 94px;
   }
   .mapa-chuva-erro { right: 8px; bottom: 108px; }
-  .mapa-wrapper > .mapa-chuva-historico {
-    bottom: 12px;
-    left: 8px;
-    width: min(340px, calc(100% - 16px));
-  }
 }
 .mapa-legenda-header {
   display: flex;

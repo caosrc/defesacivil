@@ -22,7 +22,7 @@ import {
 } from '../malhaViaria'
 import { wsOn, wsSend, wsOnOpen } from '../wsClient'
 import { useRadarFrameTimeline } from './radarTimeline'
-import { ControleHistoricoRadar, type QuadroRadarChuva } from './RadarChuvaAnimado'
+import type { QuadroRadarChuva } from './RadarChuvaAnimado'
 import RadarWeatherLayers, { type QuadroRadar } from './RadarMapaRisco/RadarWeatherLayers'
 import ChuvaPainel, {
   type ChuvaAlertaOficial,
@@ -1572,10 +1572,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
     fim: alerta.fim ? new Date(alerta.fim).toLocaleString('pt-BR') : undefined,
     url: alerta.url,
   }))
-  const quadrosRainViewer = linhaTempoRadar.quadros.map(quadro => ({
-    horario: new Date(quadro.time * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    rotulo: new Date(quadro.time * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-  }))
   const leituraCemadenAtualizada = estacoesCemadenGeorreferenciadas.filter(estacao =>
     statusLeituraCemaden(estacao.precipitacaoDataHora) === 'atualizada',
   ).length
@@ -1975,8 +1971,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         ))}
       </MapContainer>
 
-      {mostrarChuva && !painelChuvaAberto && <ControleHistoricoRadar controle={linhaTempoRadar} temaEscuro />}
-
       {/* Banner de alerta — focos de incêndio detectados */}
       {focosIncendio.length > 0 && !alertaFocosVisto && (
         <div className="mapa-fogo-alerta">
@@ -2164,16 +2158,6 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           }))}
           rainViewerAtivo={mostrarChuva}
           onAlternarRainViewer={() => setMostrarChuva(ativa => !ativa)}
-          quadrosRainViewer={quadrosRainViewer}
-          indiceQuadroRainViewer={linhaTempoRadar.indiceAtual}
-          onSelecionarQuadroRainViewer={indice => {
-            const quadro = linhaTempoRadar.quadros[indice]
-            if (quadro) linhaTempoRadar.selecionar(quadro.time)
-          }}
-          animacaoRainViewerAtiva={linhaTempoRadar.animando}
-          onAlternarAnimacaoRainViewer={linhaTempoRadar.alternarAnimacao}
-          aoVivoRainViewer={linhaTempoRadar.aoVivo}
-          onIrParaRainViewerAoVivo={linhaTempoRadar.irAoVivo}
           visaoCombinadaAtiva={visaoChuvaCombinadaAtiva}
           onAlternarVisaoCombinada={() => {
             const ativar = !visaoChuvaCombinadaAtiva

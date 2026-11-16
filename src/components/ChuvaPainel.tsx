@@ -52,11 +52,6 @@ export interface ChuvaStatusFonte {
   atualizadoEm?: string
 }
 
-export interface ChuvaQuadroObservado {
-  horario: string
-  rotulo?: string
-}
-
 export interface ChuvaPainelProps {
   onClose: () => void
 
@@ -81,13 +76,6 @@ export interface ChuvaPainelProps {
 
   rainViewerAtivo: boolean
   onAlternarRainViewer: () => void
-  quadrosRainViewer?: ChuvaQuadroObservado[]
-  indiceQuadroRainViewer: number
-  onSelecionarQuadroRainViewer: (indice: number) => void
-  animacaoRainViewerAtiva: boolean
-  onAlternarAnimacaoRainViewer: () => void
-  aoVivoRainViewer: boolean
-  onIrParaRainViewerAoVivo: () => void
 
   visaoCombinadaAtiva: boolean
   onAlternarVisaoCombinada: () => void
@@ -206,13 +194,6 @@ export default function ChuvaPainel({
   onVoltarParaOuroBranco,
   rainViewerAtivo,
   onAlternarRainViewer,
-  quadrosRainViewer = [],
-  indiceQuadroRainViewer,
-  onSelecionarQuadroRainViewer,
-  animacaoRainViewerAtiva,
-  onAlternarAnimacaoRainViewer,
-  aoVivoRainViewer,
-  onIrParaRainViewerAoVivo,
   visaoCombinadaAtiva,
   onAlternarVisaoCombinada,
   radarRedemetAtivo,
@@ -242,9 +223,6 @@ export default function ChuvaPainel({
   refreshing = false,
   onRefresh,
 }: ChuvaPainelProps) {
-  const quadroSelecionado = quadrosRainViewer[indiceQuadroRainViewer]
-  const indiceSeguro = Math.max(0, Math.min(indiceQuadroRainViewer, Math.max(quadrosRainViewer.length - 1, 0)))
-
   const alterarProduto = (event: ChangeEvent<HTMLSelectElement>) => {
     onSelecionarProdutoRadarRedemet(event.target.value as ProdutoRadarRedemet)
   }
@@ -450,54 +428,6 @@ export default function ChuvaPainel({
                 aoAlternar={onAlternarRainViewer}
                 fonte={statusFontes?.rainViewer}
               />
-              {rainViewerAtivo && (
-                <div className="chuva-timeline">
-                  <div className="chuva-timeline__top">
-                    <span>Linha do tempo observada</span>
-                    <strong>{quadroSelecionado?.rotulo || quadroSelecionado?.horario || 'Sem quadro'}</strong>
-                  </div>
-                  <div className="chuva-timeline__controls">
-                    <button
-                      type="button"
-                      className="chuva-button"
-                      aria-pressed={animacaoRainViewerAtiva}
-                      onClick={onAlternarAnimacaoRainViewer}
-                      disabled={!quadrosRainViewer.length}
-                    >
-                      {animacaoRainViewerAtiva ? 'Pausar' : 'Animar quadros'}
-                    </button>
-                    <button
-                      type="button"
-                      className={`chuva-button${aoVivoRainViewer ? ' chuva-button--active' : ''}`}
-                      aria-pressed={aoVivoRainViewer}
-                      onClick={onIrParaRainViewerAoVivo}
-                      disabled={!quadrosRainViewer.length}
-                    >
-                      Ao vivo
-                    </button>
-                  </div>
-                  {quadrosRainViewer.length > 0 ? (
-                    <>
-                      <input
-                        className="chuva-timeline__range"
-                        type="range"
-                        min={0}
-                        max={quadrosRainViewer.length - 1}
-                        step={1}
-                        value={indiceSeguro}
-                        aria-label="Selecionar quadro observado do RainViewer"
-                        onChange={event => onSelecionarQuadroRainViewer(Number(event.target.value))}
-                      />
-                      <div className="chuva-timeline__labels">
-                        <span>{quadrosRainViewer[0]?.rotulo || quadrosRainViewer[0]?.horario}</span>
-                        <span>{quadrosRainViewer[quadrosRainViewer.length - 1]?.rotulo || quadrosRainViewer[quadrosRainViewer.length - 1]?.horario}</span>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="chuva-source__note">Linha do tempo indisponível no momento.</div>
-                  )}
-                </div>
-              )}
 
               <div className="chuva-source">
                 <div className="chuva-source__main">

@@ -601,63 +601,6 @@
   font-weight: 800;
 }
 
-.chuva-timeline {
-  margin: 0 10px 10px;
-  padding: 9px 10px 8px;
-  border: 1px solid #d4e4e7;
-  border-radius: 9px;
-  background: #f0f7f7;
-}
-
-.chuva-timeline__top,
-.chuva-timeline__controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.chuva-timeline__top {
-  margin-bottom: 6px;
-  color: #59747a;
-  font-size: 9px;
-}
-
-.chuva-timeline__top strong {
-  color: #1e515d;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-
-.chuva-timeline__controls {
-  justify-content: flex-start;
-  margin-bottom: 6px;
-}
-
-.chuva-timeline .chuva-button {
-  min-height: 28px;
-  padding: 5px 8px;
-  font-size: 9px;
-}
-
-.chuva-timeline__range {
-  display: block;
-  width: 100%;
-  height: 17px;
-  margin: 0;
-  accent-color: var(--cp-rain);
-  cursor: pointer;
-}
-
-.chuva-timeline__labels {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: #71888c;
-  font-size: 8px;
-  font-variant-numeric: tabular-nums;
-}
-
 .chuva-opacity {
   display: grid;
   gap: 8px;
