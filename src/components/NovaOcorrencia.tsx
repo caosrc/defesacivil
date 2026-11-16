@@ -9,6 +9,7 @@ import { clearRascunhoNovaOcorrencia, geocodificarEndereco, getRascunhoNovaOcorr
 import { formatarCoordenadas, adicionarMarcaDagua, mensagemErroGps } from '../utils'
 import { calcularHorasTotal, calcularHorasOcorrenciaBanco, formatarHoras, carregarFeriadosCustom } from '../horasUtils'
 import PoligonoAreaQueimada, { type PontoPoligono } from './PoligonoAreaQueimada'
+import { getAgenteLogado } from './Login'
 
 // Fix Leaflet default icon
 ;(function fixLeafletIcon() {
@@ -65,9 +66,9 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
   const [situacao, setSituacao] = useState('')
   const [recomendacao, setRecomendacao] = useState('')
   const [conclusao, setConclusao] = useState('')
+  const [agenteResponsavel] = useState(() => getAgenteLogado())
   const [agentes, setAgentes] = useState<string[]>(() => {
-    const agenteLogado = sessionStorage.getItem('defesacivil-agente-sessao')
-    return agenteLogado ? [agenteLogado] : []
+    return agenteResponsavel ? [agenteResponsavel] : []
   })
   const [buscandoGps, setBuscandoGps] = useState(false)
   const [geocodificando, setGeocodificando] = useState(false)
@@ -122,7 +123,13 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
         if (d.situacao) setSituacao(d.situacao as string)
         if (d.recomendacao) setRecomendacao(d.recomendacao as string)
         if (d.conclusao) setConclusao(d.conclusao as string)
-        if (Array.isArray(d.agentes) && d.agentes.length > 0) setAgentes(d.agentes as string[])
+        const agentesRestaurados = Array.isArray(d.agentes)
+          ? d.agentes.filter((nome): nome is string => typeof nome === 'string' && nome.trim() !== '')
+          : []
+        setAgentes([...new Set([
+          ...agentesRestaurados,
+          ...(agenteResponsavel ? [agenteResponsavel] : []),
+        ])])
         if (Array.isArray(d.fotos)) setFotos(d.fotos as string[])
         if (Array.isArray(d.focosIncendio) && d.focosIncendio.length > 0) setFocosIncendio(d.focosIncendio as FocoIncendio[])
         if (Array.isArray(d.poligonoArea) && d.poligonoArea.length > 0) setPoligonoArea(d.poligonoArea as PontoPoligono[])
@@ -135,7 +142,7 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     }
     void restaurar()
     return () => { ativo = false }
-  }, [])
+  }, [agenteResponsavel])
 
   const montarRascunho = useCallback(() => ({
     tipo, tipoOutro, natureza, subnatureza, nivelRisco, statusOc,
@@ -172,14 +179,13 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
     setRua(''); setNumero(''); setBairro('')
     setLat(null); setLng(null)
     setProprietario(''); setTelefone(''); setSituacao(''); setRecomendacao(''); setConclusao('')
-    const agenteLogado = sessionStorage.getItem('defesacivil-agente-sessao')
-    setAgentes(agenteLogado ? [agenteLogado] : [])
+    setAgentes(agenteResponsavel ? [agenteResponsavel] : [])
     setFotos([])
     setFocosIncendio([{ lat: null, lng: null, buscando: false }])
     setPoligonoArea([])
     setRascunhoRestaurado(false)
     setErro('')
-  }, [hoje])
+  }, [agenteResponsavel, hoje])
 
   const voltarComRascunho = useCallback(() => {
     if (rascunhoCarregado) void persistirRascunho().finally(onVoltar)
@@ -397,8 +403,11 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
         situacao: situacao || null,
         recomendacao: recomendacao || null,
         conclusao: conclusao || null,
-        agentes,
-        responsavel_registro: sessionStorage.getItem('defesacivil-agente-sessao') || null,
+        agentes: [...new Set([
+          ...agentes,
+          ...(agenteResponsavel ? [agenteResponsavel] : []),
+        ])],
+        responsavel_registro: agenteResponsavel || null,
         focos_incendio: focosValidos && focosValidos.length > 0 ? focosValidos : null,
         poligono_area_queimada: poligonoArea.length >= 3 ? poligonoArea : null,
       }
@@ -879,9 +888,13 @@ export default function NovaOcorrencia({ onSalvo, onVoltar, isOnline }: Props) {
                   <input
                     type="checkbox"
                     className="agente-checkbox"
-                    checked={agentes.includes(nome)}
+                    checked={agentes.includes(nome) || nome === agenteResponsavel}
+                    disabled={nome === agenteResponsavel}
+                    aria-label={nome === agenteResponsavel
+                      ? `${nome} — responsável pelo registro, incluído automaticamente`
+                      : nome}
                     onChange={(e) => {
-                      if (e.target.checked) setAgentes((p) => [...p, nome])
+                      if (e.target.checked) setAgentes((p) => [...new Set([...p, nome])])
                       else setAgentes((p) => p.filter((a) => a !== nome))
                     }}
                   />

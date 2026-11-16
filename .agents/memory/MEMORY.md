@@ -6,3 +6,4 @@
 - [Desempenho do mapa](mapa-desempenho.md) — marcadores de ocorrências devem permanecer no Leaflet e ser agrupados, sem desmontagem React durante zoom/arraste.
 - [Texto XML em relatórios DOCX](docx-xml-texto.md) — texto visível de um parágrafo pode estar dividido entre vários elementos `w:t`; concatene-os antes de identificar blocos.
 - [Painel Radar DC](radar-dc-painel.md) — clima e precipitação de áreas usam Ouro Branco; o quadro hidrológico mostra o nível do Bananeiras e não corta lembretes.
+- [Responsável pela ocorrência](ocorrencias-responsavel.md) — o agente conectado que registra deve estar sempre entre os envolvidos.

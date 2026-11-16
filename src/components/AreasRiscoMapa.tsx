@@ -151,10 +151,7 @@ export default function AreasRiscoMapa({
   const [processandoKmz, setProcessandoKmz] = useState(false)
   const [mensagemKmz, setMensagemKmz] = useState('')
   const arquivoKmzRef = useRef<HTMLInputElement>(null)
-  const [recolhido, setRecolhido] = useState(() => {
-    const celular = typeof window !== 'undefined' && window.matchMedia('(max-width: 700px)').matches
-    return !modoTv && !celular
-  })
+  const [recolhido, setRecolhido] = useState(() => !modoTv)
   const painelRef = useRef<HTMLDivElement>(null)
   const scrollAntesDoFormularioRef = useRef(0)
   const formularioAberto = rascunho !== null
@@ -546,7 +543,7 @@ export default function AreasRiscoMapa({
                 data-testid="button-titulo-painel-riscos"
                 onClick={() => setRecolhido(value => !value)}
               >
-                <span className="arm-eyebrow">DEFESA CIVIL · LAFAIETE</span>
+                <span className="arm-eyebrow">DEFESA CIVIL · OURO BRANCO</span>
                 <span>Áreas de risco</span>
               </button>
             </h2>

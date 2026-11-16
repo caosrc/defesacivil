@@ -79,7 +79,7 @@ function distanciaKm(latitude, longitude) {
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-async function buscarEstacoesCemaden() {
+export async function buscarEstacoesCemaden() {
   const respostaCatalogo = await fetch(CEMADEN_CATALOG_URL, {
     headers: { 'User-Agent': 'DefesaCivilOuroBranco/1.0' },
     signal: AbortSignal.timeout(10_000),
