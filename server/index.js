@@ -14,6 +14,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { handler as planetFocosHandler } from '../netlify/functions/planet-focos.js'
+import { registerWeatherRoutes } from './weather-routes.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -65,6 +66,7 @@ app.use(cors({
   credentials: true,
 }))
 app.use(express.json({ limit: '100mb' }))
+registerWeatherRoutes(app)
 
 // ── VAPID (Web Push) ──
 // Strip any base64 padding (=) that web-push does not accept

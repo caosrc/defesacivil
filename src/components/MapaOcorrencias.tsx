@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap, Circle, Polyline, CircleMarker, Pane } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { Ocorrencia } from '../types'
@@ -24,6 +24,24 @@ import { wsOn, wsSend, wsOnOpen } from '../wsClient'
 import { useRadarFrameTimeline } from './radarTimeline'
 import { ControleHistoricoRadar, type QuadroRadarChuva } from './RadarChuvaAnimado'
 import RadarWeatherLayers, { type QuadroRadar } from './RadarMapaRisco/RadarWeatherLayers'
+import ChuvaPainel, {
+  type ChuvaAlertaOficial,
+  type ChuvaCondicaoAtual,
+  type ChuvaPrevisaoHora,
+  type ChuvaPrevisaoTrovoada,
+  type ProdutoRadarRedemet,
+} from './ChuvaPainel'
+import {
+  CamadaChuvaEstimadaCemaden,
+  CEMADEN_MAPA_OFICIAL_URL,
+  MINAS_GERAIS_BOUNDS,
+  useEstacoesCemadenMg,
+  type EstacaoCemadenMg,
+} from '../meteorologiaMapa'
+import { dataHoraCemadenFormatada, statusLeituraCemaden } from '../cemadenLeitura'
+import NuvensGoesLayer from './NuvensGoesLayer'
+import { useProdutoRedemet, type TipoRadarRedemet } from './redemetApi'
+import { CamadaRadarRedemet, CamadaSateliteRedemet, CamadaStscRedemet } from './redemetMapa'
 import {
   ativarGps as ativarGpsGlobal,
   desativarGps as desativarGpsGlobal,
@@ -300,6 +318,21 @@ function GpsCenter({ position, seguir }: { position: [number, number]; seguir: b
   return null
 }
 
+function ControladorEnquadramentoMapa({ pedido }: { pedido: PedidoEnquadramentoMapa }) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!pedido || pedido.id <= 0) return
+    if (pedido.destino === 'minas-gerais') {
+      map.fitBounds(MINAS_GERAIS_BOUNDS, { padding: [24, 24], maxZoom: 7, animate: true })
+    } else {
+      map.setView(OURO_BRANCO, 13, { animate: true })
+    }
+  }, [map, pedido])
+
+  return null
+}
+
 // Centraliza no destino quando ele muda — usado pela busca de endereço.
 function FocoDestino({ destino, rota }: {
   destino: { lat: number; lng: number } | null
@@ -507,6 +540,104 @@ type StatusOffline = 'idle' | 'baixando' | 'concluido' | 'erro'
 type StatusWs = 'desconectado' | 'conectando' | 'conectado'
 type CamadaMapa = 'padrao' | 'satelite'
 type CamadaMonitoramentoId = string | null
+type PedidoEnquadramentoMapa = { id: number; destino: 'minas-gerais' | 'ouro-branco' } | null
+
+interface TempoPainelChuva {
+  atualizadoEm?: string
+  atual?: {
+    time?: string
+    temperatura?: number | null
+    umidade?: number | null
+    precipitacao?: number | null
+    chuva?: number | null
+    codigoTempo?: number | null
+    vento?: number | null
+  } | null
+  horas?: Array<{
+    time: string
+    temperatura?: number | null
+    probabilidadeChuva?: number | null
+    codigoTempo?: number | null
+  }>
+  fonte?: string
+}
+
+interface PontoTrovoadaMapa {
+  id: string
+  nome: string
+  latitude: number
+  longitude: number
+  primeiraTrovoada: string
+  modelosComTrovoada: number
+  probabilidadeChuva: number
+  precipitacao: number
+  risco: string
+}
+
+interface PrevisaoTrovoadaMapa {
+  atualizadoEm?: string
+  atual?: {
+    time?: string
+    modelosComTrovoada?: number
+    risco?: string
+  } | null
+  modelos?: Array<{
+    id: string
+    nome: string
+    primeiraTrovoada?: string | null
+    maiorCodigo?: number
+  }>
+  pontos?: PontoTrovoadaMapa[]
+  proximaTrovoada?: string | null
+  riscoAtual?: string
+  modelosDisponiveis?: number
+  fonte?: string
+}
+
+interface AlertaTempoMapa {
+  id: string
+  titulo: string
+  descricao?: string
+  nivel: 'vermelho' | 'amarelo' | 'informativo' | string
+  inicio?: string | null
+  fim?: string | null
+  url?: string
+}
+
+const ESTACOES_CEMADEN_VAZIAS: EstacaoCemadenMg[] = []
+
+function descricaoTempoChuva(codigo?: number | null): string {
+  const valor = Number(codigo)
+  if (valor === 0) return 'Céu limpo'
+  if (valor === 1) return 'Predominantemente limpo'
+  if (valor === 2) return 'Parcialmente nublado'
+  if (valor === 3) return 'Nublado'
+  if (valor === 45 || valor === 48) return 'Neblina'
+  if (valor >= 51 && valor <= 57) return 'Garoa'
+  if (valor >= 61 && valor <= 67) return 'Chuva'
+  if (valor >= 80 && valor <= 82) return 'Pancadas de chuva'
+  if (valor >= 95) return 'Trovoada prevista'
+  return 'Condição variável'
+}
+
+function horarioChuvaPainel(valor?: string | null): string {
+  if (!valor) return '—'
+  const texto = String(valor)
+  const local = texto.match(/T(\d{2}):(\d{2})/)
+  if (local && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(texto)) return `${local[1]}:${local[2]}`
+  const data = new Date(texto)
+  return Number.isNaN(data.getTime())
+    ? '—'
+    : data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+}
+
+function horarioAtualizacaoChuva(valor?: string | null): string | undefined {
+  if (!valor) return undefined
+  const data = new Date(valor)
+  return Number.isNaN(data.getTime())
+    ? valor
+    : data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
 
 function nomeDiaSemana(dateStr: string): string {
   const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -525,8 +656,31 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   const [legendaAberta, setLegendaAberta] = useState(false)
   const [camadaMapa, setCamadaMapa] = useState<CamadaMapa>('padrao')
   const [mostrarChuva, setMostrarChuva] = useState(false)
+  const [painelChuvaAberto, setPainelChuvaAberto] = useState(false)
+  const [mostrarNuvensGoes, setMostrarNuvensGoes] = useState(false)
+  const [mostrarRadarRedemet, setMostrarRadarRedemet] = useState(false)
+  const [mostrarStscRedemet, setMostrarStscRedemet] = useState(false)
+  const [mostrarSateliteRedemet, setMostrarSateliteRedemet] = useState(false)
+  const [tipoRadarRedemet, setTipoRadarRedemet] = useState<ProdutoRadarRedemet>('MAXCAPPI')
+  const [mostrarHidroestimadorCemaden, setMostrarHidroestimadorCemaden] = useState(false)
+  const [mostrarPluviometrosCemaden, setMostrarPluviometrosCemaden] = useState(false)
+  const [mostrarPrevisaoTrovoada, setMostrarPrevisaoTrovoada] = useState(false)
+  const [opacidadeRadar, setOpacidadeRadar] = useState(72)
+  const [opacidadeSuperficie, setOpacidadeSuperficie] = useState(52)
+  const [pedidoEnquadramentoMapa, setPedidoEnquadramentoMapa] = useState<PedidoEnquadramentoMapa>(null)
+  const [atualizacaoClimaToken, setAtualizacaoClimaToken] = useState(0)
   const [radarChuvaMapa, setRadarChuvaMapa] = useState<QuadroRadar | null>(null)
   const [erroCamadasClima, setErroCamadasClima] = useState('')
+  const [tempoPainelChuva, setTempoPainelChuva] = useState<TempoPainelChuva | null>(null)
+  const [tempoPainelErro, setTempoPainelErro] = useState('')
+  const [tempoPainelCarregando, setTempoPainelCarregando] = useState(false)
+  const [previsaoTrovoadaMapa, setPrevisaoTrovoadaMapa] = useState<PrevisaoTrovoadaMapa | null>(null)
+  const [previsaoTrovoadaErro, setPrevisaoTrovoadaErro] = useState('')
+  const [previsaoTrovoadaCarregando, setPrevisaoTrovoadaCarregando] = useState(false)
+  const [alertasTempoMapa, setAlertasTempoMapa] = useState<AlertaTempoMapa[]>([])
+  const [alertasTempoErro, setAlertasTempoErro] = useState('')
+  const [alertasTempoCarregando, setAlertasTempoCarregando] = useState(false)
+  const [atualizandoFontesChuva, setAtualizandoFontesChuva] = useState(false)
   const [camadaMonitoramento, setCamadaMonitoramento] = useState<CamadaMonitoramentoId>(null)
   const [painelMonitoramentoAberto, setPainelMonitoramentoAberto] = useState(false)
   const [mostrarOcorrencias, setMostrarOcorrencias] = useState(false)
@@ -614,6 +768,124 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
   })
   const [statusMalha, setStatusMalha] = useState<'idle' | 'baixando' | 'concluido' | 'erro'>('idle')
   const [progressoMalha, setProgressoMalha] = useState<ProgressoMalha | null>(null)
+
+  const tipoRadarRedemetCodigo: TipoRadarRedemet = tipoRadarRedemet === 'MAXCAPPI'
+    ? 'maxcappi'
+    : `${tipoRadarRedemet.slice(0, -2).padStart(2, '0')}km` as TipoRadarRedemet
+  const redemetRadar = useProdutoRedemet(mostrarRadarRedemet, 'radar', tipoRadarRedemetCodigo)
+  const redemetStsc = useProdutoRedemet(mostrarStscRedemet, 'stsc')
+  const redemetSatelite = useProdutoRedemet(mostrarSateliteRedemet, 'satelite')
+  const cemadenMg = useEstacoesCemadenMg(mostrarPluviometrosCemaden || painelChuvaAberto)
+  const estacoesCemaden = cemadenMg.dados?.estacoes ?? ESTACOES_CEMADEN_VAZIAS
+  const estacoesCemadenGeorreferenciadas = useMemo(
+    () => estacoesCemaden.filter(estacao => estacao.latitude != null && estacao.longitude != null),
+    [estacoesCemaden],
+  )
+  const visaoChuvaCombinadaAtiva = mostrarChuva && mostrarRadarRedemet &&
+    mostrarStscRedemet && mostrarSateliteRedemet && mostrarHidroestimadorCemaden
+
+  const buscarTempoPainel = useCallback(async () => {
+    setTempoPainelCarregando(true)
+    setTempoPainelErro('')
+    try {
+      const resposta = await fetch(`/api/tempo?_ts=${Date.now()}`, { cache: 'no-store' })
+      const dados = await resposta.json().catch(() => ({})) as TempoPainelChuva
+      if (!resposta.ok || !dados.atual) throw new Error('Previsão local indisponível.')
+      setTempoPainelChuva(dados)
+    } catch (erro) {
+      setTempoPainelErro(erro instanceof Error ? erro.message : 'Previsão local indisponível.')
+    } finally {
+      setTempoPainelCarregando(false)
+    }
+  }, [])
+
+  const buscarPrevisaoTrovoada = useCallback(async () => {
+    setPrevisaoTrovoadaCarregando(true)
+    setPrevisaoTrovoadaErro('')
+    try {
+      const resposta = await fetch(`/api/tempo-raios?_ts=${Date.now()}`, { cache: 'no-store' })
+      const dados = await resposta.json().catch(() => ({})) as PrevisaoTrovoadaMapa
+      if (!resposta.ok || !dados.atual || !Array.isArray(dados.modelos)) {
+        throw new Error('Previsão de trovoadas indisponível.')
+      }
+      setPrevisaoTrovoadaMapa(dados)
+    } catch (erro) {
+      setPrevisaoTrovoadaErro(erro instanceof Error ? erro.message : 'Previsão de trovoadas indisponível.')
+    } finally {
+      setPrevisaoTrovoadaCarregando(false)
+    }
+  }, [])
+
+  const buscarAlertasTempo = useCallback(async () => {
+    setAlertasTempoCarregando(true)
+    setAlertasTempoErro('')
+    try {
+      const resposta = await fetch(`/api/alertas-tempo?_ts=${Date.now()}`, { cache: 'no-store' })
+      const dados = await resposta.json().catch(() => ({})) as { alertas?: AlertaTempoMapa[]; erro?: string }
+      if (!resposta.ok || !Array.isArray(dados.alertas)) {
+        throw new Error(dados.erro || 'Avisos oficiais indisponíveis.')
+      }
+      setAlertasTempoMapa(dados.alertas)
+    } catch (erro) {
+      setAlertasTempoErro(erro instanceof Error ? erro.message : 'Avisos oficiais indisponíveis.')
+    } finally {
+      setAlertasTempoCarregando(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!painelChuvaAberto) return
+    void buscarTempoPainel()
+    void buscarPrevisaoTrovoada()
+    void buscarAlertasTempo()
+    const intervalo = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      void buscarTempoPainel()
+      void buscarPrevisaoTrovoada()
+      void buscarAlertasTempo()
+    }, 10 * 60 * 1000)
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState !== 'visible') return
+      void buscarTempoPainel()
+      void buscarPrevisaoTrovoada()
+      void buscarAlertasTempo()
+    }
+    document.addEventListener('visibilitychange', atualizarAoVoltar)
+    return () => {
+      window.clearInterval(intervalo)
+      document.removeEventListener('visibilitychange', atualizarAoVoltar)
+    }
+  }, [painelChuvaAberto, buscarTempoPainel, buscarPrevisaoTrovoada, buscarAlertasTempo])
+
+  const atualizarFontesChuva = useCallback(async () => {
+    setAtualizandoFontesChuva(true)
+    setAtualizacaoClimaToken(token => token + 1)
+    const requisicoes: Promise<unknown>[] = [
+      buscarTempoPainel(),
+      buscarPrevisaoTrovoada(),
+      buscarAlertasTempo(),
+      cemadenMg.atualizar(),
+    ]
+    if (mostrarRadarRedemet) requisicoes.push(redemetRadar.atualizar())
+    if (mostrarStscRedemet) requisicoes.push(redemetStsc.atualizar())
+    if (mostrarSateliteRedemet) requisicoes.push(redemetSatelite.atualizar())
+    try {
+      await Promise.allSettled(requisicoes)
+    } finally {
+      setAtualizandoFontesChuva(false)
+    }
+  }, [
+    buscarTempoPainel,
+    buscarPrevisaoTrovoada,
+    buscarAlertasTempo,
+    cemadenMg.atualizar,
+    mostrarRadarRedemet,
+    redemetRadar.atualizar,
+    mostrarStscRedemet,
+    redemetStsc.atualizar,
+    mostrarSateliteRedemet,
+    redemetSatelite.atualizar,
+  ])
 
   // Mantém ref sempre atualizada com o nome atual
   useEffect(() => { nomeLocalRef.current = nomeLocal }, [nomeLocal])
@@ -1248,6 +1520,134 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
       : null
   ), [radarChuvaMapa])
   const linhaTempoRadar = useRadarFrameTimeline(radarChuvaMapa?.quadros || [], quadroReservaRadar)
+  const horasPrevisaoPainel = (tempoPainelChuva?.horas || [])
+    .filter(hora => !tempoPainelChuva?.atual?.time || hora.time >= tempoPainelChuva.atual.time)
+    .slice(0, 6)
+  const condicaoAtualPainel: ChuvaCondicaoAtual | null = tempoPainelChuva?.atual
+    ? {
+        temperaturaC: Number.isFinite(Number(tempoPainelChuva.atual.temperatura))
+          ? Number(tempoPainelChuva.atual.temperatura)
+          : null,
+        descricao: descricaoTempoChuva(tempoPainelChuva.atual.codigoTempo),
+        umidadePercentual: tempoPainelChuva.atual.umidade ?? null,
+        ventoKmh: tempoPainelChuva.atual.vento ?? null,
+        probabilidadeChuvaPercentual: Math.max(
+          0,
+          ...horasPrevisaoPainel.map(hora => Number(hora.probabilidadeChuva) || 0),
+        ),
+      }
+    : null
+  const previsaoHorasPainel: ChuvaPrevisaoHora[] = horasPrevisaoPainel.map(hora => ({
+    horario: horarioChuvaPainel(hora.time),
+    temperaturaC: hora.temperatura ?? null,
+    probabilidadeChuvaPercentual: hora.probabilidadeChuva ?? null,
+    descricao: descricaoTempoChuva(hora.codigoTempo),
+  }))
+  const previsaoTrovoadaPainel: ChuvaPrevisaoTrovoada | null = previsaoTrovoadaMapa
+    ? {
+        risco: previsaoTrovoadaMapa.riscoAtual === 'alto'
+          ? 'Alto'
+          : previsaoTrovoadaMapa.riscoAtual === 'atenção'
+            ? 'Atenção'
+            : 'Baixo',
+        consensoModelos: previsaoTrovoadaMapa.atual?.modelosComTrovoada ?? 0,
+        proximaIndicacao: horarioChuvaPainel(previsaoTrovoadaMapa.proximaTrovoada),
+        modelos: (previsaoTrovoadaMapa.modelos || []).map(modelo => ({
+          id: modelo.id,
+          nome: modelo.nome,
+          proximaIndicacao: modelo.primeiraTrovoada
+            ? horarioChuvaPainel(modelo.primeiraTrovoada)
+            : null,
+          indicaTrovoada: Boolean(modelo.primeiraTrovoada),
+        })),
+        locaisPrevistos: previsaoTrovoadaMapa.pontos?.length ?? 0,
+        atualizadoEm: horarioAtualizacaoChuva(previsaoTrovoadaMapa.atualizadoEm),
+      }
+    : null
+  const alertasOficiaisPainel: ChuvaAlertaOficial[] = alertasTempoMapa.map(alerta => ({
+    id: alerta.id,
+    titulo: alerta.titulo,
+    nivel: alerta.nivel === 'vermelho' ? 'severo' : alerta.nivel === 'amarelo' ? 'moderado' : alerta.nivel,
+    inicio: alerta.inicio ? new Date(alerta.inicio).toLocaleString('pt-BR') : undefined,
+    fim: alerta.fim ? new Date(alerta.fim).toLocaleString('pt-BR') : undefined,
+    url: alerta.url,
+  }))
+  const quadrosRainViewer = linhaTempoRadar.quadros.map(quadro => ({
+    horario: new Date(quadro.time * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    rotulo: new Date(quadro.time * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+  }))
+  const leituraCemadenAtualizada = estacoesCemadenGeorreferenciadas.filter(estacao =>
+    statusLeituraCemaden(estacao.precipitacaoDataHora) === 'atualizada',
+  ).length
+  const maiorChuvaCemaden = estacoesCemadenGeorreferenciadas
+    .map(estacao => estacao.precipitacaoAtual)
+    .filter((valor): valor is number => valor != null && Number.isFinite(valor))
+    .reduce<number | null>((maior, valor) => maior == null ? valor : Math.max(maior, valor), null)
+  const ultimaLeituraCemaden = [...estacoesCemadenGeorreferenciadas]
+    .sort((a, b) => b.precipitacaoDataHora.localeCompare(a.precipitacaoDataHora))[0]
+  const horarioRainViewerAtual = linhaTempoRadar.quadroAtual
+    ? new Date(linhaTempoRadar.quadroAtual.time * 1000).toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Sao_Paulo',
+      })
+    : undefined
+  const statusFontesChuva = {
+    rainViewer: {
+      status: mostrarChuva
+        ? (radarChuvaMapa ? `${linhaTempoRadar.quadros.length} quadros observados` : 'Consultando radar')
+        : 'Desativado',
+      erro: mostrarChuva ? erroCamadasClima || undefined : undefined,
+      atualizadoEm: horarioRainViewerAtual,
+    },
+    redemetRadar: {
+      status: redemetRadar.carregando
+        ? 'Consultando REDEMET'
+        : redemetRadar.dados
+          ? `${redemetRadar.dados.imagens?.length || 0} imagem(ns) disponíveis`
+          : mostrarRadarRedemet ? 'Sem imagem disponível' : 'Desativado',
+      erro: redemetRadar.erro || undefined,
+      atualizadoEm: redemetRadar.dados?.imagens?.[0]?.atualizadoEm || undefined,
+    },
+    stsc: {
+      status: redemetStsc.carregando
+        ? 'Consultando STSC'
+        : redemetStsc.dados
+          ? `${redemetStsc.dados.pontos?.length || 0} posições`
+          : mostrarStscRedemet ? 'Sem dados disponíveis' : 'Desativado',
+      erro: redemetStsc.erro || undefined,
+      atualizadoEm: redemetStsc.dados?.consultadoEm
+        ? horarioAtualizacaoChuva(redemetStsc.dados.consultadoEm)
+        : undefined,
+    },
+    redemetIr: {
+      status: redemetSatelite.carregando
+        ? 'Consultando imagem IR'
+        : redemetSatelite.dados
+          ? 'Imagem infravermelha disponível'
+          : mostrarSateliteRedemet ? 'Sem imagem disponível' : 'Desativado',
+      erro: redemetSatelite.erro || undefined,
+      atualizadoEm: redemetSatelite.dados?.imagens?.[0]?.atualizadoEm || undefined,
+    },
+    goes: {
+      status: mostrarNuvensGoes ? 'Imagem de nuvens ativa' : 'Desativado',
+      erro: mostrarNuvensGoes ? erroCamadasClima || undefined : undefined,
+    },
+    cemadenEstimativa: {
+      status: mostrarHidroestimadorCemaden ? 'Estimativa por satélite ativa' : 'Desativado',
+    },
+    pluviometros: {
+      status: cemadenMg.carregando
+        ? 'Consultando estações'
+        : cemadenMg.dados
+          ? `${estacoesCemadenGeorreferenciadas.length} pluviômetro(s) · ${leituraCemadenAtualizada} leitura(s) recente(s)`
+          : mostrarPluviometrosCemaden ? 'Sem leitura disponível' : 'Desativado',
+      erro: cemadenMg.erro || undefined,
+      atualizadoEm: ultimaLeituraCemaden
+        ? dataHoraCemadenFormatada(ultimaLeituraCemaden.precipitacaoDataHora)
+        : undefined,
+    },
+  }
 
   // ── Render ────────────────────────────────────────────────────
   return (
@@ -1287,14 +1687,78 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         <RadarWeatherLayers
           mostrarChuva={mostrarChuva}
           mostrarSintetico={false}
-          mostrarNuvens={false}
+          mostrarNuvens={mostrarNuvensGoes}
           satelite={false}
           renderizarBase={false}
           quadroSelecionado={linhaTempoRadar.quadroAtual}
+          opacidadeRadar={opacidadeRadar / 100}
+          refreshToken={atualizacaoClimaToken}
           onRadarCarregado={receberQuadroRadar}
           onErro={receberErroCamadasClima}
           onAtualizado={ignorarAtualizacaoRadar}
         />
+        <CamadaRadarRedemet
+          ativa={mostrarRadarRedemet}
+          dados={redemetRadar.dados?.tipo === tipoRadarRedemetCodigo ? redemetRadar.dados : null}
+          opacidade={opacidadeRadar / 100}
+        />
+        <CamadaSateliteRedemet ativa={mostrarSateliteRedemet} dados={redemetSatelite.dados} />
+        <CamadaStscRedemet ativa={mostrarStscRedemet} dados={redemetStsc.dados} />
+        <CamadaChuvaEstimadaCemaden
+          ativa={mostrarHidroestimadorCemaden}
+          opacidade={opacidadeSuperficie / 100}
+          nomePane="mapaHidroestimadorCemaden"
+          onErro={receberErroCamadasClima}
+        />
+        <ControladorEnquadramentoMapa pedido={pedidoEnquadramentoMapa} />
+        {mostrarPrevisaoTrovoada && (
+          <Pane name="mapaTrovoadaPrevista" style={{ zIndex: 470 }}>
+            {(previsaoTrovoadaMapa?.pontos || []).map(ponto => (
+              <CircleMarker
+                key={ponto.id}
+                center={[ponto.latitude, ponto.longitude]}
+                radius={7}
+                pathOptions={{
+                  color: '#fff',
+                  weight: 1.5,
+                  fillColor: ponto.risco === 'alto' ? '#dc2626' : ponto.risco === 'atenção' ? '#d97706' : '#7c3aed',
+                  fillOpacity: 0.92,
+                }}
+              >
+                <Popup>
+                  <strong>{ponto.nome} · Trovoada prevista</strong>
+                  <div>Horário: {horarioChuvaPainel(ponto.primeiraTrovoada)}</div>
+                  <div>{ponto.modelosComTrovoada}/3 modelos indicam trovoada</div>
+                  <div>Probabilidade de chuva: {ponto.probabilidadeChuva}%</div>
+                  <small>Previsão numérica · Open-Meteo</small>
+                </Popup>
+              </CircleMarker>
+            ))}
+          </Pane>
+        )}
+        {mostrarPluviometrosCemaden && (
+          <Pane name="mapaPluviometrosCemaden" style={{ zIndex: 480 }}>
+            {estacoesCemadenGeorreferenciadas.map(estacao => {
+              const leitura = estacao.precipitacaoAtual ?? 0
+              const cor = leitura >= 30 ? '#dc2626' : leitura >= 10 ? '#f97316' : leitura > 0 ? '#0284c7' : '#64748b'
+              return (
+                <CircleMarker
+                  key={`cemaden-${estacao.id}`}
+                  center={[estacao.latitude!, estacao.longitude!]}
+                  radius={7}
+                  pathOptions={{ color: '#fff', weight: 2, fillColor: cor, fillOpacity: 0.9 }}
+                >
+                  <Popup>
+                    <strong>{estacao.nome || 'Pluviômetro CEMADEN'}</strong>
+                    <div>{estacao.municipio} · {leitura.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mm na última hora</div>
+                    <div>Leitura: {dataHoraCemadenFormatada(estacao.precipitacaoDataHora)}</div>
+                    <small>Medida pontual · CEMADEN</small>
+                  </Popup>
+                </CircleMarker>
+              )
+            })}
+          </Pane>
+        )}
         {camadaMonitoramento && camadasMonitoramento.find(c => c.id === camadaMonitoramento)?.url && (
           <TileLayer
             key={`earth-engine-${camadaMonitoramento}`}
@@ -1511,7 +1975,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         ))}
       </MapContainer>
 
-      {mostrarChuva && <ControleHistoricoRadar controle={linhaTempoRadar} temaEscuro />}
+      {mostrarChuva && !painelChuvaAberto && <ControleHistoricoRadar controle={linhaTempoRadar} temaEscuro />}
 
       {/* Banner de alerta — focos de incêndio detectados */}
       {focosIncendio.length > 0 && !alertaFocosVisto && (
@@ -1573,7 +2037,9 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
         <button
           className={`mapa-camada-btn ${mostrarChuva ? 'ativo' : ''}`}
           onClick={() => {
-            setMostrarChuva(value => !value)
+            const proximoEstado = !mostrarChuva
+            setMostrarChuva(proximoEstado)
+            setPainelChuvaAberto(proximoEstado)
             setErroCamadasClima('')
           }}
           aria-pressed={mostrarChuva}
@@ -1668,6 +2134,84 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           </button>
         </div>
       </div>
+
+      {painelChuvaAberto && (
+        <ChuvaPainel
+          onClose={() => setPainelChuvaAberto(false)}
+          condicaoAtual={condicaoAtualPainel}
+          previsaoProximaHora={previsaoHorasPainel}
+          horarioAtualizado={horarioAtualizacaoChuva(tempoPainelChuva?.atualizadoEm)}
+          condicaoStatus={tempoPainelChuva?.fonte}
+          condicaoErro={tempoPainelErro}
+          carregandoCondicoes={tempoPainelCarregando}
+          previsaoTrovoada={previsaoTrovoadaPainel}
+          previsaoTrovoadaCarregando={previsaoTrovoadaCarregando}
+          previsaoTrovoadaErro={previsaoTrovoadaErro}
+          camadaTrovoadaAtiva={mostrarPrevisaoTrovoada}
+          onAlternarCamadaTrovoada={() => setMostrarPrevisaoTrovoada(ativa => !ativa)}
+          alertasOficiais={alertasOficiaisPainel}
+          alertasCarregando={alertasTempoCarregando}
+          alertasErro={alertasTempoErro}
+          onEnquadrarMinasGerais={() => setPedidoEnquadramentoMapa(pedido => ({
+            id: (pedido?.id || 0) + 1,
+            destino: 'minas-gerais',
+          }))}
+          onVoltarParaOuroBranco={() => setPedidoEnquadramentoMapa(pedido => ({
+            id: (pedido?.id || 0) + 1,
+            destino: 'ouro-branco',
+          }))}
+          rainViewerAtivo={mostrarChuva}
+          onAlternarRainViewer={() => setMostrarChuva(ativa => !ativa)}
+          quadrosRainViewer={quadrosRainViewer}
+          indiceQuadroRainViewer={linhaTempoRadar.indiceAtual}
+          onSelecionarQuadroRainViewer={indice => {
+            const quadro = linhaTempoRadar.quadros[indice]
+            if (quadro) linhaTempoRadar.selecionar(quadro.time)
+          }}
+          animacaoRainViewerAtiva={linhaTempoRadar.animando}
+          onAlternarAnimacaoRainViewer={linhaTempoRadar.alternarAnimacao}
+          aoVivoRainViewer={linhaTempoRadar.aoVivo}
+          onIrParaRainViewerAoVivo={linhaTempoRadar.irAoVivo}
+          visaoCombinadaAtiva={visaoChuvaCombinadaAtiva}
+          onAlternarVisaoCombinada={() => {
+            const ativar = !visaoChuvaCombinadaAtiva
+            setMostrarChuva(ativar)
+            setMostrarRadarRedemet(ativar)
+            setMostrarStscRedemet(ativar)
+            setMostrarSateliteRedemet(ativar)
+            setMostrarHidroestimadorCemaden(ativar)
+          }}
+          radarRedemetAtivo={mostrarRadarRedemet}
+          onAlternarRadarRedemet={() => setMostrarRadarRedemet(ativa => !ativa)}
+          produtoRadarRedemet={tipoRadarRedemet}
+          onSelecionarProdutoRadarRedemet={setTipoRadarRedemet}
+          stscAtivo={mostrarStscRedemet}
+          onAlternarStsc={() => setMostrarStscRedemet(ativa => !ativa)}
+          redemetIrAtivo={mostrarSateliteRedemet}
+          onAlternarRedemetIr={() => setMostrarSateliteRedemet(ativa => !ativa)}
+          nuvensGoesAtivas={mostrarNuvensGoes}
+          onAlternarNuvensGoes={() => setMostrarNuvensGoes(ativa => !ativa)}
+          estimativaCemadenAtiva={mostrarHidroestimadorCemaden}
+          onAlternarEstimativaCemaden={() => setMostrarHidroestimadorCemaden(ativa => !ativa)}
+          pluviometrosAtivos={mostrarPluviometrosCemaden}
+          onAlternarPluviometros={() => setMostrarPluviometrosCemaden(ativa => !ativa)}
+          urlMapaOficialCemaden={CEMADEN_MAPA_OFICIAL_URL}
+          opacidadeChuva={opacidadeRadar}
+          onAlterarOpacidadeChuva={setOpacidadeRadar}
+          opacidadeSuperficie={opacidadeSuperficie}
+          onAlterarOpacidadeSuperficie={setOpacidadeSuperficie}
+          statusFontes={statusFontesChuva}
+          horarioRadarMaisRecente={horarioRainViewerAtual}
+          horarioCemadenMaisRecente={ultimaLeituraCemaden
+            ? dataHoraCemadenFormatada(ultimaLeituraCemaden.precipitacaoDataHora)
+            : undefined}
+          maiorChuvaUmaHora={maiorChuvaCemaden == null
+            ? undefined
+            : `${maiorChuvaCemaden.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} mm`}
+          refreshing={atualizandoFontesChuva || tempoPainelCarregando || previsaoTrovoadaCarregando || alertasTempoCarregando}
+          onRefresh={atualizarFontesChuva}
+        />
+      )}
 
       {erroCamadasClima && (
         <div className="mapa-chuva-erro" role="status">{erroCamadasClima}</div>

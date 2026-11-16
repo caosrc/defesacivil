@@ -34,6 +34,8 @@ type Props = {
   renderizarBase?: boolean
   quadroExterno?: QuadroRadar | null
   quadroSelecionado?: QuadroRadarChuva | null
+  opacidadeRadar?: number
+  refreshToken?: number
   onRadarCarregado?: (quadro: QuadroRadar) => void
   onErro: (mensagem: string) => void
   onAtualizado: (horario: string) => void
@@ -149,6 +151,8 @@ export default function RadarWeatherLayers({
   renderizarBase = true,
   quadroExterno,
   quadroSelecionado,
+  opacidadeRadar = 0.72,
+  refreshToken = 0,
   onRadarCarregado,
   onErro,
   onAtualizado,
@@ -195,7 +199,7 @@ export default function RadarWeatherLayers({
       window.clearInterval(intervalo)
       document.removeEventListener('visibilitychange', atualizarAoVoltar)
     }
-  }, [radarAtivo, usaQuadroExterno, onAtualizado, onErro, onRadarCarregado])
+  }, [radarAtivo, usaQuadroExterno, refreshToken, onAtualizado, onErro, onRadarCarregado])
 
   return (
     <>
@@ -235,7 +239,7 @@ export default function RadarWeatherLayers({
             quadros={quadro.quadros || []}
             quadroReserva={{ time: quadro.frameTime, path: quadro.path }}
             quadroSelecionado={quadroSelecionado}
-            opacity={0.72}
+            opacity={opacidadeRadar}
             maxZoom={18}
           />
         </Pane>

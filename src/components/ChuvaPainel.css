@@ -1,0 +1,835 @@
+.chuva-panel {
+  --cp-ink: #163743;
+  --cp-muted: #617981;
+  --cp-line: #d7e2df;
+  --cp-paper: #f6f8f4;
+  --cp-white: #fffefa;
+  --cp-teal: #176c70;
+  --cp-teal-soft: #e3f1ed;
+  --cp-rain: #287ca0;
+  --cp-rain-soft: #e5f1f6;
+  --cp-amber: #ad6518;
+  --cp-amber-soft: #fff1dc;
+  --cp-red: #a53d32;
+  color: var(--cp-ink);
+  position: absolute;
+  z-index: 760;
+  inset: 10px 12px 12px auto;
+  display: flex;
+  flex-direction: column;
+  width: min(410px, calc(100% - 24px));
+  max-height: calc(100% - 22px);
+  overflow: hidden;
+  border: 1px solid rgba(34, 73, 79, .2);
+  border-radius: 16px;
+  background: var(--cp-paper);
+  box-shadow: 0 16px 44px rgba(11, 42, 50, .24), 0 2px 7px rgba(11, 42, 50, .12);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.38;
+  animation: cp-enter .22s ease-out both;
+}
+
+.chuva-panel *,
+.chuva-panel *::before,
+.chuva-panel *::after {
+  box-sizing: border-box;
+}
+
+.chuva-panel__scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: #b4c9c5 transparent;
+  scrollbar-width: thin;
+}
+
+.chuva-panel__header {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 17px 14px;
+  color: #f4f8f3;
+  background:
+    radial-gradient(ellipse at 90% 0%, rgba(111, 183, 169, .3), transparent 42%),
+    #174a53;
+}
+
+.chuva-panel__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 3px;
+  color: #a8d4ca;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+.chuva-panel__eyebrow-mark {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border: 1px solid #c8e7db;
+  border-radius: 50%;
+  background: #83c6b3;
+  box-shadow: 0 0 0 3px rgba(131, 198, 179, .14);
+}
+
+.chuva-panel__title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 780;
+  letter-spacing: -.035em;
+  line-height: 1.1;
+}
+
+.chuva-panel__location {
+  display: block;
+  margin-top: 5px;
+  color: #d0e2df;
+  font-size: 11px;
+}
+
+.chuva-panel__close {
+  display: grid;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid rgba(225, 243, 236, .3);
+  border-radius: 10px;
+  color: #f4f8f3;
+  background: rgba(255, 255, 255, .08);
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background .16s ease, transform .16s ease;
+}
+
+.chuva-panel__close:hover {
+  background: rgba(255, 255, 255, .17);
+  transform: translateY(-1px);
+}
+
+.chuva-panel__content {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+}
+
+.chuva-card {
+  min-width: 0;
+  border: 1px solid var(--cp-line);
+  border-radius: 12px;
+  background: var(--cp-white);
+}
+
+.chuva-card__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 12px 8px;
+}
+
+.chuva-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--cp-ink);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: -.01em;
+}
+
+.chuva-card__title-mark {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--cp-teal);
+  background: var(--cp-teal-soft);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.chuva-card__caption {
+  margin: 2px 12px 8px 40px;
+  color: var(--cp-muted);
+  font-size: 10px;
+}
+
+.chuva-weather {
+  padding: 0 12px 11px;
+}
+
+.chuva-weather__now {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 7px 0 9px;
+  border-bottom: 1px solid #e7eeeb;
+}
+
+.chuva-weather__temperature {
+  color: #173d48;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -.055em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.chuva-weather__description {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: var(--cp-ink);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.chuva-weather__description small {
+  color: var(--cp-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.chuva-weather__metrics {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+  color: var(--cp-muted);
+  font-size: 10px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.chuva-weather__hours {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+  padding-top: 9px;
+}
+
+.chuva-weather__hour {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 0;
+  color: #49656c;
+  font-size: 9px;
+  text-align: center;
+}
+
+.chuva-weather__hour strong {
+  color: #22454e;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chuva-weather__hour span:last-child {
+  color: var(--cp-rain);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.chuva-weather__status {
+  padding-top: 7px;
+  color: var(--cp-muted);
+  font-size: 10px;
+}
+
+.chuva-skeleton {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0 8px;
+}
+
+.chuva-skeleton__temperature,
+.chuva-skeleton__lines i,
+.chuva-skeleton__hours i {
+  display: block;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #e7eeea 20%, #f1f5f1 48%, #e7eeea 76%);
+  background-size: 220% 100%;
+  animation: cp-shimmer 1.5s ease-in-out infinite;
+}
+
+.chuva-skeleton__temperature {
+  width: 68px;
+  height: 33px;
+}
+
+.chuva-skeleton__lines {
+  display: grid;
+  gap: 7px;
+}
+
+.chuva-skeleton__lines i {
+  width: 82%;
+  height: 8px;
+}
+
+.chuva-skeleton__lines i:last-child {
+  width: 59%;
+}
+
+.chuva-skeleton__hours {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.chuva-skeleton__hours i {
+  height: 33px;
+}
+
+.chuva-skeleton--forecast .chuva-skeleton__hours {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.chuva-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 0 10px 9px;
+}
+
+.chuva-summary__item {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 8px 7px;
+  border-radius: 8px;
+  background: #f1f5f2;
+}
+
+.chuva-summary__label {
+  color: var(--cp-muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.chuva-summary__value {
+  color: #20464d;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.chuva-summary__value--risk {
+  color: var(--cp-teal);
+}
+
+.chuva-models {
+  display: grid;
+  gap: 0;
+  margin: 0 10px 8px;
+  border-top: 1px solid #e6eeea;
+}
+
+.chuva-models__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 2px;
+  border-bottom: 1px solid #edf1ed;
+  color: var(--cp-muted);
+  font-size: 10px;
+}
+
+.chuva-models__row strong {
+  color: var(--cp-ink);
+  font-size: 10px;
+  text-align: right;
+}
+
+.chuva-models__row strong[data-risk="true"] {
+  color: #a45217;
+}
+
+.chuva-card__footnote {
+  margin: 0;
+  padding: 0 12px 11px;
+  color: #6f8285;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.chuva-alerts {
+  display: grid;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
+.chuva-alerts__item {
+  display: grid;
+  gap: 3px;
+  padding: 8px 9px;
+  border-left: 3px solid #d39741;
+  border-radius: 6px;
+  color: #704710;
+  background: var(--cp-amber-soft);
+  text-decoration: none;
+}
+
+.chuva-alerts__item[data-level="alto"],
+.chuva-alerts__item[data-level="severo"],
+.chuva-alerts__item[data-level="extremo"] {
+  border-color: var(--cp-red);
+  color: #87372f;
+  background: #fff0ed;
+}
+
+.chuva-alerts__item strong {
+  font-size: 11px;
+}
+
+.chuva-alerts__item span,
+.chuva-alerts__empty,
+.chuva-alerts__error {
+  color: var(--cp-muted);
+  font-size: 10px;
+}
+
+.chuva-alerts__empty {
+  padding: 7px 2px 1px;
+}
+
+.chuva-alerts__error {
+  color: var(--cp-red);
+}
+
+.chuva-map-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 10px;
+}
+
+.chuva-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 35px;
+  padding: 7px 9px;
+  border: 1px solid #c8d8d4;
+  border-radius: 8px;
+  color: #31545a;
+  background: #fffefa;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color .15s ease, color .15s ease, background .15s ease, transform .15s ease;
+}
+
+.chuva-button:hover:not(:disabled) {
+  border-color: #6ca9a0;
+  color: #145d60;
+  background: #f2f9f5;
+  transform: translateY(-1px);
+}
+
+.chuva-button:focus-visible,
+.chuva-panel select:focus-visible,
+.chuva-panel input:focus-visible {
+  outline: 3px solid rgba(40, 124, 160, .3);
+  outline-offset: 2px;
+}
+
+.chuva-button:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.chuva-button--active {
+  border-color: #4e9b91;
+  color: #145a5b;
+  background: var(--cp-teal-soft);
+}
+
+.chuva-button--primary {
+  border-color: #176c70;
+  color: #fff;
+  background: #176c70;
+}
+
+.chuva-button--primary:hover:not(:disabled) {
+  border-color: #125b5e;
+  color: #fff;
+  background: #125b5e;
+}
+
+.chuva-button--wide {
+  width: 100%;
+}
+
+.chuva-source-list {
+  display: grid;
+  gap: 0;
+  padding: 0 10px 10px;
+}
+
+.chuva-source {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 7px 9px;
+  padding: 9px 1px;
+  border-top: 1px solid #e8eeeb;
+}
+
+.chuva-source:first-child {
+  border-top: 0;
+}
+
+.chuva-source__main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.chuva-source__title {
+  color: #254b52;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.chuva-source__note {
+  color: #708388;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.chuva-source__state {
+  color: var(--cp-muted);
+  font-size: 9px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.chuva-source__error {
+  display: block;
+  margin-top: 2px;
+  color: var(--cp-red);
+  font-size: 9px;
+}
+
+.chuva-source__toggle {
+  min-width: 88px;
+  min-height: 30px;
+  justify-content: flex-start;
+  padding: 5px 7px;
+  font-size: 9px;
+}
+
+.chuva-switch {
+  position: relative;
+  width: 25px;
+  height: 14px;
+  flex: 0 0 25px;
+  border-radius: 20px;
+  background: #b7c6c3;
+  transition: background .16s ease;
+}
+
+.chuva-switch::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  content: "";
+  transition: transform .16s ease;
+}
+
+.chuva-button[aria-pressed="true"] .chuva-switch {
+  background: #287f79;
+}
+
+.chuva-button[aria-pressed="true"] .chuva-switch::after {
+  transform: translateX(11px);
+}
+
+.chuva-product-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0 8px;
+}
+
+.chuva-product-row label {
+  color: #60787d;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.chuva-panel select {
+  min-height: 33px;
+  max-width: 190px;
+  padding: 5px 25px 5px 8px;
+  border: 1px solid #c8d8d4;
+  border-radius: 7px;
+  color: #1b4d54;
+  background-color: #fffefa;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.chuva-timeline {
+  margin: 0 10px 10px;
+  padding: 9px 10px 8px;
+  border: 1px solid #d4e4e7;
+  border-radius: 9px;
+  background: #f0f7f7;
+}
+
+.chuva-timeline__top,
+.chuva-timeline__controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chuva-timeline__top {
+  margin-bottom: 6px;
+  color: #59747a;
+  font-size: 9px;
+}
+
+.chuva-timeline__top strong {
+  color: #1e515d;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chuva-timeline__controls {
+  justify-content: flex-start;
+  margin-bottom: 6px;
+}
+
+.chuva-timeline .chuva-button {
+  min-height: 28px;
+  padding: 5px 8px;
+  font-size: 9px;
+}
+
+.chuva-timeline__range {
+  display: block;
+  width: 100%;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--cp-rain);
+  cursor: pointer;
+}
+
+.chuva-timeline__labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #71888c;
+  font-size: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chuva-opacity {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.chuva-opacity__row {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr) 37px;
+  align-items: center;
+  gap: 7px;
+  color: #557176;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.chuva-opacity__row input {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--cp-teal);
+}
+
+.chuva-opacity__row output {
+  color: #1b4e53;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.chuva-observations {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 9px 10px 10px;
+  border-top: 1px solid #e8eeeb;
+}
+
+.chuva-observations__cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.chuva-observations__cell span {
+  color: #71868a;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.chuva-observations__cell strong {
+  color: #234c53;
+  font-size: 10px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.chuva-panel__refresh {
+  padding: 0 10px 11px;
+}
+
+.chuva-panel__notice {
+  margin: 0;
+  padding: 8px 10px 10px;
+  color: #6b8082;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.chuva-panel__loading {
+  height: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .15);
+}
+
+.chuva-panel__loading::after {
+  display: block;
+  width: 38%;
+  height: 100%;
+  background: #85c6b7;
+  content: "";
+  animation: cp-loading 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes cp-enter {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes cp-loading {
+  from { transform: translateX(-35%); }
+  to { transform: translateX(170%); }
+}
+
+@keyframes cp-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -120% 0; }
+}
+
+@media (max-width: 600px) {
+  .chuva-panel {
+    position: fixed;
+    inset: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+    width: auto;
+    max-height: none;
+    border-radius: 14px;
+  }
+
+  .chuva-panel__header {
+    padding: 13px 14px 11px;
+  }
+
+  .chuva-panel__content {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .chuva-card__heading {
+    padding: 9px 10px 7px;
+  }
+
+  .chuva-weather__metrics {
+    display: grid;
+    gap: 3px;
+  }
+
+  .chuva-weather__hours {
+    gap: 2px;
+  }
+
+  .chuva-map-actions {
+    padding: 8px;
+  }
+}
+
+@media (max-width: 350px) {
+  .chuva-panel {
+    font-size: 12px;
+  }
+
+  .chuva-panel__title {
+    font-size: 17px;
+  }
+
+  .chuva-summary {
+    gap: 4px;
+    padding-inline: 7px;
+  }
+
+  .chuva-summary__item {
+    padding: 7px 6px;
+  }
+
+  .chuva-source {
+    grid-template-columns: minmax(0, 1fr) 78px;
+    gap: 5px;
+  }
+
+  .chuva-source__toggle {
+    min-width: 78px;
+    padding-inline: 5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chuva-panel,
+  .chuva-panel *,
+  .chuva-panel *::before,
+  .chuva-panel *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
