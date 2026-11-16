@@ -1,11 +1,11 @@
 .chuva-panel {
-  --cp-ink: #163743;
-  --cp-muted: #617981;
-  --cp-line: #d7e2df;
-  --cp-paper: #f6f8f4;
+  --cp-ink: #193852;
+  --cp-muted: #65788b;
+  --cp-line: #d5e0e9;
+  --cp-paper: #f5f8fb;
   --cp-white: #fffefa;
-  --cp-teal: #176c70;
-  --cp-teal-soft: #e3f1ed;
+  --cp-teal: #1a4b8c;
+  --cp-teal-soft: #e7effa;
   --cp-rain: #287ca0;
   --cp-rain-soft: #e5f1f6;
   --cp-amber: #ad6518;
@@ -55,8 +55,8 @@
   padding: 16px 17px 14px;
   color: #f4f8f3;
   background:
-    radial-gradient(ellipse at 90% 0%, rgba(111, 183, 169, .3), transparent 42%),
-    #174a53;
+    radial-gradient(ellipse at 90% 0%, rgba(133, 172, 226, .32), transparent 42%),
+    #1a4b8c;
 }
 
 .chuva-panel__eyebrow {
@@ -64,7 +64,7 @@
   align-items: center;
   gap: 7px;
   margin: 0 0 3px;
-  color: #a8d4ca;
+  color: #c4dcff;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: .12em;
@@ -75,10 +75,10 @@
   display: inline-block;
   width: 7px;
   height: 7px;
-  border: 1px solid #c8e7db;
+  border: 1px solid #d7e7ff;
   border-radius: 50%;
-  background: #83c6b3;
-  box-shadow: 0 0 0 3px rgba(131, 198, 179, .14);
+  background: #90b9f0;
+  box-shadow: 0 0 0 3px rgba(144, 185, 240, .18);
 }
 
 .chuva-panel__title {
@@ -190,6 +190,12 @@
   white-space: nowrap;
 }
 
+.chuva-weather__symbol {
+  margin-right: 5px;
+  font-size: 20px;
+  vertical-align: 4px;
+}
+
 .chuva-weather__description {
   display: grid;
   gap: 3px;
@@ -236,6 +242,12 @@
   color: #22454e;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
+}
+
+.chuva-weather__icon {
+  min-height: 18px;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .chuva-weather__hour span:last-child {
@@ -534,6 +546,97 @@
   margin-top: 2px;
   color: var(--cp-red);
   font-size: 9px;
+}
+
+.chuva-history {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 9px;
+  border: 1px solid #dbe5ed;
+  border-radius: 9px;
+  background: #f7f9fc;
+}
+
+.chuva-history__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: #264c70;
+  font-size: 10px;
+}
+
+.chuva-history__heading span,
+.chuva-history__status {
+  color: var(--cp-muted);
+  font-size: 9px;
+}
+
+.chuva-history__status {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.chuva-panel .mapa-chuva-historico {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  color: #516c7d;
+  background: transparent;
+  font-family: inherit;
+}
+
+.chuva-panel .mapa-chuva-historico-topo {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chuva-panel .mapa-chuva-historico-topo button {
+  min-height: 27px;
+  padding: 4px 7px;
+  border: 1px solid #bfd1e3;
+  border-radius: 7px;
+  color: #285276;
+  background: #fff;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.chuva-panel .mapa-chuva-historico-topo button.ao-vivo {
+  border-color: #75b6a2;
+  color: #166553;
+  background: #e9f6ef;
+}
+
+.chuva-panel .mapa-chuva-historico-topo strong {
+  margin-left: auto;
+  color: #244c6d;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chuva-panel .mapa-chuva-historico input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: #1479c9;
+}
+
+.chuva-panel .mapa-chuva-historico-escala {
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+  color: #728592;
+  font-size: 8px;
+}
+
+.chuva-panel .mapa-chuva-historico > small {
+  color: #758792;
+  font-size: 8px;
+  line-height: 1.35;
 }
 
 .chuva-source__toggle {

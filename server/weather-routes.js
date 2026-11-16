@@ -237,6 +237,7 @@ const PONTOS_PREVISAO = [
   { id: 'ouro-branco', nome: 'Ouro Branco', latitude: CENTER.latitude, longitude: CENTER.longitude },
   { id: 'manhuacu', nome: 'Manhuaçu', latitude: -20.2573, longitude: -42.0261 },
 ]
+const INDICE_OURO_BRANCO_PREVISAO = PONTOS_PREVISAO.findIndex(ponto => ponto.id === 'ouro-branco')
 const MODELOS = [
   { id: 'ecmwf_ifs025', nome: 'ECMWF IFS' },
   { id: 'gfs_global', nome: 'GFS Global' },
@@ -280,16 +281,26 @@ async function buscarPrevisaoRaios() {
     : [])
   if (modelos.length === 0) throw new Error('Modelos de previsão indisponíveis')
 
+  if (INDICE_OURO_BRANCO_PREVISAO < 0) {
+    throw new Error('Localidade de Ouro Branco ausente da previsão de trovoadas')
+  }
+  const modelosComPrevisaoLocal = modelos.filter(modelo =>
+    Array.isArray(modelo.locais[INDICE_OURO_BRANCO_PREVISAO]?.hourly?.time),
+  )
+  if (modelosComPrevisaoLocal.length === 0) {
+    throw new Error('Modelos não retornaram previsão para Ouro Branco')
+  }
+
   const agora = Date.now()
-  const horasBase = modelos[0].locais[0]?.hourly?.time || []
+  const horasBase = modelosComPrevisaoLocal[0].locais[INDICE_OURO_BRANCO_PREVISAO].hourly.time
   const indicesFuturos = horasBase
     .map((time, indice) => ({ time, indice }))
     .filter(item => instanteOpenMeteoLocal(item.time) >= agora)
     .map(item => item.indice)
   const consenso = indicesFuturos.slice(0, 36).map(indiceHora => {
     const time = horasBase[indiceHora]
-    const dados = modelos.map(modelo => {
-      const hourly = modelo.locais[0]?.hourly || {}
+    const dados = modelosComPrevisaoLocal.map(modelo => {
+      const hourly = modelo.locais[INDICE_OURO_BRANCO_PREVISAO].hourly
       return {
         codigo: Number(hourly.weather_code?.[indiceHora] ?? 0),
         probabilidade: Number(hourly.precipitation_probability?.[indiceHora] ?? 0),
@@ -309,8 +320,8 @@ async function buscarPrevisaoRaios() {
     }
   })
 
-  const modelosResumo = modelos.map(modelo => {
-    const hourly = modelo.locais[0]?.hourly || {}
+  const modelosResumo = modelosComPrevisaoLocal.map(modelo => {
+    const hourly = modelo.locais[INDICE_OURO_BRANCO_PREVISAO].hourly
     const times = Array.isArray(hourly.time) ? hourly.time : []
     const codes = Array.isArray(hourly.weather_code) ? hourly.weather_code : []
     const primeiroIndice = codes.findIndex((codigo, indice) =>
@@ -383,8 +394,8 @@ async function buscarPrevisaoRaios() {
     proximaTrovoada: primeiraTrovoada,
     riscoAtual: horaAtual?.risco || 'baixo',
     fonte: 'Open-Meteo · ECMWF IFS, GFS Global e DWD ICON Global',
-    observacao: 'Previsão por modelos numéricos em 16 localidades de Minas Gerais; não é detecção de raios.',
-    modelosDisponiveis: modelos.length,
+    observacao: 'Resumo de risco e modelos para Ouro Branco; os pontos mostram outras localidades de Minas Gerais. Não é detecção de raios.',
+    modelosDisponiveis: modelosComPrevisaoLocal.length,
   }
 }
 

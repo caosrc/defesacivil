@@ -1,5 +1,7 @@
 import type { ChangeEvent } from 'react'
 import './ChuvaPainel.css'
+import { ControleHistoricoRadar } from './RadarChuvaAnimado'
+import type { ControleLinhaTempoRadar } from './radarTimeline'
 
 export type ProdutoRadarRedemet = 'MAXCAPPI' | '3km' | '5km' | '7km' | '10km'
 
@@ -76,6 +78,7 @@ export interface ChuvaPainelProps {
 
   rainViewerAtivo: boolean
   onAlternarRainViewer: () => void
+  controleHistoricoRadar: ControleLinhaTempoRadar
 
   visaoCombinadaAtiva: boolean
   onAlternarVisaoCombinada: () => void
@@ -122,6 +125,16 @@ const URL_CEMADEN = 'https://mapainterativo.cemaden.gov.br/'
 
 function valorPercentual(valor?: number | null): string {
   return typeof valor === 'number' && Number.isFinite(valor) ? `${Math.round(valor)}%` : '—'
+}
+
+function iconeCondicao(descricao?: string | null): string {
+  const texto = (descricao || '').toLocaleLowerCase('pt-BR')
+  if (texto.includes('trovoada') || texto.includes('tempestade')) return '⛈️'
+  if (texto.includes('chuva') || texto.includes('pancada')) return '🌧️'
+  if (texto.includes('neblina') || texto.includes('nevoeiro')) return '🌫️'
+  if (texto.includes('nublado') || texto.includes('encoberto')) return '☁️'
+  if (texto.includes('limpo') || texto.includes('claro')) return '☀️'
+  return '🌤️'
 }
 
 function StatusFonte({ fonte }: { fonte?: ChuvaStatusFonte }) {
@@ -194,6 +207,7 @@ export default function ChuvaPainel({
   onVoltarParaOuroBranco,
   rainViewerAtivo,
   onAlternarRainViewer,
+  controleHistoricoRadar,
   visaoCombinadaAtiva,
   onAlternarVisaoCombinada,
   radarRedemetAtivo,
@@ -234,7 +248,7 @@ export default function ChuvaPainel({
         <div>
           <p className="chuva-panel__eyebrow"><span className="chuva-panel__eyebrow-mark" /> Monitoramento local</p>
           <h2 className="chuva-panel__title">Chuva ao vivo</h2>
-          <span className="chuva-panel__location">Ouro Branco, MG · observação local</span>
+          <span className="chuva-panel__location">Ouro Branco, MG · previsão e radar local</span>
         </div>
         <button type="button" className="chuva-panel__close" onClick={onClose} aria-label="Fechar painel de chuva">
           <span aria-hidden="true">×</span>
@@ -256,6 +270,9 @@ export default function ChuvaPainel({
                 <>
                   <div className="chuva-weather__now">
                     <strong className="chuva-weather__temperature">
+                      <span className="chuva-weather__symbol" aria-hidden="true">
+                        {iconeCondicao(condicaoAtual.descricao)}
+                      </span>
                       {condicaoAtual.temperaturaC == null ? '—' : `${Math.round(condicaoAtual.temperaturaC)} °C`}
                     </strong>
                     <div className="chuva-weather__description">
@@ -272,6 +289,7 @@ export default function ChuvaPainel({
                       {previsaoProximaHora.slice(0, 6).map((hora, index) => (
                         <div className="chuva-weather__hour" key={`${hora.horario}-${index}`}>
                           <strong>{hora.horario}</strong>
+                          <span className="chuva-weather__icon" aria-hidden="true">{iconeCondicao(hora.descricao)}</span>
                           <span>{hora.temperaturaC == null ? '—' : `${Math.round(hora.temperaturaC)}°`}</span>
                           <span>{valorPercentual(hora.probabilidadeChuvaPercentual)}</span>
                         </div>
@@ -316,7 +334,7 @@ export default function ChuvaPainel({
                 {camadaTrovoadaAtiva ? 'Raios no mapa' : 'Exibir no mapa'}
               </button>
             </div>
-            <p className="chuva-card__caption">Previsão de modelos para localidades de Minas Gerais, não detecção de descargas.</p>
+            <p className="chuva-card__caption">Resumo de risco para Ouro Branco. Os pontos no mapa incluem outras cidades de MG; não são detecção de descargas.</p>
             {previsaoTrovoada ? (
               <>
                 <div className="chuva-summary">
@@ -519,6 +537,23 @@ export default function ChuvaPainel({
               <a className="chuva-button chuva-button--wide" href={urlMapaOficialCemaden} target="_blank" rel="noreferrer">
                 Abrir mapa oficial do CEMADEN
               </a>
+              {rainViewerAtivo && (
+                <div className="chuva-history">
+                  <div className="chuva-history__heading">
+                    <strong>Histórico observado RainViewer</strong>
+                    <span>Não representa previsão</span>
+                  </div>
+                  {controleHistoricoRadar.quadros.length > 1 ? (
+                    <ControleHistoricoRadar controle={controleHistoricoRadar} />
+                  ) : (
+                    <p className="chuva-history__status" role="status">
+                      {controleHistoricoRadar.quadros.length === 1
+                        ? 'Aguardando novos quadros observados para habilitar a animação.'
+                        : 'Consultando quadros observados do radar.'}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
             <div className="chuva-opacity">
               <label className="chuva-opacity__row" htmlFor="chuva-opacidade-radar">

@@ -2158,6 +2158,7 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           }))}
           rainViewerAtivo={mostrarChuva}
           onAlternarRainViewer={() => setMostrarChuva(ativa => !ativa)}
+          controleHistoricoRadar={linhaTempoRadar}
           visaoCombinadaAtiva={visaoChuvaCombinadaAtiva}
           onAlternarVisaoCombinada={() => {
             const ativar = !visaoChuvaCombinadaAtiva
