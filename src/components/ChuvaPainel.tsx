@@ -250,7 +250,7 @@ export default function ChuvaPainel({
   }
 
   return (
-    <aside className="chuva-panel" aria-label="Painel de chuva e meteorologia">
+    <aside id="mapa-painel-chuva" className="chuva-panel" aria-label="Painel de chuva e meteorologia">
       {refreshing && <div className="chuva-panel__loading" aria-label="Atualizando fontes meteorológicas" />}
       <header className="chuva-panel__header">
         <div>

@@ -2035,16 +2035,18 @@ export default function MapaOcorrencias({ ocorrencias, onSelecionar, destinoExte
           🛰️ Satélite
         </button>
         <button
-          className={`mapa-camada-btn ${mostrarChuva ? 'ativo' : ''}`}
+          className={`mapa-camada-btn ${mostrarChuva || painelChuvaAberto ? 'ativo' : ''}`}
           onClick={() => {
-            const proximoEstado = !mostrarChuva
-            setMostrarChuva(proximoEstado)
-            setPainelChuvaAberto(proximoEstado)
+            // Este botão abre o painel. Fechar o painel não desativa o radar,
+            // então não derive a abertura do menu do estado da camada.
+            setMostrarChuva(true)
+            setPainelChuvaAberto(true)
             setErroCamadasClima('')
           }}
-          aria-pressed={mostrarChuva}
+          aria-expanded={painelChuvaAberto}
+          aria-controls="mapa-painel-chuva"
           data-testid="toggle-chuva-mapa"
-          title="Mostrar precipitação observada pelo radar RainViewer"
+          title="Abrir o painel com as funções de chuva"
         >
           🌧️ Chuva
         </button>
