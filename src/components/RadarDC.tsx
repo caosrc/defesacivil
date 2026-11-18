@@ -1337,7 +1337,7 @@ export default function RadarDC() {
   const [agentesLembrete, setAgentesLembrete] = useState<string[]>([])
   const [editorAberto, setEditorAberto] = useState(false)
   const [tv, setTv] = useState(false)
-  const [erroTelaCheia, setErroTelaCheia] = useState(false)
+  const radarTvRef = useRef<HTMLElement>(null)
   const [atividades, setAtividades] = useState<{
     checklists: Atividade[]
     checklistsFerramentas: AtividadeFerramenta[]
@@ -1947,33 +1947,17 @@ export default function RadarDC() {
       if (document.fullscreenElement && document.exitFullscreen) {
         await document.exitFullscreen().catch(() => {})
       }
-      setErroTelaCheia(false)
       setTv(false)
       return
     }
 
-    // Solicita fullscreen primeiro, ainda dentro do gesto do clique.
-    // Alguns navegadores consomem essa permissão ao iniciar o áudio.
-    let pedidoTelaCheia: Promise<boolean> | null = null
-    const raiz = document.documentElement
+    // Pede tela cheia diretamente para o painel, ainda dentro do clique.
+    const painelRadar = radarTvRef.current
     if (!document.fullscreenElement) {
-      if (raiz.requestFullscreen && document.fullscreenEnabled !== false) {
-        try {
-          pedidoTelaCheia = raiz.requestFullscreen({ navigationUI: 'hide' })
-            .then(() => true)
-            .catch(async () => {
-              try {
-                await raiz.requestFullscreen()
-                return true
-              } catch {
-                return false
-              }
-            })
-        } catch {
-          pedidoTelaCheia = Promise.resolve(false)
-        }
-      } else {
-        pedidoTelaCheia = Promise.resolve(false)
+      if (painelRadar?.requestFullscreen && document.fullscreenEnabled !== false) {
+        void painelRadar.requestFullscreen({ navigationUI: 'hide' }).catch(() => {
+          void painelRadar.requestFullscreen().catch(() => {})
+        })
       }
     }
 
@@ -1982,24 +1966,19 @@ export default function RadarDC() {
     setMes(new Date(`${dataAtual}T12:00:00`))
     prepararAudioAlertaRadar()
     setMostrarChuva(true)
-    setErroTelaCheia(false)
     setTv(true)
-    if (pedidoTelaCheia && !(await pedidoTelaCheia)) setErroTelaCheia(true)
   }, [tv])
 
   useEffect(() => {
     const sincronizarTelaCheia = () => {
-      if (!document.fullscreenElement) {
-        setTv(false)
-        setErroTelaCheia(false)
-      }
+      if (!document.fullscreenElement) setTv(false)
     }
     document.addEventListener('fullscreenchange', sincronizarTelaCheia)
     return () => document.removeEventListener('fullscreenchange', sincronizarTelaCheia)
   }, [])
 
   return (
-       <section className={`radar-page ${tv ? 'radar-tv' : ''}`}>
+       <section ref={radarTvRef} className={`radar-page ${tv ? 'radar-tv' : ''}`}>
        <div className="radar-tv-launcher">
          <div className="radar-tv-launcher-copy">
            <span className="radar-tv-launcher-label">RADAR DC</span>
@@ -2019,12 +1998,6 @@ export default function RadarDC() {
            {tv ? '↙ Voltar ao app' : '⛶ Modo TV — Tela cheia'}
          </button>
        </div>
-       {tv && erroTelaCheia && (
-         <div className="radar-tv-fullscreen-notice" role="status" aria-live="polite">
-           <span>O navegador bloqueou a tela cheia nesta janela.</span>
-           <a href={window.location.href} target="_blank" rel="noreferrer">Abrir em nova guia</a>
-         </div>
-       )}
         <div className="radar-dashboard">
         <div className="radar-overview">
         <section className="radar-weather radar-weather-compact radar-google-weather" aria-labelledby="radar-weather-title">
