@@ -7080,3 +7080,32 @@ body.radar-tv-active .radar-page.radar-tv {
     line-height: 1.4;
   }
 }
+
+.radar-tv-fullscreen-notice {
+  position: fixed;
+  z-index: 100000;
+  top: max(.6rem, env(safe-area-inset-top));
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: .35rem .75rem;
+  width: min(560px, calc(100vw - 1rem));
+  padding: .65rem .8rem;
+  transform: translateX(-50%);
+  border: 1px solid #f0c36d;
+  border-radius: 10px;
+  background: #fff7e6;
+  box-shadow: 0 8px 28px rgba(0, 15, 32, .28);
+  color: #713f12;
+  font-size: .78rem;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.radar-tv-fullscreen-notice a {
+  color: #075985;
+  font-weight: 800;
+  white-space: nowrap;
+}
