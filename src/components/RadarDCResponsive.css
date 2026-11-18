@@ -6933,6 +6933,31 @@ body.radar-tv-active .radar-tv .leaflet-overlay-pane .arm-polygon-alerta {
   50% { stroke-opacity: .48; fill-opacity: .12; stroke-width: 9px; }
 }
 
+/* O shell real do app é .app (não .app-shell/.app-content). Isso garante
+   que o painel TV ocupe a viewport mesmo quando o navegador bloqueia fullscreen. */
+body.radar-tv-active,
+body.radar-tv-active #root,
+body.radar-tv-active #root > .app {
+  box-sizing: border-box;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  min-height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+}
+
+body.radar-tv-active .radar-page.radar-tv {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  min-height: 0;
+  margin: 0;
+}
+
 /* Celular: controles do mapa em uma faixa limpa e painéis com largura previsível. */
 @media (max-width: 700px) {
   .radar-page:not(.radar-tv) .radar-overview {
