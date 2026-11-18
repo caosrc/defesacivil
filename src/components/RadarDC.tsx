@@ -1961,12 +1961,11 @@ export default function RadarDC() {
       }
     }
 
+    setTv(true)
     const dataAtual = hoje()
     setDataSelecionada(dataAtual)
     setMes(new Date(`${dataAtual}T12:00:00`))
     prepararAudioAlertaRadar()
-    setMostrarChuva(true)
-    setTv(true)
   }, [tv])
 
   useEffect(() => {
